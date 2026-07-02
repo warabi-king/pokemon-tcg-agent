@@ -146,7 +146,20 @@ function findCardForOption(option, observation) {
   return option.cardId ? { id: option.cardId } : null;
 }
 
-function optionDescription(option, card) {
+function findInPlayTarget(option, observation) {
+  if (option.type !== 8 || !observation?.current) return null;
+  const playerIndex = option.playerIndex ?? observation.current.yourIndex;
+  const player = observation.current.players[playerIndex];
+  if (option.inPlayArea === 4) {
+    return { card: player?.active?.[option.inPlayIndex], area: "バトル場" };
+  }
+  if (option.inPlayArea === 5) {
+    return { card: player?.bench?.[option.inPlayIndex], area: `ベンチ${option.inPlayIndex + 1}` };
+  }
+  return null;
+}
+
+function optionDescription(option, card, observation) {
   if (option.type === 0) return `${option.number}`;
   if (option.type === 1) return "はい";
   if (option.type === 2) return "いいえ";
@@ -156,6 +169,12 @@ function optionDescription(option, card) {
     return attack ? `${attack.name}${attack.damage ? ` — ${attack.damage}ダメージ` : ""}` : `ワザ #${option.attackId}`;
   }
   if (option.type === 14) return "自分の番を終える";
+  if (option.type === 8 && card) {
+    const target = findInPlayTarget(option, observation);
+    if (target?.card) {
+      return `${cardMeta(cardId(card)).name} → ${cardMeta(cardId(target.card)).name}（${target.area}）`;
+    }
+  }
   if (card) return cardMeta(cardId(card)).name;
   return OPTION_TYPES[option.type] || `選択肢 ${option.type}`;
 }
@@ -181,7 +200,7 @@ function renderActions(observation) {
     button.type = "button";
     button.className = `action-option${card ? "" : " no-card"}`;
     button.dataset.index = index;
-    const heading = optionDescription(option, card);
+    const heading = optionDescription(option, card, observation);
     button.innerHTML = `<span class="option-index">${index + 1}</span><span class="option-copy"><strong>${escapeHtml(heading)}</strong><small>${escapeHtml(OPTION_TYPES[option.type] || "合法手")}</small></span>`;
     if (card) button.appendChild(cardElement(card, { mini: true }));
     button.addEventListener("click", () => toggleSelection(index, selection));
