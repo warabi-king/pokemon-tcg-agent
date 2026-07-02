@@ -6,7 +6,7 @@ from pathlib import Path
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = ROOT / "src"
+SRC_ROOT = ROOT / "src_"  # src_{agent名}
 SUBMISSION = ROOT / "submission.tar.gz"
 REQUIRED_FILES = ("main.py", "deck.csv")
 REQUIRED_DIRS = ("cg",)
