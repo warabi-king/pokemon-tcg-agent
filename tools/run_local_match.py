@@ -2,20 +2,37 @@
 
 from __future__ import annotations
 
+import argparse
 import html
+import importlib.util
 import json
 from pathlib import Path
 import os
 import sys
+from types import ModuleType
 
 from kaggle_environments import make
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = ROOT / "src"
+AGENTS_ROOT = ROOT / "agents"
 RESULTS_ROOT = ROOT / "results"
-sys.path.insert(0, str(SRC_ROOT))
 
-from main import agent  # noqa: E402
+
+def agent_src_dir(agent_name: str) -> Path:
+    """agent名からsrcディレクトリを返す。"""
+    return AGENTS_ROOT / agent_name / "src"
+
+
+def load_module(path: Path, module_name: str, src_root: Path) -> ModuleType:
+    """src配下のmain.pyをユニークなモジュール名で読み込む。"""
+    sys.path.insert(0, str(src_root))
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"{path} を読み込めませんでした。")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_deck(path: Path) -> list[int]:
@@ -28,6 +45,23 @@ def load_deck(path: Path) -> list[int]:
     if len(deck) != 60:
         raise ValueError(f"deck.csvはカードIDを60枚分だけ含める必要があります。現在: {len(deck)}枚")
     return deck
+
+
+def load_agent(agent_name: str, module_name: str):
+    """agent名からagent関数とデッキを読み込む。"""
+    src_root = agent_src_dir(agent_name)
+    main_path = src_root / "main.py"
+    deck_path = src_root / "deck.csv"
+    if not main_path.exists():
+        raise FileNotFoundError(f"{main_path} が存在しません。")
+
+    deck = load_deck(deck_path)
+    module = load_module(main_path, module_name, src_root)
+    if not hasattr(module, "agent"):
+        raise AttributeError(f"{main_path} に agent(obs_dict) が定義されていません。")
+    if hasattr(module, "read_deck_csv"):
+        module.read_deck_csv = lambda: list(deck)  # type: ignore[assignment]
+    return module.agent, deck, src_root
 
 
 def build_result_html(steps: list) -> str:
@@ -145,19 +179,40 @@ renderStep(input.value);
 """
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--agent", default="random", help="同一agent同士で対戦するagent名")
+    parser.add_argument("--agent-a", default=None, help="player0側のagent名")
+    parser.add_argument("--agent-b", default=None, help="player1側のagent名")
+    parser.add_argument("--debug", action="store_true", help="kaggle_environmentsのdebugログを出す")
+    return parser.parse_args()
+
+
 def main() -> None:
-    deck = load_deck(SRC_ROOT / "deck.csv")
-    os.chdir(SRC_ROOT)
-    env = make("cabt", configuration={"decks": [deck, deck]}, debug=True)
-    env.run([agent, agent])
+    args = parse_args()
+    agent_a_name = args.agent_a or args.agent
+    agent_b_name = args.agent_b or args.agent
+
+    agent_a, deck_a, src_a = load_agent(agent_a_name, "local_agent_a")
+    agent_b, deck_b, src_b = load_agent(agent_b_name, "local_agent_b")
+
+    # deck.csvなどの相対パス参照に対応するため、player0側のsrcで実行する。
+    os.chdir(src_a)
+    env = make("cabt", configuration={"decks": [deck_a, deck_b]}, debug=args.debug)
+    env.run([agent_a, agent_b])
 
     RESULTS_ROOT.mkdir(exist_ok=True)
-    result_path = RESULTS_ROOT / "result.html"
-    kaggle_result_path = RESULTS_ROOT / "result_kaggle.html"
+    match_name = f"{agent_a_name}_vs_{agent_b_name}"
+    match_root = RESULTS_ROOT / match_name
+    match_root.mkdir(exist_ok=True)
+    result_path = match_root / "result.html"
+    kaggle_result_path = match_root / "result_kaggle.html"
     kaggle_result_path.write_text(env.render(mode="html"))
     result_path.write_text(build_result_html(env.steps))
     print(f"シミュレーションが完了しました: {result_path}")
     print(f"Kaggle標準HTMLも出力しました: {kaggle_result_path}")
+    print(f"player0: {agent_a_name} ({src_a})")
+    print(f"player1: {agent_b_name} ({src_b})")
 
 
 if __name__ == "__main__":

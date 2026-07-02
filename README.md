@@ -2,28 +2,65 @@
 
 Pokémon TCG AI Battle Challenge Simulation向けのAIエージェント開発用リポジトリです。
 
-Kaggle Dataの `sample_submission/` を参照用に残しつつ、実際に開発・提出するコードは `src/` に集約しています。
+このブランチでは、複数agentを並行して開発できるように、agentごとのディレクトリに
+提出用コードと学習用コードをまとめます。
 
 ## ディレクトリ構成
 
 ```text
 .
-├── src/                 # 開発・提出対象
-│   ├── main.py          # Kaggleが呼び出すagent実装
-│   ├── deck.csv         # 提出に使う60枚デッキ
-│   └── cg/              # cabt SDK本体
-├── tools/               # ローカル開発用ツール。提出物には含めない
-│   ├── run_local_match.py
-│   ├── build_submission.py
-│   └── inspect_cards.py
-├── sample_submission/   # Kaggle配布sample。基本的に編集しない
-├── data/                # Kaggle DataのカードCSV
-├── docs/                # Kaggle DataのPDF資料
+├── agents/
+│   ├── random/
+│   │   ├── src/          # 提出対象
+│   │   │   ├── main.py
+│   │   │   ├── deck.csv
+│   │   │   └── cg/
+│   │   └── README.md
+│   └── rl_mcts_sample/
+│       ├── src/          # 提出対象
+│       │   ├── main.py
+│       │   ├── deck.csv
+│       │   ├── cg/
+│       │   └── rl_mcts/
+│       ├── train/        # 提出に含めない学習用コード
+│       └── README.md
+├── tools/                # agent横断の補助ツール
+├── sample_submission/    # Kaggle配布sample。参照用
+├── data/                 # Kaggle DataのカードCSV
+├── docs/                 # Kaggle DataのPDF資料
+├── dist/                 # 提出アーカイブ出力先。Git管理対象外
+├── results/              # ローカル対戦結果。Git管理対象外
 ├── requirements.txt
-└── README.md
+└── AGENTS.md
 ```
 
-提出物は `src/` 配下の `main.py`、`deck.csv`、`cg/` から作成します。
+## agent構成
+
+各agentは次の形にします。
+
+```text
+agents/{agent-name}/
+  src/
+    main.py
+    deck.csv
+    cg/
+    ...                 # 推論時に必要なagent固有コード
+  train/
+    ...                 # 学習時だけ使うコード
+  README.md             # 仕組み、学習方法、使い方
+```
+
+`src/` はKaggle提出物の元です。`train/` は提出に含めません。
+
+agent名はPythonやファイルパスで扱いやすいように、ハイフンではなくアンダースコアを使います。
+
+例:
+
+```text
+random
+rl_mcts_sample
+rule_based
+```
 
 ## セットアップ
 
@@ -37,119 +74,94 @@ python -m pip install -r requirements.txt
 ```
 
 `requirements.txt` では `kaggle-environments==1.30.2` を使っています。
-Competition Overviewには `1.14.10` の記載がありますが、PyPIではそのバージョンが公開されていないため、cabt環境が含まれる公開版を使っています。
-
-## 開発対象
-
-通常は [src/main.py](src/main.py) を編集します。
-
-`agent(obs_dict)` がKaggle/cabtから呼ばれるエントリポイントです。
-
-```python
-def agent(obs_dict: dict) -> list[int]:
-    ...
-```
-
-初回呼び出しでは `obs.select` が `None` になり、このときは60枚デッキを返します。
-以降は `obs.select.option` に含まれる合法手のindexを返します。
-
-## デッキ
-
-提出用デッキは [src/deck.csv](src/deck.csv) です。
-
-形式はカードIDを1行1枚で60行です。
-
-```text
-721
-721
-...
-3
-3
-```
-
-カードIDは [data/EN_Card_Data.csv](data/EN_Card_Data.csv) または [data/JP_Card_Data.csv](data/JP_Card_Data.csv) で確認できます。
-
-カード一覧をターミナルで確認する場合:
-
-```bash
-python tools/inspect_cards.py
-```
 
 ## ローカル対戦
 
-`src/main.py` のエージェント同士で1試合実行します。
+同じagent同士で1試合実行します。
 
 ```bash
-python tools/run_local_match.py
+python tools/run_local_match.py --agent random
+python tools/run_local_match.py --agent rl_mcts_sample
+```
+
+異なるagent同士で1試合実行します。
+
+```bash
+python tools/run_local_match.py --agent-a rl_mcts_sample --agent-b random
+```
+
+複数試合の統計を取る場合:
+
+```bash
+python tools/run_matches.py --agent-a rl_mcts_sample --agent-b random --games 20
 ```
 
 出力先:
 
 ```text
-results/result.html
-results/result_kaggle.html
+results/{agent-a}_vs_{agent-b}/result.html
+results/{agent-a}_vs_{agent-b}/result_kaggle.html
 ```
-
-`results/result.html` はローカル確認用の簡易ビューアです。ステップごとのJSON、最終status、最終rewardを確認できます。
-
-`results/result_kaggle.html` は `kaggle-environments` 標準のHTMLレンダーです。ただしcabtではrenderer未設定のため、ブラウザで空表示になる場合があります。
-
-`results/` はGit追跡対象外です。
 
 ## 提出ファイル作成
 
+agent名を指定して提出アーカイブを作成します。
+
 ```bash
-python tools/build_submission.py
+python tools/build_submission.py --agent random
+python tools/build_submission.py --agent rl_mcts_sample
 ```
 
-作成されるファイル:
+出力先:
 
 ```text
-submission.tar.gz
+dist/submission_{agent-name}.tar.gz
 ```
 
-アーカイブ直下には以下が入ります。
+アーカイブ直下には `agents/{agent-name}/src/` の中身が入ります。
 
 ```text
 main.py
 deck.csv
 cg/
+...
 ```
 
-Kaggle提出では `main.py` がアーカイブ直下にある必要があります。`src/` ディレクトリごと入れないようにしてください。
+`agents/` や `src/` ディレクトリ自体はアーカイブに入れません。
 
-中身を確認する場合:
+## 学習コード
+
+学習コードは各agent配下に置きます。
+
+```text
+agents/{agent-name}/train/
+```
+
+提出時に必要な推論コード、特徴量変換、モデル定義などは `src/` に置きます。
+自己対戦ループ、optimizer、評価ログ、checkpoint保存など、学習時だけ使う処理は `train/` に置きます。
+
+例:
+
+```text
+agents/rl_mcts_sample/src/rl_mcts/model.py
+agents/rl_mcts_sample/train/train.py
+```
+
+学習実行例:
 
 ```bash
-tar -tzf submission.tar.gz | head -30
+python agents/rl_mcts_sample/train/train.py
 ```
 
-## Git管理方針
+PyTorchなど特定の学習・推論依存があるagentは、必要な依存関係を `requirements.txt` と
+各agentの `README.md` に明記します。
 
-作業ルールの詳細は [AGENTS.md](AGENTS.md) も参照してください。
+学習済み重みを提出に使う場合は、採用する重みだけを `agents/{agent-name}/src/` に置きます。
+途中checkpointやログは `agents/{agent-name}/train/checkpoints/` や `logs/` に置き、Gitには含めません。
 
-Gitに含めるもの:
+## 既存sample
 
-- `src/`
-- `tools/`
-- `sample_submission/`
-- `data/`
-- `docs/`
-- `requirements.txt`
-- `README.md`
-- `AGENTS.md`
+`sample_submission/` はKaggle配布sampleの参照用です。通常は編集しません。
 
-Gitに含めないもの:
-
-- `.venv/`
-- `results/`
-- `submission.tar.gz`
-- `__pycache__/`
-- `.DS_Store`
-
-## 注意
-
-- `sample_submission/` はKaggle配布物の参照用です。通常は編集しません。
-- 実装変更は `src/main.py` に集約します。
-- `src/cg/` はcabt SDK本体です。SDK更新が必要な場合以外は変更しません。
-- Kaggle評価中は外部通信できないため、エージェントは提出アーカイブ内のファイルだけで動く必要があります。
+`src/`、`src_random/` は旧構成の名残です。今後の開発・提出・検証は
+`agents/{agent-name}/src/` を使います。
