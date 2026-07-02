@@ -64,26 +64,28 @@ def load_agent(agent_name: str, module_name: str):
     return module.agent, deck, src_root
 
 
-def build_result_html(steps: list) -> str:
+def build_result_html(steps: list, agent_names: list[str]) -> str:
     steps_json = json.dumps(steps, ensure_ascii=False, default=str)
     escaped_steps_json = html.escape(steps_json)
     final_step = steps[-1] if steps else []
     summary_rows = []
     for player_index, state in enumerate(final_step):
+        agent_name = agent_names[player_index] if player_index < len(agent_names) else str(player_index)
         summary_rows.append(
             "<tr>"
-            f"<td>{player_index}</td>"
+            f"<td>{html.escape(agent_name)}</td>"
             f"<td>{html.escape(str(state.get('status')))}</td>"
             f"<td>{html.escape(str(state.get('reward')))}</td>"
             "</tr>"
         )
+    match_title = " vs ".join(agent_names)
 
     return f"""<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>cabt local match result</title>
+  <title>{html.escape(match_title)} - cabt local match result</title>
   <style>
     body {{
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -133,12 +135,12 @@ def build_result_html(steps: list) -> str:
 </head>
 <body>
 <main>
-  <h1>cabt local match result</h1>
+  <h1>{html.escape(match_title)}</h1>
   <section>
     <h2>Summary</h2>
     <p>steps: <strong>{len(steps)}</strong></p>
     <table>
-      <thead><tr><th>player</th><th>status</th><th>reward</th></tr></thead>
+      <thead><tr><th>agent</th><th>status</th><th>reward</th></tr></thead>
       <tbody>{''.join(summary_rows)}</tbody>
     </table>
   </section>
@@ -208,7 +210,7 @@ def main() -> None:
     result_path = match_root / "result.html"
     kaggle_result_path = match_root / "result_kaggle.html"
     kaggle_result_path.write_text(env.render(mode="html"))
-    result_path.write_text(build_result_html(env.steps))
+    result_path.write_text(build_result_html(env.steps, [agent_a_name, agent_b_name]))
     print(f"シミュレーションが完了しました: {result_path}")
     print(f"Kaggle標準HTMLも出力しました: {kaggle_result_path}")
     print(f"player0: {agent_a_name} ({src_a})")
