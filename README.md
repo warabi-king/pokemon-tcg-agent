@@ -16,9 +16,15 @@ Kaggle Dataの `sample_submission/` を参照用に残しつつ、実際に開�
 │   ├── run_local_match.py
 │   ├── build_submission.py
 │   └── inspect_cards.py
+├── app/                 # src/main.pyと対戦するブラウザアプリ
+│   ├── server.py        # ローカルWebサーバー
+│   ├── deck.csv         # プレイヤー側の60枚デッキ
+│   ├── index.html
+│   ├── app.js
+│   └── styles.css
 ├── sample_submission/   # Kaggle配布sample。基本的に編集しない
 ├── data/                # Kaggle DataのカードCSV
-├── docs/                # Kaggle DataのPDF資料
+├── docs/                # Kaggle DataのPDF資料とカード画像
 ├── requirements.txt
 └── README.md
 ```
@@ -95,6 +101,44 @@ results/result_kaggle.html
 `results/result_kaggle.html` は `kaggle-environments` 標準のHTMLレンダーです。ただしcabtではrenderer未設定のため、ブラウザで空表示になる場合があります。
 
 `results/` はGit追跡対象外です。
+
+## 対戦アプリ
+
+ブラウザ上で [src/main.py](src/main.py) のAIエージェントと対戦できます。
+
+事前に「セットアップ」の手順で仮想環境と依存パッケージを用意してください。
+
+Linux/macOS:
+
+```bash
+source .venv/bin/activate
+python app/server.py
+```
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe app\server.py
+```
+
+起動後、ブラウザで次のURLを開きます。
+
+```text
+http://127.0.0.1:8000
+```
+
+アプリでは盤面、手札、ベンチ、サイド、トラッシュ、合法手、対戦ログを確認できます。カードをクリックすると画像を拡大表示できます。エネルギーをつける行動では、対象となるポケモンと場所も合法手に表示されます。
+
+使用するファイル:
+
+- プレイヤー側デッキ: [app/deck.csv](app/deck.csv)
+- AI側デッキ: [src/deck.csv](src/deck.csv)
+- AI実装: [src/main.py](src/main.py)
+- カード画像: `docs/cards/`
+
+デッキはカードIDを1行1枚で記述した60行のCSVです。デッキを変更した場合は「新しい対戦」ボタンで対戦を作り直してください。
+
+サーバーを終了するには、起動したターミナルで `Ctrl+C` を押します。
 
 ## 提出ファイル作成
 
