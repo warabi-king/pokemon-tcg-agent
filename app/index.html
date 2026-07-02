@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PokeTCG Battle Table</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">LOCAL BATTLE / CABT</p>
+      <h1>PokeTCG Battle Table</h1>
+    </div>
+    <div class="header-actions">
+      <span id="turnBadge" class="turn-badge">準備中</span>
+      <button id="newGameButton" class="secondary-button" type="button">新しい対戦</button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="table-panel">
+      <div id="errorBanner" class="error-banner hidden"></div>
+
+      <section class="player-zone opponent-zone">
+        <div class="zone-heading">
+          <div><span class="player-dot opponent"></span><strong>対戦AI</strong></div>
+          <div id="opponentStats" class="stats"></div>
+        </div>
+        <div id="opponentBench" class="bench-row"></div>
+        <div class="battle-line">
+          <div id="opponentDiscard" class="side-pile"></div>
+          <div id="opponentActive" class="active-slot"></div>
+          <div id="opponentDeck" class="side-pile"></div>
+        </div>
+      </section>
+
+      <div class="stadium-strip">
+        <span>STADIUM</span>
+        <div id="stadium"></div>
+      </div>
+
+      <section class="player-zone human-zone">
+        <div class="battle-line">
+          <div id="humanDiscard" class="side-pile"></div>
+          <div id="humanActive" class="active-slot"></div>
+          <div id="humanDeck" class="side-pile"></div>
+        </div>
+        <div id="humanBench" class="bench-row"></div>
+        <div class="zone-heading">
+          <div><span class="player-dot human"></span><strong>あなた</strong></div>
+          <div id="humanStats" class="stats"></div>
+        </div>
+      </section>
+
+      <section class="hand-panel">
+        <div class="section-label">YOUR HAND</div>
+        <div id="humanHand" class="hand-row"></div>
+      </section>
+    </section>
+
+    <aside class="control-panel">
+      <section>
+        <div class="section-title-row">
+          <div>
+            <p class="eyebrow">LEGAL MOVES</p>
+            <h2 id="actionTitle">選択してください</h2>
+          </div>
+          <span id="selectionRule" class="rule-chip"></span>
+        </div>
+        <div id="contextCard" class="context-card"></div>
+        <div id="actionList" class="action-list"></div>
+        <button id="submitAction" class="primary-button" type="button" disabled>決定</button>
+      </section>
+
+      <section class="log-section">
+        <div class="section-title-row">
+          <div>
+            <p class="eyebrow">MATCH FEED</p>
+            <h2>対戦ログ</h2>
+          </div>
+          <span id="stepLabel" class="rule-chip"></span>
+        </div>
+        <div id="eventLog" class="event-log"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="cardPreview" class="card-preview hidden" aria-hidden="true">
+    <img id="previewImage" alt="カード拡大画像">
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
