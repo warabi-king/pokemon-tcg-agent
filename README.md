@@ -24,6 +24,10 @@ Pokémon TCG AI Battle Challenge Simulation向けのAIエージェント開発�
 │       │   └── rl_mcts/
 │       ├── train/        # 提出に含めない学習用コード
 │       └── README.md
+│   └── rl_mcts/
+│       ├── src/          # rl_mcts_sampleから派生した改善用agent
+│       ├── train/        # CSV/PNGログ付き学習コード
+│       └── README.md
 ├── tools/                # agent横断の補助ツール
 ├── sample_submission/    # Kaggle配布sample。参照用
 ├── data/                 # Kaggle DataのカードCSV
@@ -151,6 +155,7 @@ agents/rl_mcts_sample/train/train.py
 
 ```bash
 python agents/rl_mcts_sample/train/train.py
+python agents/rl_mcts/train/train.py --plot
 ```
 
 PyTorchなど特定の学習・推論依存があるagentは、必要な依存関係を `requirements.txt` と
