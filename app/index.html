@@ -96,10 +96,27 @@
       <button id="closeActionPopup" class="popup-close" type="button" aria-label="行動選択を閉じる">×</button>
       <div id="actionPopupCard" class="popup-card"></div>
       <div class="popup-content">
-        <p class="eyebrow">CARD ACTIONS</p>
+        <p id="actionPopupEyebrow" class="eyebrow">CARD ACTIONS</p>
         <h2 id="actionPopupTitle">カードの行動</h2>
         <p id="actionPopupLocation" class="popup-location"></p>
+        <div id="pokemonDetails" class="pokemon-details hidden">
+          <div id="pokemonHp" class="pokemon-hp"></div>
+          <section class="detail-section">
+            <h3>ENERGY</h3>
+            <div id="pokemonEnergy" class="attachment-list"></div>
+          </section>
+          <section class="detail-section">
+            <h3>TOOL</h3>
+            <div id="pokemonTools" class="attachment-list"></div>
+          </section>
+          <section class="detail-section">
+            <h3>状態異常</h3>
+            <div id="pokemonConditions" class="condition-list"></div>
+          </section>
+        </div>
+        <h3 id="popupActionsHeading" class="popup-actions-heading">選べる行動</h3>
         <div id="actionPopupOptions" class="action-list popup-options"></div>
+        <p id="popupNoActions" class="popup-no-actions hidden">現在選べる行動はありません。</p>
       </div>
     </section>
   </div>

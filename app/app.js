@@ -22,6 +22,12 @@ const LOG_TYPES = [
   "カードをつけた", "進化した", "特性を使った", "ワザを使った", "ダメージ", "回復", "きぜつ", "サイドを取った"
 ];
 
+const ENERGY_TYPES = ["無色", "草", "炎", "水", "雷", "超", "闘", "悪", "鋼", "ドラゴン", "レインボー", "ロケット団"];
+const CONDITION_FIELDS = [
+  ["poisoned", "どく"], ["burned", "やけど"], ["asleep", "ねむり"],
+  ["paralyzed", "マヒ"], ["confused", "こんらん"]
+];
+
 let state = null;
 let meta = { cards: {}, attacks: {} };
 let selected = new Set();
@@ -84,13 +90,21 @@ function cardElement(card, options = {}) {
   element.title = `${cardMeta(id).name} (#${id})`;
 
   const actionIndices = options.actionIndices || [];
-  if (actionIndices.length) {
-    element.classList.add("actionable");
+  const inPlayDetails = Boolean(options.inPlayDetails);
+  if (actionIndices.length || inPlayDetails) {
+    element.classList.add(inPlayDetails ? "in-play-card" : "actionable");
+    if (actionIndices.length) element.classList.add("actionable");
     element.dataset.actionIndices = actionIndices.join(",");
     element.setAttribute("role", "button");
     element.setAttribute("tabindex", "0");
-    element.setAttribute("aria-label", `${cardMeta(id).name}の行動を表示`);
-    const openActions = () => openActionPopup(card, actionIndices, options.locationLabel, options.observation);
+    element.setAttribute("aria-label", inPlayDetails ? `${cardMeta(id).name}の詳細と行動を表示` : `${cardMeta(id).name}の行動を表示`);
+    const openActions = () => {
+      if (inPlayDetails) {
+        openPokemonPopup(card, actionIndices, options.locationLabel, options.observation, options.playerState, options.isActive, options.ownerLabel);
+      } else {
+        openActionPopup(card, actionIndices, options.locationLabel, options.observation);
+      }
+    };
     element.addEventListener("click", openActions);
     element.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
@@ -99,8 +113,8 @@ function cardElement(card, options = {}) {
       }
     });
     const actionBadge = document.createElement("span");
-    actionBadge.className = "action-badge";
-    actionBadge.textContent = actionIndices.length > 1 ? `ACTION ${actionIndices.length}` : "ACTION";
+    actionBadge.className = actionIndices.length ? "action-badge" : "detail-badge";
+    actionBadge.textContent = actionIndices.length ? (actionIndices.length > 1 ? `ACTION ${actionIndices.length}` : "ACTION") : "INFO";
     element.appendChild(actionBadge);
   } else {
     element.addEventListener("click", () => showPreview(id));
@@ -151,17 +165,39 @@ function renderBoard(observation) {
   const opponent = current.players[1];
   const actionMap = buildCardActionMap(observation);
 
-  renderSlots($("opponentBench"), opponent.bench, opponent.benchMax || 5);
-  renderSlots($("humanBench"), human.bench, human.benchMax || 5, (index) => ({
-    actionIndices: actionMap.get(`field:5:${index}`) || [],
+  renderSlots($("opponentBench"), opponent.bench, opponent.benchMax || 5, (index) => ({
+    inPlayDetails: true,
     locationLabel: `ベンチ${index + 1}`,
     observation,
+    playerState: opponent,
+    isActive: false,
+    ownerLabel: "対戦AI",
   }));
-  renderSlots($("opponentActive"), opponent.active, 1);
-  renderSlots($("humanActive"), human.active, 1, (index) => ({
-    actionIndices: actionMap.get(`field:4:${index}`) || [],
+  renderSlots($("humanBench"), human.bench, human.benchMax || 5, (index) => ({
+    actionIndices: actionMap.get(`field:5:${index}`) || [],
+    inPlayDetails: true,
+    locationLabel: `ベンチ${index + 1}`,
+    observation,
+    playerState: human,
+    isActive: false,
+    ownerLabel: "あなた",
+  }));
+  renderSlots($("opponentActive"), opponent.active, 1, () => ({
+    inPlayDetails: true,
     locationLabel: "バトル場",
     observation,
+    playerState: opponent,
+    isActive: true,
+    ownerLabel: "対戦AI",
+  }));
+  renderSlots($("humanActive"), human.active, 1, (index) => ({
+    actionIndices: actionMap.get(`field:4:${index}`) || [],
+    inPlayDetails: true,
+    locationLabel: "バトル場",
+    observation,
+    playerState: human,
+    isActive: true,
+    ownerLabel: "あなた",
   }));
 
   renderPile($("opponentDeck"), "山札", opponent.deckCount, null, true);
@@ -256,15 +292,8 @@ function createActionOptionButton(index, option, observation, onClick) {
   return button;
 }
 
-function openActionPopup(card, actionIndices, locationLabel, observation) {
+function renderPopupActions(actionIndices, observation) {
   const selection = observation?.select;
-  if (!selection) return;
-  const id = cardId(card);
-  $("actionPopupTitle").textContent = cardMeta(id).name;
-  $("actionPopupLocation").textContent = `${locationLabel || "カード"}で選べる行動`;
-
-  const popupCard = $("actionPopupCard");
-  popupCard.replaceChildren(cardElement(card));
   const options = $("actionPopupOptions");
   options.replaceChildren();
   actionIndices.forEach((index) => {
@@ -275,7 +304,78 @@ function openActionPopup(card, actionIndices, locationLabel, observation) {
     button.classList.toggle("selected", selected.has(index));
     options.appendChild(button);
   });
+  $("popupActionsHeading").classList.toggle("hidden", !actionIndices.length);
+  $("popupNoActions").classList.toggle("hidden", Boolean(actionIndices.length));
+}
 
+function openActionPopup(card, actionIndices, locationLabel, observation) {
+  if (!observation?.select) return;
+  const id = cardId(card);
+  $("actionPopupEyebrow").textContent = "CARD ACTIONS";
+  $("actionPopupTitle").textContent = cardMeta(id).name;
+  $("actionPopupLocation").textContent = `${locationLabel || "カード"}で選べる行動`;
+  $("pokemonDetails").classList.add("hidden");
+
+  const popupCard = $("actionPopupCard");
+  popupCard.replaceChildren(cardElement(card));
+  renderPopupActions(actionIndices, observation);
+
+  $("actionPopup").classList.remove("hidden");
+  $("actionPopup").setAttribute("aria-hidden", "false");
+}
+
+function renderAttachmentList(target, cards, fallbackEnergyTypes = []) {
+  target.replaceChildren();
+  if (cards?.length) {
+    cards.forEach((attachedCard) => {
+      const row = document.createElement("div");
+      row.className = "attachment-item";
+      row.appendChild(cardElement(attachedCard, { mini: true }));
+      const label = document.createElement("span");
+      label.textContent = cardMeta(cardId(attachedCard)).name;
+      row.appendChild(label);
+      target.appendChild(row);
+    });
+    return;
+  }
+  if (fallbackEnergyTypes.length) {
+    fallbackEnergyTypes.forEach((type) => {
+      const chip = document.createElement("span");
+      chip.className = "energy-chip";
+      chip.textContent = ENERGY_TYPES[type] || `タイプ${type}`;
+      target.appendChild(chip);
+    });
+    return;
+  }
+  target.innerHTML = '<span class="detail-empty">なし</span>';
+}
+
+function renderPokemonDetails(card, playerState, isActive) {
+  $("pokemonDetails").classList.remove("hidden");
+  $("pokemonHp").innerHTML = `<span>現在HP</span><strong>${card.hp}/${card.maxHp}</strong>`;
+  renderAttachmentList($("pokemonEnergy"), card.energyCards, card.energies || []);
+  renderAttachmentList($("pokemonTools"), card.tools);
+
+  const conditionTarget = $("pokemonConditions");
+  conditionTarget.replaceChildren();
+  const conditions = isActive ? CONDITION_FIELDS.filter(([field]) => playerState?.[field]).map(([, label]) => label) : [];
+  if (!conditions.length) conditionTarget.innerHTML = '<span class="condition-chip normal">なし</span>';
+  else conditions.forEach((condition) => {
+    const chip = document.createElement("span");
+    chip.className = "condition-chip";
+    chip.textContent = condition;
+    conditionTarget.appendChild(chip);
+  });
+}
+
+function openPokemonPopup(card, actionIndices, locationLabel, observation, playerState, isActive, ownerLabel) {
+  const id = cardId(card);
+  $("actionPopupEyebrow").textContent = "POKÉMON DETAILS";
+  $("actionPopupTitle").textContent = cardMeta(id).name;
+  $("actionPopupLocation").textContent = `${ownerLabel || "プレイヤー"}・${locationLabel || "場"}`;
+  $("actionPopupCard").replaceChildren(cardElement(card));
+  renderPokemonDetails(card, playerState, isActive);
+  renderPopupActions(actionIndices, observation);
   $("actionPopup").classList.remove("hidden");
   $("actionPopup").setAttribute("aria-hidden", "false");
 }

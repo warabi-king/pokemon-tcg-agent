@@ -93,7 +93,16 @@ class MatchController:
             human_deck = load_deck(APP_ROOT / "deck.csv")
             opponent_deck = load_deck(SRC_ROOT / "deck.csv")
             if Battle.battle_ptr:
-                battle_finish()
+                # cabt already frees a finished battle, but leaves the shared
+                # pointer value in place. A match stopped by Kaggle's step
+                # limit still has result=-1 and must be freed explicitly.
+                result = (
+                    self.last_observation.get("current", {}).get("result", -1)
+                    if self.last_observation
+                    else -1
+                )
+                if result < 0:
+                    battle_finish()
                 Battle.battle_ptr = None
                 Battle.obs = None
             opponent_module.plan = opponent_module.AttackPlan()

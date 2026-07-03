@@ -165,6 +165,17 @@ button { font: inherit; }
   box-shadow: 0 0 0 6px rgba(185, 220, 104, .2), 0 10px 24px rgba(23, 34, 27, .24);
   transition: transform .16s ease, box-shadow .16s ease;
 }
+.card.in-play-card:not(.actionable) {
+  cursor: pointer;
+  outline: 2px solid rgba(60, 111, 82, .38);
+  outline-offset: 2px;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.card.in-play-card:not(.actionable):hover, .card.in-play-card:not(.actionable):focus-visible {
+  transform: translateY(-4px);
+  outline-color: var(--green);
+  box-shadow: 0 12px 28px rgba(23, 34, 27, .25);
+}
 .card.actionable:hover, .card.actionable:focus-visible { transform: translateY(-5px); box-shadow: 0 0 0 7px rgba(185, 220, 104, .28), 0 14px 30px rgba(23, 34, 27, .28); }
 .card.actionable.choice-selected { outline-color: var(--orange); box-shadow: 0 0 0 7px rgba(230, 126, 69, .24), 0 14px 30px rgba(23, 34, 27, .28); }
 .card-back {
@@ -185,7 +196,7 @@ button { font: inherit; }
   border-radius: 999px;
   padding: 3px 7px;
 }
-.action-badge {
+.action-badge, .detail-badge {
   position: absolute;
   z-index: 3;
   top: 5px;
@@ -200,6 +211,7 @@ button { font: inherit; }
   font-weight: 950;
   letter-spacing: .06em;
 }
+.detail-badge { color: white; background: rgba(18, 74, 53, .88); }
 .hp-badge { top: 5px; right: 5px; }
 .attach-badge { bottom: 5px; left: 5px; }
 
@@ -345,6 +357,55 @@ button { font: inherit; }
 .popup-content h2 { margin: 0; font-size: 1.35rem; }
 .popup-location { margin: 6px 0 0; color: var(--muted); font-size: .76rem; }
 .popup-options { margin-bottom: 0; }
+.pokemon-details { display: grid; gap: 11px; margin-top: 16px; }
+.pokemon-hp {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  color: var(--green-dark);
+  background: #eaf2e4;
+  border-radius: 11px;
+}
+.pokemon-hp span { color: var(--muted); font-size: .7rem; font-weight: 800; }
+.pokemon-hp strong { font-size: 1rem; }
+.detail-section { padding-top: 9px; border-top: 1px solid var(--line); }
+.detail-section h3, .popup-actions-heading {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: .67rem;
+  font-weight: 950;
+  letter-spacing: .12em;
+}
+.popup-actions-heading { margin-top: 18px; }
+.attachment-list { display: flex; gap: 7px; flex-wrap: wrap; }
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 5px 8px 5px 5px;
+  color: var(--ink);
+  background: #f0f1eb;
+  border-radius: 9px;
+  font-size: .72rem;
+  font-weight: 750;
+}
+.attachment-item .mini-card { flex: 0 0 auto; width: 27px; border-radius: 3px; }
+.attachment-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.energy-chip, .condition-chip {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 850;
+}
+.energy-chip { color: #6b4b12; background: #f5e8bc; }
+.condition-list { display: flex; gap: 6px; flex-wrap: wrap; }
+.condition-chip { color: white; background: #a3483f; }
+.condition-chip.normal { color: var(--green-dark); background: #e8eee5; }
+.detail-empty, .popup-no-actions { color: var(--muted); font-size: .72rem; }
+.popup-no-actions { margin: 13px 0 0; padding: 10px; text-align: center; background: #f3f3ed; border-radius: 9px; }
 
 @media (max-width: 980px) {
   .app-shell { grid-template-columns: 1fr; }
@@ -364,4 +425,6 @@ button { font: inherit; }
   .popup-content h2 { padding-right: 32px; font-size: 1rem; }
   .popup-options .action-option { grid-template-columns: 28px 1fr; }
   .popup-options .mini-card { display: none; }
+  .pokemon-details { gap: 8px; margin-top: 12px; }
+  .attachment-item { max-width: 100%; }
 }
