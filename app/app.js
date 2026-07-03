@@ -297,15 +297,19 @@ function renderPopupActions(actionIndices, observation) {
   const options = $("actionPopupOptions");
   options.replaceChildren();
   actionIndices.forEach((index) => {
-    const button = createActionOptionButton(index, selection.option[index], observation, () => {
-      toggleSelection(index, selection);
-      closeActionPopup();
-    });
+    const button = createActionOptionButton(index, selection.option[index], observation, () => executePopupAction(index, selection));
     button.classList.toggle("selected", selected.has(index));
     options.appendChild(button);
   });
   $("popupActionsHeading").classList.toggle("hidden", !actionIndices.length);
   $("popupNoActions").classList.toggle("hidden", Boolean(actionIndices.length));
+}
+
+async function executePopupAction(index, selection) {
+  if (busy) return;
+  if (!selected.has(index)) toggleSelection(index, selection);
+  closeActionPopup();
+  await submitAction();
 }
 
 function openActionPopup(card, actionIndices, locationLabel, observation) {
@@ -406,7 +410,7 @@ function renderActions(observation) {
   if (cardActionIndices.size) {
     const hint = document.createElement("div");
     hint.className = "card-action-hint";
-    hint.innerHTML = '<strong>盤面から行動を選択</strong><span>「ACTION」が付いた手札または場のカードをクリックしてください。</span>';
+    hint.innerHTML = '<strong>盤面から行動を選択</strong><span>「ACTION」が付いたカードを開き、行動を押すとすぐに実行されます。</span>';
     list.appendChild(hint);
   }
   selection.option.forEach((option, index) => {
