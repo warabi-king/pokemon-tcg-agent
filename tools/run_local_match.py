@@ -4,18 +4,31 @@ from __future__ import annotations
 
 import html
 import json
+import ctypes
 from pathlib import Path
 import os
 import sys
 
 from kaggle_environments import make
+from kaggle_environments.envs.cabt.cg import sim as environment_sim
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = ROOT / "src"
 RESULTS_ROOT = ROOT / "results"
 sys.path.insert(0, str(SRC_ROOT))
 
-from main import agent  # noqa: E402
+# The repository SDK contains libcg.so for Kaggle/Linux but no cg.dll.
+# On Windows, reuse the cabt engine bundled with kaggle-environments.
+environment_sim.lib.AllCard.restype = ctypes.c_char_p
+environment_sim.lib.AllAttack.restype = ctypes.c_char_p
+sys.modules["cg.sim"] = environment_sim
+
+previous_cwd = Path.cwd()
+try:
+    os.chdir(SRC_ROOT)
+    from main import agent  # noqa: E402
+finally:
+    os.chdir(previous_cwd)
 
 
 def load_deck(path: Path) -> list[int]:
@@ -154,8 +167,8 @@ def main() -> None:
     RESULTS_ROOT.mkdir(exist_ok=True)
     result_path = RESULTS_ROOT / "result.html"
     kaggle_result_path = RESULTS_ROOT / "result_kaggle.html"
-    kaggle_result_path.write_text(env.render(mode="html"))
-    result_path.write_text(build_result_html(env.steps))
+    kaggle_result_path.write_text(env.render(mode="html"), encoding="utf-8")
+    result_path.write_text(build_result_html(env.steps), encoding="utf-8")
     print(f"シミュレーションが完了しました: {result_path}")
     print(f"Kaggle標準HTMLも出力しました: {kaggle_result_path}")
 

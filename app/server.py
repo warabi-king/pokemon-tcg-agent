@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import importlib.util
 import json
 import os
 import sys
@@ -16,6 +17,7 @@ from flask import Flask, jsonify, request, send_from_directory
 ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = ROOT / "app"
 SRC_ROOT = ROOT / "src"
+SRC_SEC_ROOT = ROOT / "src_sec"
 CARD_ROOT = ROOT / "docs" / "cards"
 
 
@@ -49,6 +51,25 @@ try:
 finally:
     os.chdir(previous_cwd)
 
+
+def load_agent_module(name: str, root: Path):
+    """Load an agent under a unique module name so its globals stay isolated."""
+    spec = importlib.util.spec_from_file_location(name, root / "main.py")
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load agent module from {root / 'main.py'}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    previous = Path.cwd()
+    try:
+        os.chdir(root)
+        spec.loader.exec_module(module)
+    finally:
+        os.chdir(previous)
+    return module
+
+
+second_agent_module = load_agent_module("main_sec", SRC_SEC_ROOT)
+
 from cg.api import all_attack  # noqa: E402
 
 
@@ -78,11 +99,40 @@ ATTACK_META = {
 }
 
 
+# cabt stores one process-wide native battle pointer. Both browser modes must
+# therefore share the same lock and ownership record. A normally completed
+# battle has already been freed by cabt even though Battle.battle_ptr still
+# contains its old address; calling battle_finish() again causes an access
+# violation on Windows.
+BATTLE_LOCK = threading.RLock()
+active_environment = None
+
+
+def discard_active_battle() -> None:
+    """Release an unfinished native battle and clear stale Python pointers."""
+    global active_environment
+    if Battle.battle_ptr and active_environment is not None and not active_environment.done:
+        battle_finish()
+    Battle.battle_ptr = None
+    Battle.obs = None
+    active_environment = None
+
+
+def register_active_battle(env: Any) -> None:
+    global active_environment
+    active_environment = env
+
+
+def require_active_battle(env: Any) -> None:
+    if env is not active_environment:
+        raise ValueError("別の対戦が開始されています。新しい対戦を開始してください。")
+
+
 class MatchController:
     """Own the single local cabt match used by the browser UI."""
 
     def __init__(self) -> None:
-        self.lock = threading.RLock()
+        self.lock = BATTLE_LOCK
         self.env = None
         self.last_observation: dict[str, Any] | None = None
         self.events: list[dict[str, Any]] = []
@@ -92,25 +142,14 @@ class MatchController:
         with self.lock:
             human_deck = load_deck(APP_ROOT / "deck.csv")
             opponent_deck = load_deck(SRC_ROOT / "deck.csv")
-            if Battle.battle_ptr:
-                # cabt already frees a finished battle, but leaves the shared
-                # pointer value in place. A match stopped by Kaggle's step
-                # limit still has result=-1 and must be freed explicitly.
-                result = (
-                    self.last_observation.get("current", {}).get("result", -1)
-                    if self.last_observation
-                    else -1
-                )
-                if result < 0:
-                    battle_finish()
-                Battle.battle_ptr = None
-                Battle.obs = None
+            discard_active_battle()
             opponent_module.plan = opponent_module.AttackPlan()
             opponent_module.pre_turn = 0
             opponent_module.ability_used = False
 
             self.env = make("cabt", debug=True)
             self.env.reset()
+            register_active_battle(self.env)
             self.env.step([human_deck, opponent_deck])
             self.last_observation = None
             self.events = []
@@ -123,6 +162,7 @@ class MatchController:
         with self.lock:
             if self.env is None:
                 raise ValueError("対戦が開始されていません。")
+            require_active_battle(self.env)
             if self.env.done:
                 raise ValueError("この対戦は終了しています。")
             if self.env.state[0].status != "ACTIVE":
@@ -203,12 +243,140 @@ class MatchController:
             }
 
 
+def reset_agent(module: Any) -> None:
+    """Reset the mutable state used by the bundled sample agent."""
+    if hasattr(module, "AttackPlan"):
+        module.plan = module.AttackPlan()
+    if hasattr(module, "pre_turn"):
+        module.pre_turn = 0
+    if hasattr(module, "ability_used"):
+        module.ability_used = False
+
+
+class AgentMatchController:
+    """Run src against src_sec, advancing exactly one agent decision at a time."""
+
+    def __init__(self) -> None:
+        self.lock = BATTLE_LOCK
+        self.env = None
+        self.last_observation: dict[str, Any] | None = None
+        self.events: list[dict[str, Any]] = []
+        self.actions: list[dict[str, Any]] = []
+        self.error: str | None = None
+
+    def new_game(self) -> dict[str, Any]:
+        with self.lock:
+            decks = [load_deck(SRC_ROOT / "deck.csv"), load_deck(SRC_SEC_ROOT / "deck.csv")]
+            discard_active_battle()
+
+            reset_agent(opponent_module)
+            reset_agent(second_agent_module)
+            self.env = make("cabt", debug=True)
+            self.env.reset()
+            register_active_battle(self.env)
+            self.env.step(decks)
+            self.last_observation = None
+            self.events = []
+            self.actions = []
+            self.error = None
+            self._capture_observation("SETUP")
+            return self.payload()
+
+    def step(self) -> dict[str, Any]:
+        with self.lock:
+            if self.env is None:
+                raise ValueError("観戦対戦が開始されていません。")
+            require_active_battle(self.env)
+            if self.env.done:
+                return self.payload()
+
+            active = [index for index, state in enumerate(self.env.state) if state.status == "ACTIVE"]
+            if len(active) != 1:
+                raise RuntimeError(f"行動するプレイヤーを特定できません: {active}")
+            player_index = active[0]
+            module = (opponent_module, second_agent_module)[player_index]
+            observation = plain(self.env.state[player_index].observation)
+            try:
+                action = module.agent(observation)
+                env_actions = [None, None]
+                env_actions[player_index] = action
+                self.env.step(env_actions)
+            except Exception as exc:
+                self.error = f"Player {player_index + 1} のエージェントでエラーが発生しました: {exc}"
+                return self.payload()
+
+            self.actions.append(
+                {
+                    "number": len(self.actions) + 1,
+                    "player": player_index,
+                    "indices": action,
+                }
+            )
+            self._capture_observation(f"P{player_index + 1}")
+            return self.payload()
+
+    def _capture_observation(self, source: str) -> None:
+        if self.env is None:
+            return
+        observations = [plain(state.observation) for state in self.env.state]
+        base = next((obs for obs in observations if obs.get("current") is not None), None)
+        if base is None:
+            return
+
+        # Each player observation exposes that player's own hand. Merge those
+        # two views so a spectator can see both agents' cards.
+        for player_index, observation in enumerate(observations):
+            current = observation.get("current")
+            if current is None:
+                continue
+            own_state = current["players"][player_index]
+            base["current"]["players"][player_index]["hand"] = own_state.get("hand", [])
+            base["current"]["players"][player_index]["handCount"] = own_state.get("handCount", 0)
+
+        self.last_observation = base
+        logs = base.get("logs") or []
+        for log in logs:
+            self.events.append({"source": source, **log})
+        self.events = self.events[-160:]
+
+    def payload(self) -> dict[str, Any]:
+        with self.lock:
+            if self.env is None:
+                return {"started": False, "watchMode": True}
+            active = next(
+                (index for index, state in enumerate(self.env.state) if state.status == "ACTIVE"),
+                None,
+            )
+            return {
+                "started": True,
+                "watchMode": True,
+                "finished": self.env.done,
+                "humanTurn": False,
+                "nextPlayer": active,
+                "observation": self.last_observation,
+                "states": [
+                    {"status": state.status, "reward": state.reward}
+                    for state in self.env.state
+                ],
+                "events": self.events,
+                "actions": self.actions,
+                "error": self.error,
+                "step": len(self.actions),
+            }
+
+
 app = Flask(__name__, static_folder=None)
 match = MatchController()
+agent_match = AgentMatchController()
 
 
 @app.get("/")
 def index():
+    return send_from_directory(APP_ROOT, "index.html")
+
+
+@app.get("/watch")
+def watch():
     return send_from_directory(APP_ROOT, "index.html")
 
 
@@ -245,6 +413,27 @@ def action():
     try:
         body = request.get_json(force=True) or {}
         return jsonify(match.act(body.get("indices")))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.get("/api/watch/state")
+def watch_state():
+    return jsonify(agent_match.payload())
+
+
+@app.post("/api/watch/new")
+def watch_new_game():
+    try:
+        return jsonify(agent_match.new_game())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.post("/api/watch/step")
+def watch_step():
+    try:
+        return jsonify(agent_match.step())
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 

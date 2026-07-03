@@ -14,6 +14,7 @@
     </div>
     <div class="header-actions">
       <span id="turnBadge" class="turn-badge">準備中</span>
+      <button id="autoPlayButton" class="secondary-button hidden" type="button">連続再生</button>
       <button id="newGameButton" class="secondary-button" type="button">新しい対戦</button>
     </div>
   </header>
@@ -33,6 +34,11 @@
           <div id="opponentActive" class="active-slot"></div>
           <div id="opponentDeck" class="side-pile"></div>
         </div>
+      </section>
+
+      <section id="opponentHandPanel" class="hand-panel hidden">
+        <div class="section-label">PLAYER 2 HAND</div>
+        <div id="opponentHand" class="hand-row"></div>
       </section>
 
       <div class="stadium-strip">

@@ -32,6 +32,9 @@ let state = null;
 let meta = { cards: {}, attacks: {} };
 let selected = new Set();
 let busy = false;
+const watchMode = window.location.pathname === "/watch";
+let autoPlaying = false;
+let autoPlayTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const padCardId = (id) => String(id).padStart(4, "0");
@@ -217,6 +220,21 @@ function renderBoard(observation) {
     observation,
   })));
 
+  $("opponentHandPanel").classList.toggle("hidden", !watchMode);
+  if (watchMode) {
+    const opponentHand = $("opponentHand");
+    opponentHand.replaceChildren();
+    if (opponent.hand?.length) {
+      opponent.hand.forEach((card) => opponentHand.appendChild(cardElement(card)));
+    } else if (opponent.handCount) {
+      for (let index = 0; index < opponent.handCount; index += 1) {
+        opponentHand.appendChild(cardElement({}, { back: true }));
+      }
+    } else {
+      opponentHand.innerHTML = '<div class="empty-message">手札はありません</div>';
+    }
+  }
+
   const stadium = $("stadium");
   stadium.replaceChildren();
   if (current.stadium?.[0]) stadium.appendChild(cardElement(current.stadium[0], { mini: true }));
@@ -396,6 +414,20 @@ function renderActions(observation) {
   const list = $("actionList");
   list.replaceChildren();
   $("selectedAction").classList.add("hidden");
+  if (watchMode) {
+    $("contextCard").replaceChildren();
+    $("actionTitle").textContent = state?.finished
+      ? "対戦終了"
+      : `Player ${Number(state?.nextPlayer) + 1} の行動待ち`;
+    $("selectionRule").textContent = `ACTION ${state?.step ?? 0}`;
+    $("submitAction").disabled = busy || state?.finished || Boolean(state?.error);
+    $("submitAction").textContent = state?.finished ? "対戦終了" : "次の1行動";
+    const latest = state?.actions?.at(-1);
+    list.innerHTML = latest
+      ? `<div class="empty-message">直前: Player ${latest.player + 1} / 選択 index [${latest.indices.join(", ")}]</div>`
+      : '<div class="empty-message">ボタンを押すとエージェントが1行動します。</div>';
+    return;
+  }
   if (!selection || !state?.humanTurn) {
     $("actionTitle").textContent = state?.finished ? "対戦終了" : "AIが選択中";
     $("selectionRule").textContent = "";
@@ -491,6 +523,9 @@ function renderEvents(events) {
 function resultMessage() {
   if (!state?.finished) return "";
   const reward = state.states?.[0]?.reward;
+  if (watchMode && reward > 0) return "PLAYER 1 WIN";
+  if (watchMode && reward < 0) return "PLAYER 2 WIN";
+  if (watchMode) return "DRAW";
   if (reward > 0) return "YOU WIN — 勝利しました";
   if (reward < 0) return "YOU LOSE — AIの勝利です";
   return "DRAW — 引き分けです";
@@ -505,8 +540,12 @@ function render() {
   $("stepLabel").textContent = `STEP ${state?.step ?? 0}`;
 
   const badge = $("turnBadge");
-  badge.classList.toggle("waiting", !state?.humanTurn);
-  badge.textContent = state?.finished ? resultMessage() : state?.humanTurn ? "YOUR MOVE" : "AI THINKING";
+  badge.classList.toggle("waiting", watchMode ? false : !state?.humanTurn);
+  badge.textContent = state?.finished
+    ? resultMessage()
+    : watchMode
+      ? `PLAYER ${Number(state?.nextPlayer) + 1} TO MOVE`
+      : state?.humanTurn ? "YOUR MOVE" : "AI THINKING";
   const bannerMessage = state?.error;
   $("errorBanner").textContent = bannerMessage || "";
   $("errorBanner").classList.toggle("hidden", !bannerMessage);
@@ -528,13 +567,15 @@ async function startNewGame() {
   $("newGameButton").disabled = true;
   $("turnBadge").textContent = "SHUFFLING";
   try {
-    state = await api("/api/new", { method: "POST", body: "{}" });
+    stopAutoPlay();
+    state = await api(watchMode ? "/api/watch/new" : "/api/new", { method: "POST", body: "{}" });
     render();
   } catch (error) {
     showError(error.message);
   } finally {
     busy = false;
     $("newGameButton").disabled = false;
+    if (watchMode && state?.started) renderActions(state.observation);
   }
 }
 
@@ -544,17 +585,41 @@ async function submitAction() {
   $("submitAction").disabled = true;
   $("turnBadge").textContent = "RESOLVING";
   try {
-    state = await api("/api/action", {
+    state = await api(watchMode ? "/api/watch/step" : "/api/action", {
       method: "POST",
-      body: JSON.stringify({ indices: [...selected].sort((a, b) => a - b) }),
+      body: watchMode ? "{}" : JSON.stringify({ indices: [...selected].sort((a, b) => a - b) }),
     });
     render();
   } catch (error) {
     showError(error.message);
   } finally {
     busy = false;
-    if (state?.observation?.select) updateSubmit(state.observation.select);
+    if (!watchMode && state?.observation?.select) updateSubmit(state.observation.select);
+    if (watchMode && state?.started) renderActions(state.observation);
+    if (watchMode && autoPlaying && !state?.finished && !state?.error) {
+      autoPlayTimer = window.setTimeout(submitAction, 650);
+    } else if (watchMode && (state?.finished || state?.error)) {
+      stopAutoPlay();
+    }
   }
+}
+
+function stopAutoPlay() {
+  autoPlaying = false;
+  if (autoPlayTimer != null) window.clearTimeout(autoPlayTimer);
+  autoPlayTimer = null;
+  $("autoPlayButton").textContent = "連続再生";
+}
+
+function toggleAutoPlay() {
+  if (!watchMode || state?.finished || state?.error) return;
+  if (autoPlaying) {
+    stopAutoPlay();
+    return;
+  }
+  autoPlaying = true;
+  $("autoPlayButton").textContent = "一時停止";
+  submitAction();
 }
 
 function showPreview(id) {
@@ -576,6 +641,7 @@ function escapeHtml(value) {
 
 $("newGameButton").addEventListener("click", startNewGame);
 $("submitAction").addEventListener("click", submitAction);
+$("autoPlayButton").addEventListener("click", toggleAutoPlay);
 $("cardPreview").addEventListener("click", () => $("cardPreview").classList.add("hidden"));
 $("closeActionPopup").addEventListener("click", closeActionPopup);
 $("actionPopup").addEventListener("click", (event) => {
@@ -590,8 +656,17 @@ document.addEventListener("keydown", (event) => {
 
 async function initialize() {
   try {
+    if (watchMode) {
+      document.title = "PokeTCG Agent Match Viewer";
+      document.querySelector("h1").textContent = "PokeTCG Agent Match Viewer";
+      $("autoPlayButton").classList.remove("hidden");
+      document.querySelector(".human-zone .zone-heading strong").textContent = "Player 1 / src";
+      document.querySelector(".opponent-zone .zone-heading strong").textContent = "Player 2 / src_sec";
+      $("opponentHandPanel").querySelector(".section-label").textContent = "PLAYER 2 HAND";
+      $("humanHand").parentElement.querySelector(".section-label").textContent = "PLAYER 1 HAND";
+    }
     meta = await api("/api/meta");
-    state = await api("/api/state");
+    state = await api(watchMode ? "/api/watch/state" : "/api/state");
     if (!state.started) await startNewGame();
     else render();
   } catch (error) {
