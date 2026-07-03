@@ -40,6 +40,8 @@ button { font: inherit; }
 .topbar h1 { font-size: clamp(1.35rem, 2.2vw, 2rem); letter-spacing: -.03em; }
 .eyebrow { margin: 0 0 5px; font-size: .69rem; font-weight: 800; letter-spacing: .16em; opacity: .7; }
 .header-actions { display: flex; align-items: center; gap: 12px; }
+.header-actions label { display: grid; gap: 3px; font-size: .68rem; font-weight: 800; }
+.header-actions select { min-width: 130px; padding: 6px 8px; border-radius: 7px; border: 1px solid rgba(255,255,255,.35); }
 .turn-badge, .rule-chip, .stats span {
   display: inline-flex;
   align-items: center;

@@ -2,33 +2,50 @@
 
 from __future__ import annotations
 
-import html
-import json
+import argparse
 import ctypes
+import html
+import importlib.util
+import json
 from pathlib import Path
 import os
 import sys
+from types import ModuleType
 
 from kaggle_environments import make
 from kaggle_environments.envs.cabt.cg import sim as environment_sim
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = ROOT / "src"
+AGENTS_ROOT = ROOT / "agents"
 RESULTS_ROOT = ROOT / "results"
-sys.path.insert(0, str(SRC_ROOT))
 
-# The repository SDK contains libcg.so for Kaggle/Linux but no cg.dll.
-# On Windows, reuse the cabt engine bundled with kaggle-environments.
+# On Windows, all agents reuse the cabt native library bundled with
+# kaggle-environments instead of trying to load each agent's SDK DLL.
 environment_sim.lib.AllCard.restype = ctypes.c_char_p
 environment_sim.lib.AllAttack.restype = ctypes.c_char_p
 sys.modules["cg.sim"] = environment_sim
 
-previous_cwd = Path.cwd()
-try:
-    os.chdir(SRC_ROOT)
-    from main import agent  # noqa: E402
-finally:
-    os.chdir(previous_cwd)
+
+def agent_src_dir(agent_name: str) -> Path:
+    """agent名からsrcディレクトリを返す。"""
+    return AGENTS_ROOT / agent_name / "src"
+
+
+def load_module(path: Path, module_name: str, src_root: Path) -> ModuleType:
+    """src配下のmain.pyをユニークなモジュール名で読み込む。"""
+    sys.path.insert(0, str(src_root))
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"{path} を読み込めませんでした。")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(src_root)
+        spec.loader.exec_module(module)
+    finally:
+        os.chdir(previous_cwd)
+    return module
 
 
 def load_deck(path: Path) -> list[int]:
@@ -43,26 +60,45 @@ def load_deck(path: Path) -> list[int]:
     return deck
 
 
-def build_result_html(steps: list) -> str:
+def load_agent(agent_name: str, module_name: str):
+    """agent名からagent関数とデッキを読み込む。"""
+    src_root = agent_src_dir(agent_name)
+    main_path = src_root / "main.py"
+    deck_path = src_root / "deck.csv"
+    if not main_path.exists():
+        raise FileNotFoundError(f"{main_path} が存在しません。")
+
+    deck = load_deck(deck_path)
+    module = load_module(main_path, module_name, src_root)
+    if not hasattr(module, "agent"):
+        raise AttributeError(f"{main_path} に agent(obs_dict) が定義されていません。")
+    if hasattr(module, "read_deck_csv"):
+        module.read_deck_csv = lambda: list(deck)  # type: ignore[assignment]
+    return module.agent, deck, src_root
+
+
+def build_result_html(steps: list, agent_names: list[str]) -> str:
     steps_json = json.dumps(steps, ensure_ascii=False, default=str)
     escaped_steps_json = html.escape(steps_json)
     final_step = steps[-1] if steps else []
     summary_rows = []
     for player_index, state in enumerate(final_step):
+        agent_name = agent_names[player_index] if player_index < len(agent_names) else str(player_index)
         summary_rows.append(
             "<tr>"
-            f"<td>{player_index}</td>"
+            f"<td>{html.escape(agent_name)}</td>"
             f"<td>{html.escape(str(state.get('status')))}</td>"
             f"<td>{html.escape(str(state.get('reward')))}</td>"
             "</tr>"
         )
+    match_title = " vs ".join(agent_names)
 
     return f"""<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>cabt local match result</title>
+  <title>{html.escape(match_title)} - cabt local match result</title>
   <style>
     body {{
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -112,12 +148,12 @@ def build_result_html(steps: list) -> str:
 </head>
 <body>
 <main>
-  <h1>cabt local match result</h1>
+  <h1>{html.escape(match_title)}</h1>
   <section>
     <h2>Summary</h2>
     <p>steps: <strong>{len(steps)}</strong></p>
     <table>
-      <thead><tr><th>player</th><th>status</th><th>reward</th></tr></thead>
+      <thead><tr><th>agent</th><th>status</th><th>reward</th></tr></thead>
       <tbody>{''.join(summary_rows)}</tbody>
     </table>
   </section>
@@ -158,19 +194,42 @@ renderStep(input.value);
 """
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--agent", default="random", help="同一agent同士で対戦するagent名")
+    parser.add_argument("--agent-a", default=None, help="player0側のagent名")
+    parser.add_argument("--agent-b", default=None, help="player1側のagent名")
+    parser.add_argument("--debug", action="store_true", help="kaggle_environmentsのdebugログを出す")
+    return parser.parse_args()
+
+
 def main() -> None:
-    deck = load_deck(SRC_ROOT / "deck.csv")
-    os.chdir(SRC_ROOT)
-    env = make("cabt", configuration={"decks": [deck, deck]}, debug=True)
-    env.run([agent, agent])
+    args = parse_args()
+    agent_a_name = args.agent_a or args.agent
+    agent_b_name = args.agent_b or args.agent
+
+    agent_a, deck_a, src_a = load_agent(agent_a_name, "local_agent_a")
+    agent_b, deck_b, src_b = load_agent(agent_b_name, "local_agent_b")
+
+    # deck.csvなどの相対パス参照に対応するため、player0側のsrcで実行する。
+    os.chdir(src_a)
+    env = make("cabt", configuration={"decks": [deck_a, deck_b]}, debug=args.debug)
+    env.run([agent_a, agent_b])
 
     RESULTS_ROOT.mkdir(exist_ok=True)
-    result_path = RESULTS_ROOT / "result.html"
-    kaggle_result_path = RESULTS_ROOT / "result_kaggle.html"
+    match_name = f"{agent_a_name}_vs_{agent_b_name}"
+    match_root = RESULTS_ROOT / match_name
+    match_root.mkdir(exist_ok=True)
+    result_path = match_root / "result.html"
+    kaggle_result_path = match_root / "result_kaggle.html"
     kaggle_result_path.write_text(env.render(mode="html"), encoding="utf-8")
-    result_path.write_text(build_result_html(env.steps), encoding="utf-8")
+    result_path.write_text(
+        build_result_html(env.steps, [agent_a_name, agent_b_name]), encoding="utf-8"
+    )
     print(f"シミュレーションが完了しました: {result_path}")
     print(f"Kaggle標準HTMLも出力しました: {kaggle_result_path}")
+    print(f"player0: {agent_a_name} ({src_a})")
+    print(f"player1: {agent_b_name} ({src_b})")
 
 
 if __name__ == "__main__":

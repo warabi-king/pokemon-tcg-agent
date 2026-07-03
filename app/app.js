@@ -534,6 +534,10 @@ function resultMessage() {
 function render() {
   closeActionPopup();
   const observation = state?.observation;
+  if (watchMode && state?.agentNames?.length === 2) {
+    document.querySelector(".human-zone .zone-heading strong").textContent = `Player 1 / ${state.agentNames[0]}`;
+    document.querySelector(".opponent-zone .zone-heading strong").textContent = `Player 2 / ${state.agentNames[1]}`;
+  }
   renderBoard(observation);
   renderActions(observation);
   renderEvents(state?.events);
@@ -568,7 +572,13 @@ async function startNewGame() {
   $("turnBadge").textContent = "SHUFFLING";
   try {
     stopAutoPlay();
-    state = await api(watchMode ? "/api/watch/new" : "/api/new", { method: "POST", body: "{}" });
+    const agents = watchMode
+      ? { agentA: $("agentASelect").value, agentB: $("agentBSelect").value }
+      : { agent: $("agentBSelect").value };
+    state = await api(watchMode ? "/api/watch/new" : "/api/new", {
+      method: "POST",
+      body: JSON.stringify(agents),
+    });
     render();
   } catch (error) {
     showError(error.message);
@@ -660,12 +670,18 @@ async function initialize() {
       document.title = "PokeTCG Agent Match Viewer";
       document.querySelector("h1").textContent = "PokeTCG Agent Match Viewer";
       $("autoPlayButton").classList.remove("hidden");
-      document.querySelector(".human-zone .zone-heading strong").textContent = "Player 1 / src";
-      document.querySelector(".opponent-zone .zone-heading strong").textContent = "Player 2 / src_sec";
+      document.querySelector(".human-zone .zone-heading strong").textContent = "Player 1";
+      document.querySelector(".opponent-zone .zone-heading strong").textContent = "Player 2";
       $("opponentHandPanel").querySelector(".section-label").textContent = "PLAYER 2 HAND";
       $("humanHand").parentElement.querySelector(".section-label").textContent = "PLAYER 1 HAND";
     }
     meta = await api("/api/meta");
+    for (const select of [$("agentASelect"), $("agentBSelect")]) {
+      for (const agentName of meta.agents) {
+        select.add(new Option(agentName, agentName));
+      }
+    }
+    $("agentASelect").closest("label").classList.toggle("hidden", !watchMode);
     state = await api(watchMode ? "/api/watch/state" : "/api/state");
     if (!state.started) await startNewGame();
     else render();

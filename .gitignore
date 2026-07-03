@@ -5,4 +5,7 @@ __pycache__/
 result.html
 result_kaggle.html
 results/
+dist/
 submission.tar.gz
+agents/*/train/checkpoints/
+agents/*/train/logs/

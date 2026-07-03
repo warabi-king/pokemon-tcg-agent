@@ -16,9 +16,23 @@ from flask import Flask, jsonify, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = ROOT / "app"
-SRC_ROOT = ROOT / "src"
-SRC_SEC_ROOT = ROOT / "src_sec"
+AGENTS_ROOT = ROOT / "agents"
 CARD_ROOT = ROOT / "docs" / "cards"
+
+
+def available_agents() -> list[str]:
+    """Return agent directories that contain a runnable src/main.py and deck."""
+    return sorted(
+        path.name
+        for path in AGENTS_ROOT.iterdir()
+        if (path / "src" / "main.py").is_file() and (path / "src" / "deck.csv").is_file()
+    )
+
+
+def agent_src(agent_name: str) -> Path:
+    if agent_name not in available_agents():
+        raise ValueError(f"Unknown agent: {agent_name}")
+    return AGENTS_ROOT / agent_name / "src"
 
 
 def load_deck(path: Path) -> list[int]:
@@ -39,21 +53,16 @@ from kaggle_environments.envs.cabt.cg.sim import Battle  # noqa: E402
 environment_sim.lib.AllCard.restype = ctypes.c_char_p
 environment_sim.lib.AllAttack.restype = ctypes.c_char_p
 
-sys.path.insert(0, str(SRC_ROOT))
+DEFAULT_AGENT = available_agents()[0]
+DEFAULT_SRC_ROOT = agent_src(DEFAULT_AGENT)
+sys.path.insert(0, str(DEFAULT_SRC_ROOT))
 import cg  # noqa: E402
 
 sys.modules["cg.sim"] = environment_sim
 
-previous_cwd = Path.cwd()
-try:
-    os.chdir(SRC_ROOT)
-    import main as opponent_module  # noqa: E402
-finally:
-    os.chdir(previous_cwd)
-
-
 def load_agent_module(name: str, root: Path):
     """Load an agent under a unique module name so its globals stay isolated."""
+    sys.path.insert(0, str(root))
     spec = importlib.util.spec_from_file_location(name, root / "main.py")
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load agent module from {root / 'main.py'}")
@@ -68,7 +77,7 @@ def load_agent_module(name: str, root: Path):
     return module
 
 
-second_agent_module = load_agent_module("main_sec", SRC_SEC_ROOT)
+opponent_module = load_agent_module("browser_default_agent", DEFAULT_SRC_ROOT)
 
 from cg.api import all_attack  # noqa: E402
 
@@ -138,14 +147,15 @@ class MatchController:
         self.events: list[dict[str, Any]] = []
         self.error: str | None = None
 
-    def new_game(self) -> dict[str, Any]:
+    def new_game(self, agent_name: str = DEFAULT_AGENT) -> dict[str, Any]:
         with self.lock:
+            global opponent_module
+            selected_src = agent_src(agent_name)
+            opponent_module = load_agent_module("browser_human_opponent", selected_src)
             human_deck = load_deck(APP_ROOT / "deck.csv")
-            opponent_deck = load_deck(SRC_ROOT / "deck.csv")
+            opponent_deck = load_deck(selected_src / "deck.csv")
             discard_active_battle()
-            opponent_module.plan = opponent_module.AttackPlan()
-            opponent_module.pre_turn = 0
-            opponent_module.ability_used = False
+            reset_agent(opponent_module)
 
             self.env = make("cabt", debug=True)
             self.env.reset()
@@ -254,7 +264,7 @@ def reset_agent(module: Any) -> None:
 
 
 class AgentMatchController:
-    """Run src against src_sec, advancing exactly one agent decision at a time."""
+    """Run two selected agents, advancing exactly one agent decision at a time."""
 
     def __init__(self) -> None:
         self.lock = BATTLE_LOCK
@@ -263,14 +273,23 @@ class AgentMatchController:
         self.events: list[dict[str, Any]] = []
         self.actions: list[dict[str, Any]] = []
         self.error: str | None = None
+        self.modules: list[Any] = []
+        self.agent_names: list[str] = []
 
-    def new_game(self) -> dict[str, Any]:
+    def new_game(self, agent_a: str = DEFAULT_AGENT, agent_b: str = DEFAULT_AGENT) -> dict[str, Any]:
         with self.lock:
-            decks = [load_deck(SRC_ROOT / "deck.csv"), load_deck(SRC_SEC_ROOT / "deck.csv")]
+            names = [agent_a, agent_b]
+            roots = [agent_src(name) for name in names]
+            decks = [load_deck(root / "deck.csv") for root in roots]
+            self.modules = [
+                load_agent_module(f"browser_watch_agent_{index}", root)
+                for index, root in enumerate(roots)
+            ]
+            self.agent_names = names
             discard_active_battle()
 
-            reset_agent(opponent_module)
-            reset_agent(second_agent_module)
+            for module in self.modules:
+                reset_agent(module)
             self.env = make("cabt", debug=True)
             self.env.reset()
             register_active_battle(self.env)
@@ -294,7 +313,7 @@ class AgentMatchController:
             if len(active) != 1:
                 raise RuntimeError(f"行動するプレイヤーを特定できません: {active}")
             player_index = active[0]
-            module = (opponent_module, second_agent_module)[player_index]
+            module = self.modules[player_index]
             observation = plain(self.env.state[player_index].observation)
             try:
                 action = module.agent(observation)
@@ -362,6 +381,7 @@ class AgentMatchController:
                 "actions": self.actions,
                 "error": self.error,
                 "step": len(self.actions),
+                "agentNames": self.agent_names,
             }
 
 
@@ -392,7 +412,7 @@ def card_image(filename: str):
 
 @app.get("/api/meta")
 def metadata():
-    return jsonify({"cards": CARD_META, "attacks": ATTACK_META})
+    return jsonify({"cards": CARD_META, "attacks": ATTACK_META, "agents": available_agents()})
 
 
 @app.get("/api/state")
@@ -403,7 +423,8 @@ def state():
 @app.post("/api/new")
 def new_game():
     try:
-        return jsonify(match.new_game())
+        body = request.get_json(silent=True) or {}
+        return jsonify(match.new_game(body.get("agent", DEFAULT_AGENT)))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -425,7 +446,13 @@ def watch_state():
 @app.post("/api/watch/new")
 def watch_new_game():
     try:
-        return jsonify(agent_match.new_game())
+        body = request.get_json(silent=True) or {}
+        return jsonify(
+            agent_match.new_game(
+                body.get("agentA", DEFAULT_AGENT),
+                body.get("agentB", DEFAULT_AGENT),
+            )
+        )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 
