@@ -69,6 +69,7 @@
           <span id="selectionRule" class="rule-chip"></span>
         </div>
         <div id="contextCard" class="context-card"></div>
+        <div id="selectedAction" class="selected-action hidden"></div>
         <div id="actionList" class="action-list"></div>
         <button id="submitAction" class="primary-button" type="button" disabled>決定</button>
       </section>
@@ -88,6 +89,19 @@
 
   <div id="cardPreview" class="card-preview hidden" aria-hidden="true">
     <img id="previewImage" alt="カード拡大画像">
+  </div>
+
+  <div id="actionPopup" class="action-popup hidden" role="dialog" aria-modal="true" aria-labelledby="actionPopupTitle">
+    <section class="action-popup-panel">
+      <button id="closeActionPopup" class="popup-close" type="button" aria-label="行動選択を閉じる">×</button>
+      <div id="actionPopupCard" class="popup-card"></div>
+      <div class="popup-content">
+        <p class="eyebrow">CARD ACTIONS</p>
+        <h2 id="actionPopupTitle">カードの行動</h2>
+        <p id="actionPopupLocation" class="popup-location"></p>
+        <div id="actionPopupOptions" class="action-list popup-options"></div>
+      </div>
+    </section>
   </div>
 
   <script src="/static/app.js"></script>

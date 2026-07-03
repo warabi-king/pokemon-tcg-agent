@@ -36,6 +36,32 @@ function cardImageUrl(id) {
   return `/cards/${padCardId(id)}.jpg`;
 }
 
+function addActionIndex(map, key, index) {
+  if (!map.has(key)) map.set(key, []);
+  map.get(key).push(index);
+}
+
+function buildCardActionMap(observation) {
+  const map = new Map();
+  const selection = observation?.select;
+  if (!state?.humanTurn || selection?.context !== 0) return map;
+
+  selection.option.forEach((option, index) => {
+    if ([7, 8, 9].includes(option.type) && option.index != null) {
+      addActionIndex(map, `hand:${option.index}`, index);
+    } else if ([10, 11].includes(option.type) && [4, 5].includes(option.area)) {
+      addActionIndex(map, `field:${option.area}:${option.index}`, index);
+    } else if ([12, 13].includes(option.type)) {
+      addActionIndex(map, "field:4:0", index);
+    }
+  });
+  return map;
+}
+
+function mappedActionIndices(observation) {
+  return new Set([...buildCardActionMap(observation).values()].flat());
+}
+
 function cardElement(card, options = {}) {
   const element = document.createElement("div");
   element.className = options.mini ? "mini-card" : "card";
@@ -56,7 +82,29 @@ function cardElement(card, options = {}) {
   image.loading = "lazy";
   element.appendChild(image);
   element.title = `${cardMeta(id).name} (#${id})`;
-  element.addEventListener("click", () => showPreview(id));
+
+  const actionIndices = options.actionIndices || [];
+  if (actionIndices.length) {
+    element.classList.add("actionable");
+    element.dataset.actionIndices = actionIndices.join(",");
+    element.setAttribute("role", "button");
+    element.setAttribute("tabindex", "0");
+    element.setAttribute("aria-label", `${cardMeta(id).name}の行動を表示`);
+    const openActions = () => openActionPopup(card, actionIndices, options.locationLabel, options.observation);
+    element.addEventListener("click", openActions);
+    element.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openActions();
+      }
+    });
+    const actionBadge = document.createElement("span");
+    actionBadge.className = "action-badge";
+    actionBadge.textContent = actionIndices.length > 1 ? `ACTION ${actionIndices.length}` : "ACTION";
+    element.appendChild(actionBadge);
+  } else {
+    element.addEventListener("click", () => showPreview(id));
+  }
 
   if (!options.mini && card.hp != null) {
     const hp = document.createElement("span");
@@ -76,9 +124,12 @@ function cardElement(card, options = {}) {
   return element;
 }
 
-function renderSlots(target, cards, count) {
+function renderSlots(target, cards, count, optionsForIndex = () => ({})) {
   target.replaceChildren();
-  for (let i = 0; i < count; i += 1) target.appendChild(cardElement(cards?.[i] || null));
+  for (let i = 0; i < count; i += 1) {
+    const card = cards?.[i] || null;
+    target.appendChild(cardElement(card, card ? optionsForIndex(i, card) : {}));
+  }
 }
 
 function renderPile(target, label, count, topCard = null, hidden = false) {
@@ -98,11 +149,20 @@ function renderBoard(observation) {
   if (!current) return;
   const human = current.players[0];
   const opponent = current.players[1];
+  const actionMap = buildCardActionMap(observation);
 
   renderSlots($("opponentBench"), opponent.bench, opponent.benchMax || 5);
-  renderSlots($("humanBench"), human.bench, human.benchMax || 5);
+  renderSlots($("humanBench"), human.bench, human.benchMax || 5, (index) => ({
+    actionIndices: actionMap.get(`field:5:${index}`) || [],
+    locationLabel: `ベンチ${index + 1}`,
+    observation,
+  }));
   renderSlots($("opponentActive"), opponent.active, 1);
-  renderSlots($("humanActive"), human.active, 1);
+  renderSlots($("humanActive"), human.active, 1, (index) => ({
+    actionIndices: actionMap.get(`field:4:${index}`) || [],
+    locationLabel: "バトル場",
+    observation,
+  }));
 
   renderPile($("opponentDeck"), "山札", opponent.deckCount, null, true);
   renderPile($("humanDeck"), "山札", human.deckCount, null, true);
@@ -115,7 +175,11 @@ function renderBoard(observation) {
   const hand = $("humanHand");
   hand.replaceChildren();
   if (!human.hand?.length) hand.innerHTML = '<div class="empty-message">手札はありません</div>';
-  else human.hand.forEach((card) => hand.appendChild(cardElement(card)));
+  else human.hand.forEach((card, index) => hand.appendChild(cardElement(card, {
+    actionIndices: actionMap.get(`hand:${index}`) || [],
+    locationLabel: "手札",
+    observation,
+  })));
 
   const stadium = $("stadium");
   stadium.replaceChildren();
@@ -179,11 +243,55 @@ function optionDescription(option, card, observation) {
   return OPTION_TYPES[option.type] || `選択肢 ${option.type}`;
 }
 
+function createActionOptionButton(index, option, observation, onClick) {
+  const card = findCardForOption(option, observation);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `action-option${card ? "" : " no-card"}`;
+  button.dataset.index = index;
+  const heading = optionDescription(option, card, observation);
+  button.innerHTML = `<span class="option-index">${index + 1}</span><span class="option-copy"><strong>${escapeHtml(heading)}</strong><small>${escapeHtml(OPTION_TYPES[option.type] || "合法手")}</small></span>`;
+  if (card) button.appendChild(cardElement(card, { mini: true }));
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function openActionPopup(card, actionIndices, locationLabel, observation) {
+  const selection = observation?.select;
+  if (!selection) return;
+  const id = cardId(card);
+  $("actionPopupTitle").textContent = cardMeta(id).name;
+  $("actionPopupLocation").textContent = `${locationLabel || "カード"}で選べる行動`;
+
+  const popupCard = $("actionPopupCard");
+  popupCard.replaceChildren(cardElement(card));
+  const options = $("actionPopupOptions");
+  options.replaceChildren();
+  actionIndices.forEach((index) => {
+    const button = createActionOptionButton(index, selection.option[index], observation, () => {
+      toggleSelection(index, selection);
+      closeActionPopup();
+    });
+    button.classList.toggle("selected", selected.has(index));
+    options.appendChild(button);
+  });
+
+  $("actionPopup").classList.remove("hidden");
+  $("actionPopup").setAttribute("aria-hidden", "false");
+}
+
+function closeActionPopup() {
+  $("actionPopup").classList.add("hidden");
+  $("actionPopup").setAttribute("aria-hidden", "true");
+}
+
 function renderActions(observation) {
   selected = new Set();
+  closeActionPopup();
   const selection = observation?.select;
   const list = $("actionList");
   list.replaceChildren();
+  $("selectedAction").classList.add("hidden");
   if (!selection || !state?.humanTurn) {
     $("actionTitle").textContent = state?.finished ? "対戦終了" : "AIが選択中";
     $("selectionRule").textContent = "";
@@ -194,17 +302,16 @@ function renderActions(observation) {
 
   $("actionTitle").textContent = CONTEXTS[selection.context] || "行動を選択";
   $("selectionRule").textContent = `${selection.minCount}〜${selection.maxCount}個`;
+  const cardActionIndices = mappedActionIndices(observation);
+  if (cardActionIndices.size) {
+    const hint = document.createElement("div");
+    hint.className = "card-action-hint";
+    hint.innerHTML = '<strong>盤面から行動を選択</strong><span>「ACTION」が付いた手札または場のカードをクリックしてください。</span>';
+    list.appendChild(hint);
+  }
   selection.option.forEach((option, index) => {
-    const card = findCardForOption(option, observation);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `action-option${card ? "" : " no-card"}`;
-    button.dataset.index = index;
-    const heading = optionDescription(option, card, observation);
-    button.innerHTML = `<span class="option-index">${index + 1}</span><span class="option-copy"><strong>${escapeHtml(heading)}</strong><small>${escapeHtml(OPTION_TYPES[option.type] || "合法手")}</small></span>`;
-    if (card) button.appendChild(cardElement(card, { mini: true }));
-    button.addEventListener("click", () => toggleSelection(index, selection));
-    list.appendChild(button);
+    if (cardActionIndices.has(index)) return;
+    list.appendChild(createActionOptionButton(index, option, observation, () => toggleSelection(index, selection)));
   });
 
   const contextTarget = $("contextCard");
@@ -218,6 +325,7 @@ function renderActions(observation) {
     row.appendChild(label);
     contextTarget.appendChild(row);
   }
+  updateSelectedAction(selection, observation);
   updateSubmit(selection);
 }
 
@@ -230,7 +338,27 @@ function toggleSelection(index, selection) {
   document.querySelectorAll(".action-option").forEach((button) => {
     button.classList.toggle("selected", selected.has(Number(button.dataset.index)));
   });
+  document.querySelectorAll(".card.actionable").forEach((card) => {
+    const indices = (card.dataset.actionIndices || "").split(",").filter(Boolean).map(Number);
+    card.classList.toggle("choice-selected", indices.some((optionIndex) => selected.has(optionIndex)));
+  });
+  updateSelectedAction(selection, state?.observation);
   updateSubmit(selection);
+}
+
+function updateSelectedAction(selection, observation) {
+  const target = $("selectedAction");
+  if (!selected.size) {
+    target.classList.add("hidden");
+    target.replaceChildren();
+    return;
+  }
+  const labels = [...selected].map((index) => {
+    const option = selection.option[index];
+    return optionDescription(option, findCardForOption(option, observation), observation);
+  });
+  target.innerHTML = `<span>選択中</span><strong>${labels.map(escapeHtml).join(" / ")}</strong>`;
+  target.classList.remove("hidden");
 }
 
 function updateSubmit(selection) {
@@ -265,6 +393,7 @@ function resultMessage() {
 }
 
 function render() {
+  closeActionPopup();
   const observation = state?.observation;
   renderBoard(observation);
   renderActions(observation);
@@ -344,8 +473,15 @@ function escapeHtml(value) {
 $("newGameButton").addEventListener("click", startNewGame);
 $("submitAction").addEventListener("click", submitAction);
 $("cardPreview").addEventListener("click", () => $("cardPreview").classList.add("hidden"));
+$("closeActionPopup").addEventListener("click", closeActionPopup);
+$("actionPopup").addEventListener("click", (event) => {
+  if (event.target === $("actionPopup")) closeActionPopup();
+});
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") $("cardPreview").classList.add("hidden");
+  if (event.key === "Escape") {
+    $("cardPreview").classList.add("hidden");
+    closeActionPopup();
+  }
 });
 
 async function initialize() {
