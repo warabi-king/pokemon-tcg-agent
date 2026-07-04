@@ -23,6 +23,29 @@ RESULTS_ROOT = ROOT / "results"
 # kaggle-environments instead of trying to load each agent's SDK DLL.
 environment_sim.lib.AllCard.restype = ctypes.c_char_p
 environment_sim.lib.AllAttack.restype = ctypes.c_char_p
+environment_sim.lib.AgentStart.restype = ctypes.c_void_p
+environment_sim.lib.SearchBegin.restype = ctypes.c_char_p
+environment_sim.lib.SearchBegin.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_char_p,
+    ctypes.c_int,
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_int,
+]
+environment_sim.lib.SearchStep.restype = ctypes.c_char_p
+environment_sim.lib.SearchStep.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_int64,
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_int,
+]
+environment_sim.lib.SearchEnd.argtypes = [ctypes.c_void_p]
+environment_sim.lib.SearchRelease.argtypes = [ctypes.c_void_p, ctypes.c_int64]
 sys.modules["cg.sim"] = environment_sim
 
 

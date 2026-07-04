@@ -52,6 +52,29 @@ from kaggle_environments.envs.cabt.cg.sim import Battle  # noqa: E402
 
 environment_sim.lib.AllCard.restype = ctypes.c_char_p
 environment_sim.lib.AllAttack.restype = ctypes.c_char_p
+environment_sim.lib.AgentStart.restype = ctypes.c_void_p
+environment_sim.lib.SearchBegin.restype = ctypes.c_char_p
+environment_sim.lib.SearchBegin.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_char_p,
+    ctypes.c_int,
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_int,
+]
+environment_sim.lib.SearchStep.restype = ctypes.c_char_p
+environment_sim.lib.SearchStep.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_int64,
+    ctypes.POINTER(ctypes.c_int),
+    ctypes.c_int,
+]
+environment_sim.lib.SearchEnd.argtypes = [ctypes.c_void_p]
+environment_sim.lib.SearchRelease.argtypes = [ctypes.c_void_p, ctypes.c_int64]
 
 DEFAULT_AGENT = available_agents()[0]
 DEFAULT_SRC_ROOT = agent_src(DEFAULT_AGENT)
