@@ -24,18 +24,24 @@ Pokémon TCG AI Battle Challenge Simulation向けのAIエージェント開発�
 │   │   │   ├── deck.csv
 │   │   │   └── cg/
 │   │   └── README.md
-│   └── rl_mcts_sample/
-│       ├── src/          # 提出対象
-│       │   ├── main.py
-│       │   ├── deck.csv
-│       │   ├── cg/
-│       │   └── rl_mcts/
-│       ├── train/        # 提出に含めない学習用コード
-│       └── README.md
+│   ├── rule_Lucario/
+│   │   └── src/          # ルカリオデッキ用ルールベースagent
+│   │       ├── main.py
+│   │       ├── deck.csv
+│   │       └── cg/
+│   ├── rl_mcts_sample/
+│   │   ├── src/          # MCTSサンプルの提出対象
+│   │   │   ├── main.py
+│   │   │   ├── deck.csv
+│   │   │   ├── cg/
+│   │   │   └── rl_mcts/
+│   │   ├── train/        # 提出に含めない学習用コード
+│   │   └── README.md
 │   └── rl_mcts/
 │       ├── src/          # rl_mcts_sampleから派生した改善用agent
 │       ├── train/        # CSV/PNGログ付き学習コード
 │       └── README.md
+├── app/                  # ブラウザ対戦・観戦UI
 ├── tools/                # agent横断の補助ツール
 ├── sample_submission/    # Kaggle配布sample。参照用
 ├── data/                 # Kaggle DataのカードCSV
@@ -71,7 +77,7 @@ agent名はPythonやファイルパスで扱いやすいように、ハイフン
 ```text
 random
 rl_mcts_sample
-rule_based
+rule_Lucario
 ```
 
 ## セットアップ
@@ -93,6 +99,7 @@ python -m pip install -r requirements.txt
 
 ```bash
 python tools/run_local_match.py --agent random
+python tools/run_local_match.py --agent rule_Lucario
 python tools/run_local_match.py --agent rl_mcts_sample
 ```
 
@@ -131,6 +138,7 @@ agent名を指定して提出アーカイブを作成します。
 
 ```bash
 python tools/build_submission.py --agent random
+python tools/build_submission.py --agent rule_Lucario
 python tools/build_submission.py --agent rl_mcts_sample
 ```
 
@@ -186,5 +194,5 @@ PyTorchなど特定の学習・推論依存があるagentは、必要な依存�
 
 `sample_submission/` はKaggle配布sampleの参照用です。通常は編集しません。
 
-`src/`、`src_random/` は旧構成の名残です。今後の開発・提出・検証は
-`agents/{agent-name}/src/` を使います。
+旧ルート直下の `src/`、`src_sec/` は廃止しました。開発・提出・検証では
+必ず `agents/{agent-name}/src/` を使います。
