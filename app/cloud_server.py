@@ -58,6 +58,16 @@ atexit.register(manager.close_all)
 atexit.register(agent_manager.close_all)
 
 
+def uploaded_deck(value: Any) -> list[int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or len(value) != 60:
+        raise ValueError("CSVにはカードIDを60件指定してください。")
+    if any(type(card_id) is not int or card_id not in CARD_META for card_id in value):
+        raise ValueError("CSVに存在しないカードIDが含まれています。")
+    return value
+
+
 def session_player() -> tuple[str, int]:
     player_token = request.headers.get("X-Player-Token", "")
     if player_token:
@@ -93,6 +103,11 @@ def play():
 @app.get("/watch")
 def watch():
     return send_from_directory(APP_ROOT, "index.html")
+
+
+@app.get("/deck-builder")
+def deck_builder():
+    return send_from_directory(APP_ROOT, "deck_builder.html")
 
 
 @app.get("/static/<path:filename>")
@@ -146,7 +161,9 @@ def agent_new_game():
     try:
         body = request.get_json(silent=True) or {}
         with capacity_lock:
-            match, payload = agent_manager.create("play", [str(body.get("agent") or "")])
+            match, payload = agent_manager.create(
+                "play", [str(body.get("agent") or "")], uploaded_deck(body.get("deckIds"))
+            )
         return jsonify({**payload, "cloudMode": True, "matchToken": match.token})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
@@ -205,9 +222,10 @@ def create_room():
     try:
         body = request.get_json(force=True) or {}
         with capacity_lock:
-            room = manager.create(
-                [str(body.get("deckA") or ""), str(body.get("deckB") or "")],
-            )
+            room = manager.create([
+                uploaded_deck(body.get("deckAIds")) or str(body.get("deckA") or ""),
+                str(body.get("deckB") or ""),
+            ])
         session.clear()
         session["room_id"] = room.room_id
         session["role"] = 0
@@ -222,7 +240,10 @@ def create_room():
 def join_room():
     try:
         body = request.get_json(force=True) or {}
-        room = manager.join(str(body.get("roomId") or ""))
+        room = manager.join(
+            str(body.get("roomId") or ""),
+            uploaded_deck(body.get("deckIds")) or str(body.get("deck") or ""),
+        )
         session.clear()
         session["room_id"] = room.room_id
         session["role"] = 1

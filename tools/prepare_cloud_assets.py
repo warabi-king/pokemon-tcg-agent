@@ -35,11 +35,7 @@ def main(root: Path) -> None:
         shutil.rmtree(cache)
     for bytecode in agents.rglob("*.pyc"):
         bytecode.unlink()
-    for path in cards.glob("*.jpg"):
-        if int(path.stem) not in used_card_ids:
-            path.unlink()
-
-    print(f"Prepared {len(used_card_ids)} card images for Cloud Run.")
+    print(f"Prepared agent sources and {len(list(cards.glob('*.jpg')))} card images for Cloud Run.")
 
 
 if __name__ == "__main__":

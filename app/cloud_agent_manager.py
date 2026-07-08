@@ -24,14 +24,16 @@ def available_agents() -> list[str]:
 
 
 class AgentWorkerClient:
-    def __init__(self, mode: str, agent_names: list[str]) -> None:
+    def __init__(
+        self, mode: str, agent_names: list[str], human_deck: list[int] | None = None
+    ) -> None:
         context = multiprocessing.get_context("spawn")
         parent, child = context.Pipe()
         self.connection = parent
         self.lock = threading.Lock()
         self.process = context.Process(
             target=worker_main,
-            args=(child, mode, agent_names),
+            args=(child, mode, agent_names, human_deck),
             daemon=True,
             name=f"cabt-{mode}-{secrets.token_hex(3)}",
         )
@@ -112,7 +114,9 @@ class CloudAgentManager:
         for match in matches:
             match.worker.close()
 
-    def create(self, mode: str, agent_names: list[str]) -> tuple[HostedMatch, dict[str, Any]]:
+    def create(
+        self, mode: str, agent_names: list[str], human_deck: list[int] | None = None
+    ) -> tuple[HostedMatch, dict[str, Any]]:
         choices = set(available_agents())
         expected = 1 if mode == "play" else 2 if mode == "watch" else 0
         if len(agent_names) != expected or any(name not in choices for name in agent_names):
@@ -120,7 +124,12 @@ class CloudAgentManager:
         self.cleanup()
         if self.total_active() >= self.max_matches:
             raise ValueError("現在満室です。同時に実行できる対戦は5つまでです。")
-        worker = AgentWorkerClient(mode, agent_names)
+        if human_deck is not None and (
+            len(human_deck) != 60
+            or any(type(card_id) is not int or card_id <= 0 for card_id in human_deck)
+        ):
+            raise ValueError("CSVにはカードIDを60件指定してください。")
+        worker = AgentWorkerClient(mode, agent_names, human_deck)
         token = secrets.token_urlsafe(32)
         match = HostedMatch(token, mode, worker)
         with self.lock:

@@ -1,0 +1,14 @@
+:root { font-family: Inter,"Noto Sans JP",system-ui,sans-serif; color:#17221b; background:#f2f3ec; }
+* { box-sizing:border-box; } body { margin:0; }
+header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:24px; padding:18px 3vw; border-bottom:1px solid #d6ddd4; background:rgba(242,243,236,.96); }
+header a { color:#165f43; font-weight:800; text-decoration:none; } header div { flex:1; } header p { margin:0; color:#165f43; font-size:.7rem; font-weight:900; letter-spacing:.16em; } h1 { margin:2px 0 0; font-size:1.6rem; }
+button { border:0; border-radius:9px; padding:10px 14px; color:white; background:#165f43; font-weight:800; cursor:pointer; } button:disabled { opacity:.45; cursor:not-allowed; }
+main { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:22px; width:min(1500px,94vw); margin:25px auto; }
+.toolbar { display:flex; align-items:center; gap:15px; margin-bottom:16px; } input { flex:1; padding:13px; border:1px solid #ccd5cc; border-radius:10px; font:inherit; }
+.card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:12px; }
+.card { position:relative; display:grid; gap:7px; padding:8px; color:#17221b; text-align:left; background:white; box-shadow:0 8px 20px rgba(31,52,38,.08); }
+.card img { width:100%; border-radius:6px; } .card span { min-height:2.5em; font-size:.75rem; } .card b { position:absolute; right:12px; bottom:42px; display:grid; place-items:center; width:31px; height:31px; border-radius:50%; color:white; background:#165f43; font-size:1.2rem; }
+aside { position:sticky; top:100px; align-self:start; max-height:calc(100vh - 120px); display:flex; flex-direction:column; padding:20px; border-radius:16px; background:white; box-shadow:0 14px 38px rgba(31,52,38,.1); }
+.deck-title { display:flex; justify-content:space-between; align-items:center; } .deck-title h2 { margin:0; }.deck-title strong { color:#165f43; font-size:1.2rem; }
+.deck-list { overflow:auto; margin:15px 0; }.deck-list>div { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #edf0eb; font-size:.78rem; }.deck-list>div>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.deck-list div div { display:flex; align-items:center; gap:7px; }.deck-list button { padding:4px 8px; }.secondary { color:#165f43; background:#e7eee9; }
+@media(max-width:800px){ header { flex-wrap:wrap; } main { grid-template-columns:1fr; } aside { position:static; max-height:none; order:-1; }.card-grid{grid-template-columns:repeat(2,1fr);} }

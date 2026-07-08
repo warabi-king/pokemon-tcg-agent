@@ -13,6 +13,7 @@
       <h1>PokeTCG Online Battle</h1>
       <p>ルームを作成するか、受け取ったルームコードを入力して参加します。</p>
       <span id="capacity" class="capacity">空き状況を確認中…</span>
+      <a class="builder-link" href="/deck-builder">デッキを作成する →</a>
     </header>
 
     <div id="errorMessage" class="error hidden" role="alert"></div>
@@ -55,6 +56,10 @@
           <select id="deckA" required></select>
         </label>
         <label>
+          または自分のdeck.csv
+          <input id="deckAFile" type="file" accept=".csv,text/csv">
+        </label>
+        <label>
           Player 2 デッキ
           <select id="deckB" required></select>
         </label>
@@ -72,6 +77,14 @@
           <input id="roomId" type="text" minlength="8" maxlength="8" autocomplete="off" placeholder="例: A3K7XP9R" required>
         </label>
         <button type="submit">ルームに参加</button>
+        <label>
+          自分のデッキ
+          <select id="joinDeck" required></select>
+        </label>
+        <label>
+          または自分のdeck.csv
+          <input id="joinDeckFile" type="file" accept=".csv,text/csv">
+        </label>
       </form>
       </div>
     </section>

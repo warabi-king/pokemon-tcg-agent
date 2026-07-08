@@ -174,12 +174,17 @@ class MatchController:
         self.events: list[dict[str, Any]] = []
         self.error: str | None = None
 
-    def new_game(self, agent_name: str = DEFAULT_AGENT) -> dict[str, Any]:
+    def new_game(
+        self, agent_name: str = DEFAULT_AGENT, human_deck: list[int] | None = None
+    ) -> dict[str, Any]:
         with self.lock:
             global opponent_module
             selected_src = agent_src(agent_name)
             opponent_module = load_agent_module("browser_human_opponent", selected_src)
-            human_deck = load_deck(APP_ROOT / "deck.csv")
+            if human_deck is None:
+                human_deck = load_deck(APP_ROOT / "deck.csv")
+            elif len(human_deck) != 60 or any(type(card_id) is not int or card_id <= 0 for card_id in human_deck):
+                raise ValueError("CSV deck must contain exactly 60 card IDs.")
             opponent_deck = load_deck(selected_src / "deck.csv")
             discard_active_battle()
             reset_agent(opponent_module)
@@ -598,6 +603,11 @@ def index():
 @app.get("/watch")
 def watch():
     return send_from_directory(APP_ROOT, "index.html")
+
+
+@app.get("/deck-builder")
+def deck_builder():
+    return send_from_directory(APP_ROOT, "deck_builder.html")
 
 
 @app.get("/duel")

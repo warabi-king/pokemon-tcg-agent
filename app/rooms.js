@@ -25,12 +25,23 @@ function setBusy(form, busy) {
   form.querySelector("button").disabled = busy;
 }
 
+async function readDeckFile(input) {
+  if (!input.files.length) return null;
+  const values = (await input.files[0].text()).split(/[\s,]+/).filter(Boolean);
+  const ids = values.map(Number);
+  if (ids.length !== 60 || ids.some(id => !Number.isInteger(id) || id <= 0)) {
+    throw new Error("CSVにはカードIDを60件指定してください。");
+  }
+  return ids;
+}
+
 async function initialize() {
   try {
     const [meta, status] = await Promise.all([api("/api/meta"), api("/api/rooms/status")]);
     for (const name of meta.agents) {
       $("deckA").add(new Option(name, name));
       $("deckB").add(new Option(name, name));
+      $("joinDeck").add(new Option(name, name));
     }
     $("capacity").textContent = `使用中 ${status.activeMatches} / ${status.maxRooms} 対戦`;
   } catch (error) {
@@ -46,11 +57,13 @@ $("createForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   setBusy(event.currentTarget, true);
   try {
+    const deckAIds = await readDeckFile($("deckAFile"));
     const result = await api("/api/rooms", {
       method: "POST",
       body: JSON.stringify({
         deckA: $("deckA").value,
         deckB: $("deckB").value,
+        deckAIds,
       }),
     });
     enterDuel(result);
@@ -64,9 +77,10 @@ $("joinForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   setBusy(event.currentTarget, true);
   try {
+    const deckIds = await readDeckFile($("joinDeckFile"));
     const result = await api("/api/rooms/join", {
       method: "POST",
-      body: JSON.stringify({ roomId: $("roomId").value }),
+      body: JSON.stringify({ roomId: $("roomId").value, deck: $("joinDeck").value, deckIds }),
     });
     enterDuel(result);
   } catch (error) {

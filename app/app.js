@@ -622,11 +622,19 @@ async function startNewGame() {
   $("turnBadge").textContent = "SHUFFLING";
   try {
     stopAutoPlay();
+    let deckIds = null;
+    if (cloudAgentMode && $("humanDeckFile").files.length) {
+      const values = (await $("humanDeckFile").files[0].text()).split(/[\s,]+/).filter(Boolean);
+      deckIds = values.map(Number);
+      if (deckIds.length !== 60 || deckIds.some(id => !Number.isInteger(id) || id <= 0)) {
+        throw new Error("CSVにはカードIDを60件指定してください。");
+      }
+    }
     const agents = watchMode
       ? { agentA: $("agentASelect").value, agentB: $("agentBSelect").value }
       : duelMode
         ? { deckA: $("agentASelect").value, deckB: $("agentBSelect").value }
-        : { agent: $("agentBSelect").value };
+        : { agent: $("agentBSelect").value, deckIds };
     const path = watchMode ? "/api/watch/new" : duelMode ? "/api/duel/create" : "/api/new";
     state = await api(path, {
       method: "POST",
@@ -750,6 +758,7 @@ async function initialize() {
       document.querySelector(".eyebrow").textContent = "HUMAN VS HUMAN / CABT";
       $("newGameButton").textContent = "ルーム作成";
     }
+    $("humanDeckLabel").classList.toggle("hidden", !cloudAgentMode);
     meta = await api("/api/meta");
     for (const select of [$("agentASelect"), $("agentBSelect")]) {
       for (const agentName of meta.agents) {
@@ -759,7 +768,7 @@ async function initialize() {
     $("agentASelect").closest("label").classList.toggle("hidden", !watchMode && !duelMode);
     const statePath = watchMode ? "/api/watch/state" : duelMode ? "/api/duel/state" : "/api/state";
     state = await api(statePath);
-    if (!state.started && !duelMode) await startNewGame();
+    if (!state.started && !duelMode && !cloudAgentMode) await startNewGame();
     else render();
     if (duelMode) duelPollTimer = window.setInterval(pollDuelState, 1000);
     if (cloudAgentMode) duelPollTimer = window.setInterval(pollAgentStep, 1000);

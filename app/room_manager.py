@@ -27,7 +27,7 @@ def available_decks() -> list[str]:
 
 
 class WorkerClient:
-    def __init__(self, deck_names: list[str]) -> None:
+    def __init__(self, deck_names: list[str | list[int]]) -> None:
         context = multiprocessing.get_context("spawn")
         parent, child = context.Pipe()
         self.connection = parent
@@ -79,6 +79,7 @@ class WorkerClient:
 class Room:
     room_id: str
     deck_names: list[str]
+    deck_sources: list[str | list[int]]
     worker: WorkerClient | None
     player_tokens: tuple[str, str] = field(
         default_factory=lambda: (secrets.token_urlsafe(32), secrets.token_urlsafe(32))
@@ -126,9 +127,14 @@ class RoomManager:
         with self.lock:
             return sum(room.worker is not None for room in self.rooms.values())
 
-    def create(self, deck_names: list[str]) -> Room:
+    def create(self, deck_names: list[str | list[int]]) -> Room:
         choices = set(available_decks())
-        if len(deck_names) != 2 or any(name not in choices for name in deck_names):
+        valid = len(deck_names) == 2 and all(
+            (isinstance(deck, str) and deck in choices)
+            or (isinstance(deck, list) and len(deck) == 60 and all(type(card_id) is int and card_id > 0 for card_id in deck))
+            for deck in deck_names
+        )
+        if not valid:
             raise ValueError("デッキの指定が不正です。")
         self.cleanup()
         with self.lock:
@@ -137,11 +143,12 @@ class RoomManager:
                 raise ValueError("現在満室です。同時に作成できるルームは5室までです。")
             room_id = self._room_code()
             worker = WorkerClient(deck_names)
-            room = Room(room_id, list(deck_names), worker)
+            labels = ["アップロードCSV" if isinstance(deck, list) else deck for deck in deck_names]
+            room = Room(room_id, labels, list(deck_names), worker)
             self.rooms[room_id] = room
             return room
 
-    def join(self, room_id: str) -> Room:
+    def join(self, room_id: str, deck_source: str | list[int] | None = None) -> Room:
         self.cleanup()
         normalized = (room_id or "").strip().upper()
         with self.lock:
@@ -150,6 +157,18 @@ class RoomManager:
                 raise ValueError("指定されたルームが見つかりません。")
             if room.player2_joined:
                 raise ValueError("このルームにはすでに2人参加しています。")
+            if deck_source is not None:
+                if isinstance(deck_source, str) and deck_source not in set(available_decks()):
+                    raise ValueError("デッキの指定が不正です。")
+                if isinstance(deck_source, list) and (
+                    len(deck_source) != 60
+                    or any(type(card_id) is not int or card_id <= 0 for card_id in deck_source)
+                ):
+                    raise ValueError("CSVにはカードIDを60件指定してください。")
+                room.worker.close()
+                room.deck_sources[1] = deck_source
+                room.deck_names[1] = "アップロードCSV" if isinstance(deck_source, list) else deck_source
+                room.worker = WorkerClient(room.deck_sources)
             room.player2_joined = True
             room.last_activity = time.monotonic()
             return room

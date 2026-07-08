@@ -5,7 +5,9 @@ from __future__ import annotations
 from multiprocessing.connection import Connection
 
 
-def worker_main(connection: Connection, mode: str, agent_names: list[str]) -> None:
+def worker_main(
+    connection: Connection, mode: str, agent_names: list[str], human_deck: list[int] | None = None
+) -> None:
     controller = None
     try:
         # Importing server initializes cabt's process-global native bindings.
@@ -14,7 +16,7 @@ def worker_main(connection: Connection, mode: str, agent_names: list[str]) -> No
 
         if mode == "play":
             controller = MatchController(auto_advance=False)
-            controller.new_game(agent_names[0])
+            controller.new_game(agent_names[0], human_deck)
         elif mode == "watch":
             controller = AgentMatchController()
             controller.new_game(agent_names[0], agent_names[1])

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>デッキ作成 | PokeTCG</title>
+  <link rel="stylesheet" href="/static/deck_builder.css">
+</head>
+<body>
+  <header>
+    <a href="/">← トップへ</a>
+    <div><p>DECK BUILDER</p><h1>60枚のデッキを作成</h1></div>
+    <button id="download" disabled>CSVをダウンロード</button>
+  </header>
+  <main>
+    <section class="catalog">
+      <div class="toolbar"><input id="search" type="search" placeholder="カード名またはIDで検索"><span id="resultCount"></span></div>
+      <div id="cards" class="card-grid"></div>
+    </section>
+    <aside>
+      <div class="deck-title"><h2>選択中</h2><strong id="deckCount">0 / 60</strong></div>
+      <div id="deckList" class="deck-list"></div>
+      <button id="clear" class="secondary">すべて外す</button>
+    </aside>
+  </main>
+  <script src="/static/deck_builder.js"></script>
+</body>
+</html>

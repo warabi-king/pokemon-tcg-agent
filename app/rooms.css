@@ -19,6 +19,7 @@ h1 { max-width: 700px; margin: 6px 0 12px; font-size: clamp(2.2rem, 7vw, 5rem); 
 header > p:not(.eyebrow) { max-width: 600px; color: var(--muted); line-height: 1.7; }
 .eyebrow { margin: 0; color: var(--green); font-size: .72rem; font-weight: 900; letter-spacing: .18em; }
 .capacity { display: inline-flex; margin-top: 10px; padding: 7px 12px; border-radius: 999px; color: #173523; background: var(--lime); font-size: .8rem; font-weight: 800; }
+.builder-link { display:inline-flex; margin:10px 0 0 10px; color:var(--green); font-size:.85rem; font-weight:900; }
 .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 44px; }
 .mode-card { position: relative; display: grid; gap: 9px; min-height: 190px; overflow: hidden; padding: 25px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); background: var(--panel); box-shadow: 0 14px 36px rgba(31, 52, 38, .08); text-decoration: none; transition: transform .15s ease, box-shadow .15s ease; }
@@ -45,6 +46,7 @@ input:focus, select:focus { outline: 3px solid rgba(185, 220, 104, .48); border-
 button { margin-top: 5px; padding: 13px 18px; border: 0; border-radius: 10px; color: white; background: var(--green); font: inherit; font-weight: 900; cursor: pointer; }
 .accent button { color: #173523; background: var(--lime); }
 button:disabled { cursor: wait; opacity: .6; }
+#joinForm button[type="submit"] { order: 10; }
 .error { margin-bottom: 18px; padding: 12px 15px; border: 1px solid #e8aaa0; border-radius: 10px; color: #792b20; background: #fde9e5; font-weight: 700; }
 .hidden { display: none; }
 footer { padding: 25px 0 0; color: var(--muted); text-align: center; font-size: .82rem; }

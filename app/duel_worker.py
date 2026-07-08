@@ -17,7 +17,12 @@ def plain(value: Any) -> Any:
     return json.loads(json.dumps(value))
 
 
-def load_deck(agent_name: str) -> list[int]:
+def load_deck(deck_source: str | list[int]) -> list[int]:
+    if isinstance(deck_source, list):
+        if len(deck_source) != 60 or any(type(card_id) is not int or card_id <= 0 for card_id in deck_source):
+            raise ValueError("CSV deck must contain exactly 60 card IDs.")
+        return deck_source
+    agent_name = deck_source
     path = ROOT / "agents" / agent_name / "src" / "deck.csv"
     deck = [int(line.strip()) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if len(deck) != 60:
@@ -58,7 +63,7 @@ def configure_environment():
 
 
 class BattleWorker:
-    def __init__(self, deck_names: list[str]) -> None:
+    def __init__(self, deck_names: list[str | list[int]]) -> None:
         from kaggle_environments import make
 
         sim = configure_environment()
@@ -154,7 +159,7 @@ class BattleWorker:
         self._battle_class.obs = None
 
 
-def worker_main(connection: Connection, deck_names: list[str]) -> None:
+def worker_main(connection: Connection, deck_names: list[str | list[int]]) -> None:
     worker: BattleWorker | None = None
     try:
         worker = BattleWorker(deck_names)

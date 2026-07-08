@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
+from pathlib import Path
 
 from app.cloud_agent_manager import CloudAgentManager, available_agents
 
 
 class FinishingAgentWorker:
-    def __init__(self, _mode, _agents) -> None:
+    def __init__(self, _mode, _agents, _human_deck=None) -> None:
         self.closed = False
 
     def request(self, _payload):
@@ -34,7 +35,9 @@ class CloudAgentModeIntegrationTests(unittest.TestCase):
         agent = available_agents()[0]
         manager = CloudAgentManager(lambda: len(manager.matches), max_matches=5)
         try:
-            play, play_state = manager.create("play", [agent])
+            deck_path = Path("agents") / agent / "src" / "deck.csv"
+            uploaded_deck = [int(value) for value in deck_path.read_text().splitlines() if value]
+            play, play_state = manager.create("play", [agent], uploaded_deck)
             self.assertTrue(play_state["started"])
             ai_steps = 0
             for _ in range(20):
