@@ -737,7 +737,7 @@ def duel_create():
         body = request.get_json(silent=True) or {}
         payload = duel_match.new_room(
             body.get("deckA", DEFAULT_AGENT),
-            body.get("deckB", DEFAULT_AGENT),
+            DEFAULT_AGENT,
         )
         session.clear()
         session["duel_can_host"] = True

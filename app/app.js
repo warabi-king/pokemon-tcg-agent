@@ -634,7 +634,7 @@ async function startNewGame() {
     const agents = watchMode
       ? { agentA: $("agentASelect").value, agentB: $("agentBSelect").value }
       : duelMode
-        ? { deckA: $("agentASelect").value, deckB: $("agentBSelect").value }
+        ? { deckA: $("agentASelect").value }
         : { agent: $("agentBSelect").value, deckName: $("agentASelect").value, deckIds };
     const path = watchMode ? "/api/watch/new" : duelMode ? "/api/duel/create" : "/api/new";
     state = await api(path, {
@@ -772,6 +772,9 @@ async function initialize() {
     }
     $("agentASelect").closest("label").classList.toggle(
       "hidden", !watchMode && !duelMode && !cloudAgentMode
+    );
+    $("agentBSelect").closest("label").classList.toggle(
+      "hidden", duelMode
     );
     const statePath = watchMode ? "/api/watch/state" : duelMode ? "/api/duel/state" : "/api/state";
     state = await api(statePath);
