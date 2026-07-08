@@ -11,3 +11,4 @@ __pycache__
 *.pyo
 agents/*/train
 docs/*.pdf
+docs/cards

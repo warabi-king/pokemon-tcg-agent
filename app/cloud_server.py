@@ -54,6 +54,7 @@ agent_manager = CloudAgentManager(
 manager.total_active = lambda: manager.active_room_count() + len(agent_manager.matches)
 capacity_lock = threading.Lock()
 CARD_META = card_metadata()
+CARD_IMAGE_BASE_URL = os.environ.get("CARD_IMAGE_BASE_URL", "").rstrip("/")
 atexit.register(manager.close_all)
 atexit.register(agent_manager.close_all)
 
@@ -127,7 +128,12 @@ def health():
 
 @app.get("/api/meta")
 def metadata():
-    return jsonify({"cards": CARD_META, "attacks": {}, "agents": available_agents()})
+    return jsonify({
+        "cards": CARD_META,
+        "attacks": {},
+        "agents": available_agents(),
+        "cardImageBaseUrl": CARD_IMAGE_BASE_URL,
+    })
 
 
 @app.get("/api/rooms/status")

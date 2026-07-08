@@ -35,7 +35,7 @@ def main(root: Path) -> None:
         shutil.rmtree(cache)
     for bytecode in agents.rglob("*.pyc"):
         bytecode.unlink()
-    print(f"Prepared agent sources and {len(list(cards.glob('*.jpg')))} card images for Cloud Run.")
+    print("Prepared agent sources for Cloud Run; card images are served by Cloud Storage.")
 
 
 if __name__ == "__main__":

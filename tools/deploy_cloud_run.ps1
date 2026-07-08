@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ProjectId,
     [string]$Region = "asia-northeast1",
-    [string]$Service = "poketcg-duel"
+    [string]$Service = "poketcg-duel",
+    [string]$CardBucket = "",
+    [switch]$SkipCardUpload
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,8 +22,15 @@ $flaskSecret = [Convert]::ToBase64String($secretBytes).TrimEnd("=").Replace("+",
 gcloud config set project $ProjectId
 if ($LASTEXITCODE -ne 0) { throw "Could not select the GCP project." }
 
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com storage.googleapis.com
 if ($LASTEXITCODE -ne 0) { throw "Could not enable the required GCP APIs." }
+
+if (-not $CardBucket) { $CardBucket = "$ProjectId-poketcg-cards" }
+if (-not $SkipCardUpload) {
+    & .\tools\publish_card_images.ps1 -ProjectId $ProjectId -Region $Region -Bucket $CardBucket
+    if ($LASTEXITCODE -ne 0) { throw "Card image publishing failed." }
+}
+$cardImageBaseUrl = "https://storage.googleapis.com/$CardBucket/cards"
 
 gcloud run deploy $Service `
     --source . `
@@ -33,7 +42,7 @@ gcloud run deploy $Service `
     --concurrency 20 `
     --min-instances 0 `
     --max-instances 1 `
-    --set-env-vars "FLASK_SECRET_KEY=$flaskSecret"
+    --set-env-vars "FLASK_SECRET_KEY=$flaskSecret,CARD_IMAGE_BASE_URL=$cardImageBaseUrl"
 
 if ($LASTEXITCODE -ne 0) { throw "Cloud Run deployment failed." }
 

@@ -1,8 +1,11 @@
 const cardsTarget = document.getElementById("cards");
 const deck = new Map();
 let cards = [];
+let cardImageBaseUrl = "";
 
-const imageUrl = (id) => `/cards/${String(id).padStart(4, "0")}.jpg`;
+const imageUrl = (id) => cardImageBaseUrl
+  ? `${cardImageBaseUrl}/${String(id).padStart(4, "0")}.webp`
+  : `/cards/${String(id).padStart(4, "0")}.jpg`;
 
 function add(id) {
   if ([...deck.values()].reduce((a, b) => a + b, 0) >= 60) return;
@@ -56,6 +59,7 @@ document.getElementById("download").addEventListener("click", () => {
 });
 
 fetch("/api/meta").then(response => response.json()).then(meta => {
+  cardImageBaseUrl = (meta.cardImageBaseUrl || "").replace(/\/$/, "");
   cards = Object.values(meta.cards).sort((a, b) => a.id - b.id);
   renderCards(); renderDeck();
 });

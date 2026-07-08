@@ -60,4 +60,22 @@ docker build -t poketcg-duel .
 docker run --rm -p 8080:8080 -e FLASK_SECRET_KEY=local-test poketcg-duel
 ```
 
+## カード画像の配信
+
+Cloud Runへの通常デプロイでは、カード画像を320px幅のWebPへ変換し、公開Cloud Storageバケットへアップロードします。オブジェクトには1年間の長期キャッシュを設定します。
+
+画像だけを更新する場合:
+
+```powershell
+.\tools\publish_card_images.ps1 -ProjectId YOUR_GCP_PROJECT_ID
+```
+
+通常デプロイで画像アップロードを省略する場合:
+
+```powershell
+.\tools\deploy_cloud_run.ps1 -ProjectId YOUR_GCP_PROJECT_ID -SkipCardUpload
+```
+
+デフォルトのバケット名は `YOUR_GCP_PROJECT_ID-poketcg-cards` です。組織ポリシーで公開バケットが禁止されている場合は、公開許可の設定が必要です。
+
 ブラウザで `http://127.0.0.1:8080` を開きます。

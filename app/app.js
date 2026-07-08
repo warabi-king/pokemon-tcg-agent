@@ -49,7 +49,8 @@ const cardId = (card) => card && (card.id ?? card.cardId);
 const cardMeta = (id) => meta.cards[String(id)] || { id, name: `カード #${id}` };
 
 function cardImageUrl(id) {
-  return `/cards/${padCardId(id)}.jpg`;
+  const base = meta.cardImageBaseUrl;
+  return base ? `${base}/${padCardId(id)}.webp` : `/cards/${padCardId(id)}.jpg`;
 }
 
 function addActionIndex(map, key, index) {
