@@ -32,7 +32,7 @@ async function initialize() {
       $("deckA").add(new Option(name, name));
       $("deckB").add(new Option(name, name));
     }
-    $("capacity").textContent = `使用中 ${status.activeRooms} / ${status.maxRooms} ルーム`;
+    $("capacity").textContent = `使用中 ${status.activeMatches} / ${status.maxRooms} 対戦`;
   } catch (error) {
     showError(error.message);
   }

@@ -38,6 +38,8 @@ let autoPlaying = false;
 let autoPlayTimer = null;
 let duelPollTimer = null;
 const duelPlayerToken = sessionStorage.getItem("duelPlayerToken") || "";
+const matchStorageKey = watchMode ? "watchMatchToken" : "agentMatchToken";
+let matchToken = sessionStorage.getItem(matchStorageKey) || "";
 
 const $ = (id) => document.getElementById(id);
 const padCardId = (id) => String(id).padStart(4, "0");
@@ -597,13 +599,17 @@ function render() {
 async function api(path, options = {}) {
   const authHeaders = duelMode && duelPlayerToken
     ? { "X-Player-Token": duelPlayerToken }
-    : {};
+    : matchToken ? { "X-Match-Token": matchToken } : {};
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...authHeaders },
     ...options,
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+  if (body.matchToken) {
+    matchToken = body.matchToken;
+    sessionStorage.setItem(matchStorageKey, matchToken);
+  }
   return body;
 }
 

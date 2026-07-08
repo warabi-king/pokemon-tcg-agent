@@ -17,7 +17,33 @@
 
     <div id="errorMessage" class="error hidden" role="alert"></div>
 
-    <section class="cards">
+    <nav class="modes" aria-label="対戦モード">
+      <a class="mode-card play" href="/play">
+        <span class="mode-number">01</span>
+        <span class="eyebrow">HUMAN VS AGENT</span>
+        <strong>エージェントと対戦</strong>
+        <span>好きなエージェントを選び、ブラウザから対戦します。</span>
+      </a>
+      <a class="mode-card watch" href="/watch">
+        <span class="mode-number">02</span>
+        <span class="eyebrow">AGENT VS AGENT</span>
+        <strong>対戦を観戦</strong>
+        <span>2つのエージェントを選び、行動を追いながら観戦します。</span>
+      </a>
+      <a class="mode-card room" href="#rooms">
+        <span class="mode-number">03</span>
+        <span class="eyebrow">HUMAN VS HUMAN</span>
+        <strong>ユーザー同士で対戦</strong>
+        <span>ルームを作成するか、受け取ったコードで参加します。</span>
+      </a>
+    </nav>
+
+    <section id="rooms" class="room-section">
+      <div class="section-heading">
+        <p class="eyebrow">ONLINE ROOM</p>
+        <h2>ユーザー同士で対戦</h2>
+      </div>
+      <div class="cards">
       <form id="createForm" class="panel">
         <div class="number">01</div>
         <p class="eyebrow">CREATE ROOM</p>
@@ -47,6 +73,7 @@
         </label>
         <button type="submit">ルームに参加</button>
       </form>
+      </div>
     </section>
 
     <footer>同時に対戦できるのは最大10人・5ルームです。</footer>

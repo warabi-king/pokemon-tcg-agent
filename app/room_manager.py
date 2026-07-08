@@ -8,7 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.duel_worker import worker_main
 
@@ -90,8 +90,11 @@ class Room:
 
 
 class RoomManager:
-    def __init__(self, max_rooms: int = 5) -> None:
+    def __init__(
+        self, max_rooms: int = 5, total_active: Callable[[], int] | None = None
+    ) -> None:
         self.max_rooms = max_rooms
+        self.total_active = total_active
         self.rooms: dict[str, Room] = {}
         self.lock = threading.RLock()
 
@@ -121,7 +124,8 @@ class RoomManager:
             raise ValueError("デッキの指定が不正です。")
         self.cleanup()
         with self.lock:
-            if len(self.rooms) >= self.max_rooms:
+            active_count = self.total_active() if self.total_active else len(self.rooms)
+            if active_count >= self.max_rooms:
                 raise ValueError("現在満室です。同時に作成できるルームは5室までです。")
             room_id = self._room_code()
             worker = WorkerClient(deck_names)

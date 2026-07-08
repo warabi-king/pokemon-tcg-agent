@@ -20,6 +20,18 @@ header > p:not(.eyebrow) { max-width: 600px; color: var(--muted); line-height: 1
 .eyebrow { margin: 0; color: var(--green); font-size: .72rem; font-weight: 900; letter-spacing: .18em; }
 .capacity { display: inline-flex; margin-top: 10px; padding: 7px 12px; border-radius: 999px; color: #173523; background: var(--lime); font-size: .8rem; font-weight: 800; }
 .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 44px; }
+.mode-card { position: relative; display: grid; gap: 9px; min-height: 190px; overflow: hidden; padding: 25px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); background: var(--panel); box-shadow: 0 14px 36px rgba(31, 52, 38, .08); text-decoration: none; transition: transform .15s ease, box-shadow .15s ease; }
+.mode-card:hover { transform: translateY(-3px); box-shadow: 0 20px 45px rgba(31, 52, 38, .14); }
+.mode-card strong { align-self: end; font-size: 1.25rem; }
+.mode-card > span:last-child { color: var(--muted); font-size: .83rem; line-height: 1.55; }
+.mode-card.room { color: white; border-color: #154d39; background: linear-gradient(145deg, #143c2e, #1d6c4b); }
+.mode-card.room .eyebrow, .mode-card.room > span:last-child { color: #cde4d6; }
+.mode-number { position: absolute; top: 8px; right: 14px; color: rgba(23, 34, 27, .07); font-size: 4rem; font-weight: 900; }
+.mode-card.room .mode-number { color: rgba(255,255,255,.08); }
+.room-section { scroll-margin-top: 20px; }
+.section-heading { margin-bottom: 16px; }
+.section-heading h2 { margin: 5px 0 0; font-size: 1.8rem; }
 .panel { position: relative; display: grid; gap: 16px; overflow: hidden; padding: clamp(24px, 4vw, 38px); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 20px 55px rgba(31, 52, 38, .1); background: var(--panel); }
 .panel.accent { color: white; border-color: #154d39; background: linear-gradient(145deg, #143c2e, #1d6c4b); }
 .panel.accent .eyebrow, .panel.accent .description { color: #cde4d6; }
@@ -39,6 +51,7 @@ footer { padding: 25px 0 0; color: var(--muted); text-align: center; font-size: 
 
 @media (max-width: 720px) {
   main { padding-top: 38px; }
+  .modes { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr; }
   .description { min-height: auto; }
 }

@@ -1,8 +1,9 @@
-"""Trim staged Docker assets to decks and card images used by those decks."""
+"""Trim staged Docker assets to runnable agent sources and their card images."""
 
 from __future__ import annotations
 
 import sys
+import shutil
 from pathlib import Path
 
 
@@ -18,9 +19,22 @@ def main(root: Path) -> None:
             if line.strip()
         )
 
-    for path in agents.rglob("*"):
-        if path.is_file() and path.name != "deck.csv":
-            path.unlink()
+    # Cloud agent modes execute src/main.py and may depend on other files in
+    # src/. Remove training and documentation assets but preserve the complete
+    # submission-time source tree.
+    for agent_dir in agents.iterdir():
+        if not agent_dir.is_dir():
+            continue
+        for path in agent_dir.iterdir():
+            if path.name != "src":
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+    for cache in agents.rglob("__pycache__"):
+        shutil.rmtree(cache)
+    for bytecode in agents.rglob("*.pyc"):
+        bytecode.unlink()
     for path in cards.glob("*.jpg"):
         if int(path.stem) not in used_card_ids:
             path.unlink()
