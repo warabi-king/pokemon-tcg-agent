@@ -19,6 +19,17 @@ class FinishingAgentWorker:
 
 
 class CloudAgentModeIntegrationTests(unittest.TestCase):
+    def test_torch_agent_worker_starts(self) -> None:
+        if "rl_mcts" not in available_agents():
+            self.skipTest("rl_mcts is not available")
+        manager = CloudAgentManager(lambda: len(manager.matches), max_matches=1)
+        try:
+            match, state = manager.create("play", ["rl_mcts"])
+            self.assertTrue(state["started"])
+            self.assertIn(match.token, manager.matches)
+        finally:
+            manager.close_all()
+
     def test_finished_agent_match_releases_worker_immediately(self) -> None:
         agent = available_agents()[0]
         manager = CloudAgentManager(lambda: len(manager.matches), max_matches=1)

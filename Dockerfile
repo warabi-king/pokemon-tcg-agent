@@ -14,6 +14,7 @@ WORKDIR /srv/poketcg
 
 COPY requirements-cloud.txt .
 RUN pip install --no-cache-dir -r requirements-cloud.txt
+RUN python -c "import torch; print('Cloud PyTorch:', torch.__version__)"
 
 COPY app app
 COPY data data

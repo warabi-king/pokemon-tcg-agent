@@ -1,3 +1,5 @@
 Flask==3.1.2
 gunicorn==23.0.0
 kaggle-environments==1.30.2
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.12.1+cpu
