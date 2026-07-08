@@ -168,7 +168,9 @@ def agent_new_game():
         body = request.get_json(silent=True) or {}
         with capacity_lock:
             match, payload = agent_manager.create(
-                "play", [str(body.get("agent") or "")], uploaded_deck(body.get("deckIds"))
+                "play",
+                [str(body.get("agent") or "")],
+                uploaded_deck(body.get("deckIds")) or str(body.get("deckName") or ""),
             )
         return jsonify({**payload, "cloudMode": True, "matchToken": match.token})
     except Exception as exc:
@@ -230,7 +232,7 @@ def create_room():
         with capacity_lock:
             room = manager.create([
                 uploaded_deck(body.get("deckAIds")) or str(body.get("deckA") or ""),
-                str(body.get("deckB") or ""),
+                available_decks()[0],
             ])
         session.clear()
         session["room_id"] = room.room_id

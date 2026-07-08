@@ -175,7 +175,9 @@ class MatchController:
         self.error: str | None = None
 
     def new_game(
-        self, agent_name: str = DEFAULT_AGENT, human_deck: list[int] | None = None
+        self,
+        agent_name: str = DEFAULT_AGENT,
+        human_deck: list[int] | str | None = None,
     ) -> dict[str, Any]:
         with self.lock:
             global opponent_module
@@ -183,6 +185,8 @@ class MatchController:
             opponent_module = load_agent_module("browser_human_opponent", selected_src)
             if human_deck is None:
                 human_deck = load_deck(APP_ROOT / "deck.csv")
+            elif isinstance(human_deck, str):
+                human_deck = load_deck(agent_src(human_deck) / "deck.csv")
             elif len(human_deck) != 60 or any(type(card_id) is not int or card_id <= 0 for card_id in human_deck):
                 raise ValueError("CSV deck must contain exactly 60 card IDs.")
             opponent_deck = load_deck(selected_src / "deck.csv")

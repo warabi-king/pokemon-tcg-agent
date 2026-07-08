@@ -635,7 +635,7 @@ async function startNewGame() {
       ? { agentA: $("agentASelect").value, agentB: $("agentBSelect").value }
       : duelMode
         ? { deckA: $("agentASelect").value, deckB: $("agentBSelect").value }
-        : { agent: $("agentBSelect").value, deckIds };
+        : { agent: $("agentBSelect").value, deckName: $("agentASelect").value, deckIds };
     const path = watchMode ? "/api/watch/new" : duelMode ? "/api/duel/create" : "/api/new";
     state = await api(path, {
       method: "POST",
@@ -760,13 +760,19 @@ async function initialize() {
       $("newGameButton").textContent = "ルーム作成";
     }
     $("humanDeckLabel").classList.toggle("hidden", !cloudAgentMode);
+    if (cloudAgentMode) {
+      $("agentALabel").firstChild.textContent = "自分のデッキ ";
+      $("agentBLabel").firstChild.textContent = "対戦エージェント ";
+    }
     meta = await api("/api/meta");
     for (const select of [$("agentASelect"), $("agentBSelect")]) {
       for (const agentName of meta.agents) {
         select.add(new Option(agentName, agentName));
       }
     }
-    $("agentASelect").closest("label").classList.toggle("hidden", !watchMode && !duelMode);
+    $("agentASelect").closest("label").classList.toggle(
+      "hidden", !watchMode && !duelMode && !cloudAgentMode
+    );
     const statePath = watchMode ? "/api/watch/state" : duelMode ? "/api/duel/state" : "/api/state";
     state = await api(statePath);
     if (!state.started && !duelMode && !cloudAgentMode) await startNewGame();

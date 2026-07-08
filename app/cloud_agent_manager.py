@@ -25,7 +25,10 @@ def available_agents() -> list[str]:
 
 class AgentWorkerClient:
     def __init__(
-        self, mode: str, agent_names: list[str], human_deck: list[int] | None = None
+        self,
+        mode: str,
+        agent_names: list[str],
+        human_deck: list[int] | str | None = None,
     ) -> None:
         context = multiprocessing.get_context("spawn")
         parent, child = context.Pipe()
@@ -115,7 +118,10 @@ class CloudAgentManager:
             match.worker.close()
 
     def create(
-        self, mode: str, agent_names: list[str], human_deck: list[int] | None = None
+        self,
+        mode: str,
+        agent_names: list[str],
+        human_deck: list[int] | str | None = None,
     ) -> tuple[HostedMatch, dict[str, Any]]:
         choices = set(available_agents())
         expected = 1 if mode == "play" else 2 if mode == "watch" else 0
@@ -124,7 +130,9 @@ class CloudAgentManager:
         self.cleanup()
         if self.total_active() >= self.max_matches:
             raise ValueError("現在満室です。同時に実行できる対戦は5つまでです。")
-        if human_deck is not None and (
+        if isinstance(human_deck, str) and human_deck not in choices:
+            raise ValueError("デッキの指定が不正です。")
+        if isinstance(human_deck, list) and (
             len(human_deck) != 60
             or any(type(card_id) is not int or card_id <= 0 for card_id in human_deck)
         ):

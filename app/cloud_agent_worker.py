@@ -6,7 +6,10 @@ from multiprocessing.connection import Connection
 
 
 def worker_main(
-    connection: Connection, mode: str, agent_names: list[str], human_deck: list[int] | None = None
+    connection: Connection,
+    mode: str,
+    agent_names: list[str],
+    human_deck: list[int] | str | None = None,
 ) -> None:
     controller = None
     try:

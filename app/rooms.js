@@ -40,7 +40,6 @@ async function initialize() {
     const [meta, status] = await Promise.all([api("/api/meta"), api("/api/rooms/status")]);
     for (const name of meta.agents) {
       $("deckA").add(new Option(name, name));
-      $("deckB").add(new Option(name, name));
       $("joinDeck").add(new Option(name, name));
     }
     $("capacity").textContent = `使用中 ${status.activeMatches} / ${status.maxRooms} 対戦`;
@@ -62,7 +61,6 @@ $("createForm").addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify({
         deckA: $("deckA").value,
-        deckB: $("deckB").value,
         deckAIds,
       }),
     });

@@ -49,7 +49,7 @@
         <div class="number">01</div>
         <p class="eyebrow">CREATE ROOM</p>
         <h2>ルームの作成</h2>
-        <p class="description">対戦で使用する2つのデッキを選択し、参加者へ伝えるルームコードを発行します。</p>
+        <p class="description">自分のデッキを選択し、参加者へ伝えるルームコードを発行します。Player 2のデッキは参加者自身が選びます。</p>
 
         <label>
           Player 1 デッキ
@@ -58,10 +58,6 @@
         <label>
           または自分のdeck.csv
           <input id="deckAFile" type="file" accept=".csv,text/csv">
-        </label>
-        <label>
-          Player 2 デッキ
-          <select id="deckB" required></select>
         </label>
         <button type="submit">ルームを作成</button>
       </form>

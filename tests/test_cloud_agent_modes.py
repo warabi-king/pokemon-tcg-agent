@@ -24,7 +24,7 @@ class CloudAgentModeIntegrationTests(unittest.TestCase):
             self.skipTest("rl_mcts is not available")
         manager = CloudAgentManager(lambda: len(manager.matches), max_matches=1)
         try:
-            match, state = manager.create("play", ["rl_mcts"])
+            match, state = manager.create("play", ["rl_mcts"], "rule_Lucario")
             self.assertTrue(state["started"])
             self.assertIn(match.token, manager.matches)
         finally:
