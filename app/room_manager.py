@@ -80,6 +80,9 @@ class Room:
     room_id: str
     deck_names: list[str]
     worker: WorkerClient
+    player_tokens: tuple[str, str] = field(
+        default_factory=lambda: (secrets.token_urlsafe(32), secrets.token_urlsafe(32))
+    )
     player2_joined: bool = False
     created_at: float = field(default_factory=time.monotonic)
     last_activity: float = field(default_factory=time.monotonic)
@@ -146,6 +149,17 @@ class RoomManager:
             if room is None:
                 raise ValueError("対戦ルームが終了したか、サーバーが再起動されました。")
             return room
+
+    def authenticate(self, token: str) -> tuple[str, int]:
+        if not token:
+            raise ValueError("プレイヤー認証情報がありません。ロビーから入り直してください。")
+        self.cleanup()
+        with self.lock:
+            for room in self.rooms.values():
+                for role, expected in enumerate(room.player_tokens):
+                    if secrets.compare_digest(token, expected):
+                        return room.room_id, role
+        raise ValueError("プレイヤー認証情報が無効です。ロビーから入り直してください。")
 
     def state(self, room_id: str, role: int) -> dict[str, Any]:
         room = self.get(room_id)

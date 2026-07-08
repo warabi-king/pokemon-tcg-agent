@@ -18,6 +18,9 @@ class FakeWorker:
     def close(self) -> None:
         pass
 
+    def request(self, _payload):
+        return {"active": True, "step": 0}
+
 
 class RoomLimitTests(unittest.TestCase):
     def test_five_room_limit_and_room_id_length(self) -> None:
@@ -31,6 +34,20 @@ class RoomLimitTests(unittest.TestCase):
             self.assertEqual(len(set(room_ids)), 5)
             with self.assertRaisesRegex(ValueError, "満室"):
                 manager.create([deck, deck])
+
+
+class PlayerTokenTests(unittest.TestCase):
+    def test_each_player_has_an_independent_token(self) -> None:
+        deck = available_decks()[0]
+        manager = RoomManager(max_rooms=1)
+        with patch("app.room_manager.WorkerClient", FakeWorker):
+            room = manager.create([deck, deck])
+            manager.join(room.room_id)
+            self.assertEqual(manager.authenticate(room.player_tokens[0]), (room.room_id, 0))
+            self.assertEqual(manager.authenticate(room.player_tokens[1]), (room.room_id, 1))
+            self.assertNotEqual(room.player_tokens[0], room.player_tokens[1])
+            with self.assertRaises(ValueError):
+                manager.authenticate("invalid-token")
 
 
 class WorkerIntegrationTests(unittest.TestCase):

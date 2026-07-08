@@ -51,6 +51,9 @@ atexit.register(manager.close_all)
 
 
 def session_player() -> tuple[str, int]:
+    player_token = request.headers.get("X-Player-Token", "")
+    if player_token:
+        return manager.authenticate(player_token)
     room_id = session.get("room_id")
     role = session.get("role")
     if not isinstance(room_id, str) or type(role) is not int or role not in (0, 1):
@@ -110,7 +113,9 @@ def create_room():
         session.clear()
         session["room_id"] = room.room_id
         session["role"] = 0
-        return jsonify(manager.state(room.room_id, 0))
+        payload = manager.state(room.room_id, 0)
+        payload["playerToken"] = room.player_tokens[0]
+        return jsonify(payload)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -123,7 +128,9 @@ def join_room():
         session.clear()
         session["room_id"] = room.room_id
         session["role"] = 1
-        return jsonify(manager.state(room.room_id, 1))
+        payload = manager.state(room.room_id, 1)
+        payload["playerToken"] = room.player_tokens[1]
+        return jsonify(payload)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
 

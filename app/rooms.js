@@ -1,5 +1,10 @@
 const $ = (id) => document.getElementById(id);
 
+function enterDuel(result) {
+  sessionStorage.setItem("duelPlayerToken", result.playerToken);
+  window.location.assign("/duel");
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -41,14 +46,14 @@ $("createForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   setBusy(event.currentTarget, true);
   try {
-    await api("/api/rooms", {
+    const result = await api("/api/rooms", {
       method: "POST",
       body: JSON.stringify({
         deckA: $("deckA").value,
         deckB: $("deckB").value,
       }),
     });
-    window.location.assign("/duel");
+    enterDuel(result);
   } catch (error) {
     showError(error.message);
     setBusy(event.currentTarget, false);
@@ -59,11 +64,11 @@ $("joinForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   setBusy(event.currentTarget, true);
   try {
-    await api("/api/rooms/join", {
+    const result = await api("/api/rooms/join", {
       method: "POST",
       body: JSON.stringify({ roomId: $("roomId").value }),
     });
-    window.location.assign("/duel");
+    enterDuel(result);
   } catch (error) {
     showError(error.message);
     setBusy(event.currentTarget, false);

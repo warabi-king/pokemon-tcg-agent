@@ -37,6 +37,7 @@ const duelMode = window.location.pathname === "/duel";
 let autoPlaying = false;
 let autoPlayTimer = null;
 let duelPollTimer = null;
+const duelPlayerToken = sessionStorage.getItem("duelPlayerToken") || "";
 
 const $ = (id) => document.getElementById(id);
 const padCardId = (id) => String(id).padStart(4, "0");
@@ -594,8 +595,11 @@ function render() {
 }
 
 async function api(path, options = {}) {
+  const authHeaders = duelMode && duelPlayerToken
+    ? { "X-Player-Token": duelPlayerToken }
+    : {};
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     ...options,
   });
   const body = await response.json();
