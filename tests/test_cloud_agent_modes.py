@@ -1,11 +1,35 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from app.cloud_agent_manager import CloudAgentManager, available_agents
 
 
+class FinishingAgentWorker:
+    def __init__(self, _mode, _agents) -> None:
+        self.closed = False
+
+    def request(self, _payload):
+        return {"started": True, "finished": True, "step": 99}
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class CloudAgentModeIntegrationTests(unittest.TestCase):
+    def test_finished_agent_match_releases_worker_immediately(self) -> None:
+        agent = available_agents()[0]
+        manager = CloudAgentManager(lambda: len(manager.matches), max_matches=1)
+        with patch("app.cloud_agent_manager.AgentWorkerClient", FinishingAgentWorker):
+            match, result = manager.create("play", [agent])
+            self.assertTrue(result["finished"])
+            self.assertTrue(match.worker.closed)
+            self.assertNotIn(match.token, manager.matches)
+            self.assertEqual(
+                manager.request(match.token, "play", "state")["step"], 99
+            )
+
     def test_play_and_watch_workers_advance(self) -> None:
         agent = available_agents()[0]
         manager = CloudAgentManager(lambda: len(manager.matches), max_matches=5)

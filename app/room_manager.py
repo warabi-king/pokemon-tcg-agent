@@ -79,7 +79,7 @@ class WorkerClient:
 class Room:
     room_id: str
     deck_names: list[str]
-    worker: WorkerClient
+    worker: WorkerClient | None
     player_tokens: tuple[str, str] = field(
         default_factory=lambda: (secrets.token_urlsafe(32), secrets.token_urlsafe(32))
     )
@@ -87,6 +87,8 @@ class Room:
     created_at: float = field(default_factory=time.monotonic)
     last_activity: float = field(default_factory=time.monotonic)
     finished_at: float | None = None
+    final_results: dict[int, dict[str, Any]] = field(default_factory=dict)
+    lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
 
 class RoomManager:
@@ -112,11 +114,17 @@ class RoomManager:
                 waiting_expired = not room.player2_joined and now - room.created_at > 15 * 60
                 inactive_expired = now - room.last_activity > 30 * 60
                 finished_expired = room.finished_at is not None and now - room.finished_at > 10 * 60
-                if waiting_expired or inactive_expired or finished_expired or not room.worker.process.is_alive():
+                worker_stopped = room.worker is not None and not room.worker.process.is_alive()
+                if waiting_expired or inactive_expired or finished_expired or worker_stopped:
                     expired.append(room_id)
             for room_id in expired:
                 room = self.rooms.pop(room_id)
-                room.worker.close()
+                if room.worker is not None:
+                    room.worker.close()
+
+    def active_room_count(self) -> int:
+        with self.lock:
+            return sum(room.worker is not None for room in self.rooms.values())
 
     def create(self, deck_names: list[str]) -> Room:
         choices = set(available_decks())
@@ -124,7 +132,7 @@ class RoomManager:
             raise ValueError("デッキの指定が不正です。")
         self.cleanup()
         with self.lock:
-            active_count = self.total_active() if self.total_active else len(self.rooms)
+            active_count = self.total_active() if self.total_active else self.active_room_count()
             if active_count >= self.max_rooms:
                 raise ValueError("現在満室です。同時に作成できるルームは5室までです。")
             room_id = self._room_code()
@@ -167,23 +175,42 @@ class RoomManager:
 
     def state(self, room_id: str, role: int) -> dict[str, Any]:
         room = self.get(room_id)
-        result = room.worker.request({"operation": "state", "role": role})
-        room.last_activity = time.monotonic()
-        if result.get("finished") and room.finished_at is None:
-            room.finished_at = time.monotonic()
-        return self._payload(room, role, result)
+        with room.lock:
+            if room.worker is None:
+                return self._payload(room, role, room.final_results[role])
+            result = room.worker.request({"operation": "state", "role": role})
+            room.last_activity = time.monotonic()
+            if result.get("finished"):
+                self._finish_room(room, role, result)
+            return self._payload(room, role, result)
 
     def action(self, room_id: str, role: int, indices: Any, step: Any) -> dict[str, Any]:
         room = self.get(room_id)
         if not room.player2_joined:
             raise ValueError("Player 2の参加を待っています。")
-        result = room.worker.request(
-            {"operation": "action", "role": role, "indices": indices, "step": step}
+        with room.lock:
+            if room.worker is None:
+                return self._payload(room, role, room.final_results[role])
+            result = room.worker.request(
+                {"operation": "action", "role": role, "indices": indices, "step": step}
+            )
+            room.last_activity = time.monotonic()
+            if result.get("finished"):
+                self._finish_room(room, role, result)
+            return self._payload(room, role, result)
+
+    def _finish_room(self, room: Room, role: int, result: dict[str, Any]) -> None:
+        if room.worker is None:
+            return
+        room.final_results[role] = result
+        other_role = 1 - role
+        room.final_results[other_role] = room.worker.request(
+            {"operation": "state", "role": other_role}
         )
-        room.last_activity = time.monotonic()
-        if result.get("finished") and room.finished_at is None:
-            room.finished_at = time.monotonic()
-        return self._payload(room, role, result)
+        room.finished_at = time.monotonic()
+        worker = room.worker
+        room.worker = None
+        worker.close()
 
     def _payload(self, room: Room, role: int, result: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -203,4 +230,5 @@ class RoomManager:
             rooms = list(self.rooms.values())
             self.rooms.clear()
         for room in rooms:
-            room.worker.close()
+            if room.worker is not None:
+                room.worker.close()

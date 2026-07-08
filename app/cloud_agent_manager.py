@@ -80,11 +80,19 @@ class HostedMatch:
     last_activity: float = field(default_factory=time.monotonic)
 
 
+@dataclass
+class CompletedMatch:
+    mode: str
+    result: dict[str, Any]
+    finished_at: float = field(default_factory=time.monotonic)
+
+
 class CloudAgentManager:
     def __init__(self, total_active: Callable[[], int], max_matches: int = 5) -> None:
         self.total_active = total_active
         self.max_matches = max_matches
         self.matches: dict[str, HostedMatch] = {}
+        self.completed: dict[str, CompletedMatch] = {}
         self.lock = threading.RLock()
 
     def cleanup(self) -> None:
@@ -95,6 +103,12 @@ class CloudAgentManager:
                 if now - match.last_activity > 30 * 60 or not match.worker.process.is_alive()
             ]
             matches = [self.matches.pop(token) for token in expired]
+            completed_expired = [
+                token for token, match in self.completed.items()
+                if now - match.finished_at > 10 * 60
+            ]
+            for token in completed_expired:
+                self.completed.pop(token)
         for match in matches:
             match.worker.close()
 
@@ -111,21 +125,38 @@ class CloudAgentManager:
         match = HostedMatch(token, mode, worker)
         with self.lock:
             self.matches[token] = match
-        return match, worker.request({"operation": "state"})
+        result = worker.request({"operation": "state"})
+        if result.get("finished"):
+            self._complete(match, result)
+        return match, result
+
+    def _complete(self, match: HostedMatch, result: dict[str, Any]) -> None:
+        with self.lock:
+            self.matches.pop(match.token, None)
+            self.completed[match.token] = CompletedMatch(match.mode, result)
+        match.worker.close()
 
     def request(self, token: str, mode: str, operation: str, **payload: Any) -> dict[str, Any]:
         self.cleanup()
         with self.lock:
             match = self.matches.get(token)
+            completed = self.completed.get(token)
+        if completed is not None and completed.mode == mode:
+            if operation == "state":
+                return completed.result
+            raise ValueError("This match has finished.")
         if match is None or match.mode != mode:
             raise ValueError("対戦情報がありません。新しい対戦を開始してください。")
         result = match.worker.request({"operation": operation, **payload})
         match.last_activity = time.monotonic()
+        if result.get("finished"):
+            self._complete(match, result)
         return result
 
     def close_all(self) -> None:
         with self.lock:
             matches = list(self.matches.values())
             self.matches.clear()
+            self.completed.clear()
         for match in matches:
             match.worker.close()

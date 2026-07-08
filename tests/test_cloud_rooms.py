@@ -22,6 +22,18 @@ class FakeWorker:
         return {"active": True, "step": 0}
 
 
+class FinishingFakeWorker(FakeWorker):
+    def __init__(self, _deck_names: list[str]) -> None:
+        super().__init__(_deck_names)
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+    def request(self, payload):
+        return {"active": False, "finished": True, "role": payload.get("role"), "step": 1}
+
+
 class RoomLimitTests(unittest.TestCase):
     def test_five_room_limit_and_room_id_length(self) -> None:
         deck = available_decks()[0]
@@ -48,6 +60,20 @@ class PlayerTokenTests(unittest.TestCase):
             self.assertNotEqual(room.player_tokens[0], room.player_tokens[1])
             with self.assertRaises(ValueError):
                 manager.authenticate("invalid-token")
+
+    def test_finished_room_releases_worker_immediately(self) -> None:
+        deck = available_decks()[0]
+        manager = RoomManager(max_rooms=1)
+        with patch("app.room_manager.WorkerClient", FinishingFakeWorker):
+            room = manager.create([deck, deck])
+            worker = room.worker
+            manager.join(room.room_id)
+            final_state = manager.state(room.room_id, 0)
+            self.assertTrue(final_state["finished"])
+            self.assertTrue(worker.closed)
+            self.assertIsNone(room.worker)
+            self.assertEqual(manager.active_room_count(), 0)
+            self.assertTrue(manager.state(room.room_id, 1)["finished"])
 
 
 class WorkerIntegrationTests(unittest.TestCase):

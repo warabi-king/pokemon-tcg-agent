@@ -49,9 +49,9 @@ app.config.update(
 )
 manager = RoomManager(max_rooms=5)
 agent_manager = CloudAgentManager(
-    lambda: len(manager.rooms) + len(agent_manager.matches), max_matches=5
+    lambda: manager.active_room_count() + len(agent_manager.matches), max_matches=5
 )
-manager.total_active = lambda: len(manager.rooms) + len(agent_manager.matches)
+manager.total_active = lambda: manager.active_room_count() + len(agent_manager.matches)
 capacity_lock = threading.Lock()
 CARD_META = card_metadata()
 atexit.register(manager.close_all)
@@ -120,8 +120,8 @@ def room_status():
     manager.cleanup()
     agent_manager.cleanup()
     return jsonify({
-        "activeRooms": len(manager.rooms),
-        "activeMatches": len(manager.rooms) + len(agent_manager.matches),
+        "activeRooms": manager.active_room_count(),
+        "activeMatches": manager.active_room_count() + len(agent_manager.matches),
         "maxRooms": manager.max_rooms,
     })
 
