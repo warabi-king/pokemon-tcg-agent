@@ -24,6 +24,14 @@
   <main class="app-shell">
     <section class="table-panel">
       <div id="errorBanner" class="error-banner hidden"></div>
+      <div id="duelLobby" class="duel-lobby hidden">
+        <strong id="duelLobbyTitle">対戦ルームを作成してください</strong>
+        <span id="duelLobbyMessage">2つのデッキを選び、「ルーム作成」を押します。</span>
+        <div id="invitePanel" class="invite-panel hidden">
+          <input id="inviteLink" type="text" readonly aria-label="Player 2 招待リンク">
+          <button id="copyInviteButton" class="secondary-button" type="button">招待リンクをコピー</button>
+        </div>
+      </div>
 
       <section class="player-zone opponent-zone">
         <div class="zone-heading">

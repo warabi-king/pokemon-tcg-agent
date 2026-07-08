@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+.agents
+.codex
+dist
+results
+sample_submission
+__pycache__
+*.pyc
+*.pyo
+agents/*/train
+docs/*.pdf

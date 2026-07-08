@@ -6,18 +6,21 @@ import ctypes
 import importlib.util
 import json
 import os
+import secrets
 import sys
 import threading
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = ROOT / "app"
 AGENTS_ROOT = ROOT / "agents"
 CARD_ROOT = ROOT / "docs" / "cards"
+DUEL_HOST_TOKEN = os.environ.get("DUEL_HOST_TOKEN") or secrets.token_urlsafe(18)
+DUEL_INSTANCE_ID = os.environ.get("DUEL_INSTANCE_ID") or secrets.token_urlsafe(16)
 
 
 def available_agents() -> list[str]:
@@ -408,9 +411,159 @@ class AgentMatchController:
             }
 
 
+class DuelMatchController:
+    """Own the single browser-to-browser match hosted by this process."""
+
+    def __init__(self) -> None:
+        self.lock = BATTLE_LOCK
+        self.env = None
+        self.room_id: str | None = None
+        self.join_token: str | None = None
+        self.player_joined = [False, False]
+        self.deck_names: list[str] = []
+        self.last_observations: list[dict[str, Any] | None] = [None, None]
+        self.events: list[list[dict[str, Any]]] = [[], []]
+        self.error: str | None = None
+
+    def new_room(self, deck_a: str, deck_b: str) -> dict[str, Any]:
+        """Replace the current room and return player 1's private view."""
+        with self.lock:
+            names = [deck_a, deck_b]
+            roots = [agent_src(name) for name in names]
+            decks = [load_deck(root / "deck.csv") for root in roots]
+
+            discard_active_battle()
+            self.env = make("cabt", debug=True)
+            self.env.reset()
+            register_active_battle(self.env)
+            self.env.step(decks)
+
+            self.room_id = secrets.token_urlsafe(9)
+            self.join_token = secrets.token_urlsafe(32)
+            self.player_joined = [True, False]
+            self.deck_names = names
+            self.last_observations = [None, None]
+            self.events = [[], []]
+            self.error = None
+            self._capture_observations("SETUP")
+            return self.payload(0, include_invite=True)
+
+    def join(self, token: str) -> None:
+        """Join or reconnect as player 2 using the room's secret invitation."""
+        with self.lock:
+            if self.env is None or self.room_id is None:
+                raise ValueError("参加できる対戦ルームがありません。")
+            if self.join_token is None or not secrets.compare_digest(token, self.join_token):
+                raise ValueError("招待リンクが無効です。")
+            self.player_joined[1] = True
+
+    def action(self, role: int, indices: Any, expected_step: Any = None) -> dict[str, Any]:
+        with self.lock:
+            self._require_role(role)
+            require_active_battle(self.env)
+            if not self.player_joined[1]:
+                raise ValueError("Player 2の参加を待っています。")
+            if self.env.done:
+                raise ValueError("この対戦は終了しています。")
+            if self.env.state[role].status != "ACTIVE":
+                raise ValueError("現在は相手のターンです。")
+            current_step = len(self.env.steps) - 1
+            if expected_step is not None and expected_step != current_step:
+                raise ValueError("対戦状態が更新されています。画面を更新してから選択してください。")
+            if not isinstance(indices, list) or any(type(index) is not int for index in indices):
+                raise ValueError("indices must be an array of integers.")
+
+            observation = plain(self.env.state[role].observation)
+            selection = observation.get("select")
+            if selection is None:
+                raise ValueError("選択可能な合法手がありません。")
+            option_count = len(selection["option"])
+            if len(indices) < selection["minCount"] or len(indices) > selection["maxCount"]:
+                raise ValueError(
+                    f"{selection['minCount']}〜{selection['maxCount']}個の選択が必要です。"
+                )
+            if len(indices) != len(set(indices)):
+                raise ValueError("同じ選択肢を複数回選ぶことはできません。")
+            if any(index < 0 or index >= option_count for index in indices):
+                raise ValueError("存在しない選択肢が含まれています。")
+
+            actions = [None, None]
+            actions[role] = indices
+            self.env.step(actions)
+            self._capture_observations(f"P{role + 1}")
+            return self.payload(role, include_invite=(role == 0))
+
+    def _require_role(self, role: int) -> None:
+        if role not in (0, 1) or self.env is None or self.room_id is None:
+            raise ValueError("対戦ルームに参加していません。")
+        if not self.player_joined[role]:
+            raise ValueError("このプレイヤーはまだ参加していません。")
+
+    def _capture_observations(self, source: str) -> None:
+        if self.env is None:
+            return
+        for role, state in enumerate(self.env.state):
+            observation = plain(state.observation)
+            if observation.get("current") is not None:
+                self.last_observations[role] = observation
+                # Logs can contain private card IDs. Keep each player's filtered
+                # engine view separate just like the board observation itself.
+                for log in observation.get("logs") or []:
+                    self.events[role].append({"source": source, **log})
+                self.events[role] = self.events[role][-120:]
+
+    def payload(self, role: int, include_invite: bool = False) -> dict[str, Any]:
+        with self.lock:
+            self._require_role(role)
+            observation = self.last_observations[role]
+            if observation is not None:
+                # The existing UI always renders the local player at index 0.
+                # Player 2 receives a private copy with the two board positions swapped.
+                observation = plain(observation)
+                if role == 1 and observation.get("current") is not None:
+                    players = observation["current"].get("players")
+                    if isinstance(players, list) and len(players) == 2:
+                        observation["current"]["players"] = [players[1], players[0]]
+
+            states = [
+                {"status": state.status, "reward": state.reward}
+                for state in self.env.state
+            ]
+            if role == 1:
+                states.reverse()
+            result = {
+                "started": True,
+                "duelMode": True,
+                "roomId": self.room_id,
+                "role": role,
+                "opponentJoined": self.player_joined[1 - role],
+                "finished": self.env.done,
+                "humanTurn": (
+                    self.player_joined[1]
+                    and not self.env.done
+                    and self.env.state[role].status == "ACTIVE"
+                ),
+                "observation": observation,
+                "states": states,
+                "events": self.events[role],
+                "error": self.error,
+                "step": len(self.env.steps) - 1,
+                "deckNames": self.deck_names,
+            }
+            if include_invite and self.join_token is not None:
+                result["invitePath"] = f"/j/{self.join_token}"
+            return result
+
+
 app = Flask(__name__, static_folder=None)
+app.secret_key = secrets.token_bytes(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 match = MatchController()
 agent_match = AgentMatchController()
+duel_match = DuelMatchController()
 
 
 @app.get("/")
@@ -421,6 +574,34 @@ def index():
 @app.get("/watch")
 def watch():
     return send_from_directory(APP_ROOT, "index.html")
+
+
+@app.get("/duel")
+def duel():
+    return send_from_directory(APP_ROOT, "index.html")
+
+
+@app.get("/duel/host/<token>")
+@app.get("/h/<token>")
+def duel_host(token: str):
+    if not secrets.compare_digest(token, DUEL_HOST_TOKEN):
+        return "ホスト用リンクが無効です。", 403
+    session.clear()
+    session["duel_can_host"] = True
+    return redirect(url_for("duel"))
+
+
+@app.get("/duel/join/<token>")
+@app.get("/j/<token>")
+def duel_join(token: str):
+    try:
+        duel_match.join(token)
+        session.clear()
+        session["duel_room_id"] = duel_match.room_id
+        session["duel_role"] = 1
+        return redirect(url_for("duel"))
+    except Exception as exc:
+        return f"対戦ルームに参加できませんでした: {exc}", 400
 
 
 @app.get("/static/<path:filename>")
@@ -488,6 +669,61 @@ def watch_step():
         return jsonify({"error": str(exc)}), 400
 
 
+def duel_session_role() -> int:
+    role = session.get("duel_role")
+    room_id = session.get("duel_room_id")
+    if type(role) is not int or room_id != duel_match.room_id:
+        raise ValueError("対戦ルームに参加していません。")
+    return role
+
+
+@app.get("/api/duel/state")
+def duel_state():
+    try:
+        role = duel_session_role()
+        return jsonify(duel_match.payload(role, include_invite=(role == 0)))
+    except Exception:
+        return jsonify({"started": False, "duelMode": True})
+
+
+@app.get("/api/duel/health")
+def duel_health():
+    return jsonify({"instanceId": DUEL_INSTANCE_ID})
+
+
+@app.post("/api/duel/create")
+def duel_create():
+    try:
+        if session.get("duel_can_host") is not True:
+            raise ValueError("ルームを作成できるのはホストだけです。")
+        body = request.get_json(silent=True) or {}
+        payload = duel_match.new_room(
+            body.get("deckA", DEFAULT_AGENT),
+            body.get("deckB", DEFAULT_AGENT),
+        )
+        session.clear()
+        session["duel_can_host"] = True
+        session["duel_room_id"] = duel_match.room_id
+        session["duel_role"] = 0
+        return jsonify(payload)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.post("/api/duel/action")
+def duel_action():
+    try:
+        role = duel_session_role()
+        body = request.get_json(force=True) or {}
+        return jsonify(
+            duel_match.action(role, body.get("indices"), body.get("step"))
+        )
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 if __name__ == "__main__":
     print("PokeTCG Battle Table: http://127.0.0.1:8000")
+    if os.environ.get("DUEL_MANAGED") != "1":
+        print(f"1対1対戦ホスト: http://127.0.0.1:8000/h/{DUEL_HOST_TOKEN}")
     app.run(host="127.0.0.1", port=8000, debug=False, threaded=True)

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PokeTCG Online Battle</title>
+  <link rel="stylesheet" href="/static/rooms.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">CLOUD BATTLE / CABT</p>
+      <h1>PokeTCG Online Battle</h1>
+      <p>ルームを作成するか、ルームコードと暗証番号を入力して参加します。</p>
+      <span id="capacity" class="capacity">空き状況を確認中…</span>
+    </header>
+
+    <div id="errorMessage" class="error hidden" role="alert"></div>
+
+    <section class="cards">
+      <form id="createForm" class="panel">
+        <div class="number">01</div>
+        <p class="eyebrow">CREATE ROOM</p>
+        <h2>ルームの作成</h2>
+        <p class="description">対戦で使用する2つのデッキと、参加者へ伝える4桁の暗証番号を設定します。</p>
+
+        <label>
+          Player 1 デッキ
+          <select id="deckA" required></select>
+        </label>
+        <label>
+          Player 2 デッキ
+          <select id="deckB" required></select>
+        </label>
+        <label>
+          4桁の暗証番号
+          <input id="createPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" placeholder="例: 1234" required>
+        </label>
+        <button type="submit">ルームを作成</button>
+      </form>
+
+      <form id="joinForm" class="panel accent">
+        <div class="number">02</div>
+        <p class="eyebrow">JOIN ROOM</p>
+        <h2>ルームの参加</h2>
+        <p class="description">作成者から受け取った6桁のルームコードと4桁の暗証番号を入力します。</p>
+
+        <label>
+          ルームコード
+          <input id="roomId" type="text" minlength="6" maxlength="6" autocomplete="off" placeholder="例: A3K7XP" required>
+        </label>
+        <label>
+          4桁の暗証番号
+          <input id="joinPin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" placeholder="例: 1234" required>
+        </label>
+        <button type="submit">ルームに参加</button>
+      </form>
+    </section>
+
+    <footer>同時に対戦できるのは最大10人・5ルームです。</footer>
+  </main>
+  <script src="/static/rooms.js"></script>
+</body>
+</html>

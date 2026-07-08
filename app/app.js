@@ -33,8 +33,10 @@ let meta = { cards: {}, attacks: {} };
 let selected = new Set();
 let busy = false;
 const watchMode = window.location.pathname === "/watch";
+const duelMode = window.location.pathname === "/duel";
 let autoPlaying = false;
 let autoPlayTimer = null;
+let duelPollTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const padCardId = (id) => String(id).padStart(4, "0");
@@ -429,6 +431,17 @@ function renderActions(observation) {
     return;
   }
   if (!selection || !state?.humanTurn) {
+    if (duelMode) {
+      $("actionTitle").textContent = state?.finished
+        ? "対戦終了"
+        : !state?.started
+          ? "ルーム作成待ち"
+          : !state?.opponentJoined ? "Player 2参加待ち" : "対戦相手の選択待ち";
+      $("selectionRule").textContent = "";
+      $("submitAction").disabled = true;
+      list.innerHTML = `<div class="empty-message">${state?.finished ? resultMessage() : "少々お待ちください"}</div>`;
+      return;
+    }
     $("actionTitle").textContent = state?.finished ? "対戦終了" : "AIが選択中";
     $("selectionRule").textContent = "";
     $("submitAction").disabled = true;
@@ -523,6 +536,7 @@ function renderEvents(events) {
 function resultMessage() {
   if (!state?.finished) return "";
   const reward = state.states?.[0]?.reward;
+  if (duelMode) return reward > 0 ? "YOU WIN" : reward < 0 ? "YOU LOSE" : "DRAW";
   if (watchMode && reward > 0) return "PLAYER 1 WIN";
   if (watchMode && reward < 0) return "PLAYER 2 WIN";
   if (watchMode) return "DRAW";
@@ -538,6 +552,28 @@ function render() {
     document.querySelector(".human-zone .zone-heading strong").textContent = `Player 1 / ${state.agentNames[0]}`;
     document.querySelector(".opponent-zone .zone-heading strong").textContent = `Player 2 / ${state.agentNames[1]}`;
   }
+  if (duelMode && state?.started) {
+    const role = Number(state.role);
+    document.querySelector(".human-zone .zone-heading strong").textContent = `あなた / Player ${role + 1}`;
+    document.querySelector(".opponent-zone .zone-heading strong").textContent = `対戦相手 / Player ${2 - role}`;
+    $("duelLobby").classList.remove("hidden");
+    $("duelLobbyTitle").textContent = state.opponentJoined ? "対戦中" : "Player 2の参加を待っています";
+    $("duelLobbyMessage").textContent = state.opponentJoined
+      ? `ルームコード ${state.roomId}`
+      : state.cloudMode
+        ? `ルームコード ${state.roomId} と設定した暗証番号をPlayer 2へ伝えてください。`
+        : "下の招待リンクをPlayer 2へ共有してください。";
+    if (state.invitePath) {
+      $("inviteLink").value = `${window.location.origin}${state.invitePath}`;
+      $("invitePanel").classList.remove("hidden");
+    }
+    $("newGameButton").classList.toggle("hidden", state.cloudMode || role !== 0);
+    for (const select of [$("agentASelect"), $("agentBSelect")]) {
+      select.closest("label").classList.add("hidden");
+    }
+  } else if (duelMode) {
+    $("duelLobby").classList.remove("hidden");
+  }
   renderBoard(observation);
   renderActions(observation);
   renderEvents(state?.events);
@@ -549,7 +585,9 @@ function render() {
     ? resultMessage()
     : watchMode
       ? `PLAYER ${Number(state?.nextPlayer) + 1} TO MOVE`
-      : state?.humanTurn ? "YOUR MOVE" : "AI THINKING";
+      : duelMode && !state?.started ? "LOBBY"
+      : duelMode && !state?.opponentJoined ? "WAITING FOR PLAYER 2"
+      : state?.humanTurn ? "YOUR MOVE" : duelMode ? "OPPONENT'S MOVE" : "AI THINKING";
   const bannerMessage = state?.error;
   $("errorBanner").textContent = bannerMessage || "";
   $("errorBanner").classList.toggle("hidden", !bannerMessage);
@@ -574,8 +612,11 @@ async function startNewGame() {
     stopAutoPlay();
     const agents = watchMode
       ? { agentA: $("agentASelect").value, agentB: $("agentBSelect").value }
-      : { agent: $("agentBSelect").value };
-    state = await api(watchMode ? "/api/watch/new" : "/api/new", {
+      : duelMode
+        ? { deckA: $("agentASelect").value, deckB: $("agentBSelect").value }
+        : { agent: $("agentBSelect").value };
+    const path = watchMode ? "/api/watch/new" : duelMode ? "/api/duel/create" : "/api/new";
+    state = await api(path, {
       method: "POST",
       body: JSON.stringify(agents),
     });
@@ -595,9 +636,12 @@ async function submitAction() {
   $("submitAction").disabled = true;
   $("turnBadge").textContent = "RESOLVING";
   try {
-    state = await api(watchMode ? "/api/watch/step" : "/api/action", {
+    const path = watchMode ? "/api/watch/step" : duelMode ? "/api/duel/action" : "/api/action";
+    state = await api(path, {
       method: "POST",
-      body: watchMode ? "{}" : JSON.stringify({ indices: [...selected].sort((a, b) => a - b) }),
+      body: watchMode
+        ? "{}"
+        : JSON.stringify({ indices: [...selected].sort((a, b) => a - b), step: state?.step }),
     });
     render();
   } catch (error) {
@@ -657,6 +701,19 @@ $("closeActionPopup").addEventListener("click", closeActionPopup);
 $("actionPopup").addEventListener("click", (event) => {
   if (event.target === $("actionPopup")) closeActionPopup();
 });
+$("copyInviteButton").addEventListener("click", async () => {
+  const link = $("inviteLink").value;
+  if (!link) return;
+  try {
+    await navigator.clipboard.writeText(link);
+    $("copyInviteButton").textContent = "コピーしました";
+    window.setTimeout(() => {
+      $("copyInviteButton").textContent = "招待リンクをコピー";
+    }, 1600);
+  } catch (_error) {
+    $("inviteLink").select();
+  }
+});
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     $("cardPreview").classList.add("hidden");
@@ -675,16 +732,39 @@ async function initialize() {
       $("opponentHandPanel").querySelector(".section-label").textContent = "PLAYER 2 HAND";
       $("humanHand").parentElement.querySelector(".section-label").textContent = "PLAYER 1 HAND";
     }
+    if (duelMode) {
+      document.title = "PokeTCG 1対1 Online Battle";
+      document.querySelector("h1").textContent = "PokeTCG 1対1 Online Battle";
+      document.querySelector(".eyebrow").textContent = "HUMAN VS HUMAN / CABT";
+      $("newGameButton").textContent = "ルーム作成";
+    }
     meta = await api("/api/meta");
     for (const select of [$("agentASelect"), $("agentBSelect")]) {
       for (const agentName of meta.agents) {
         select.add(new Option(agentName, agentName));
       }
     }
-    $("agentASelect").closest("label").classList.toggle("hidden", !watchMode);
-    state = await api(watchMode ? "/api/watch/state" : "/api/state");
-    if (!state.started) await startNewGame();
+    $("agentASelect").closest("label").classList.toggle("hidden", !watchMode && !duelMode);
+    const statePath = watchMode ? "/api/watch/state" : duelMode ? "/api/duel/state" : "/api/state";
+    state = await api(statePath);
+    if (!state.started && !duelMode) await startNewGame();
     else render();
+    if (duelMode) duelPollTimer = window.setInterval(pollDuelState, 1000);
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+async function pollDuelState() {
+  if (!duelMode || busy) return;
+  try {
+    const nextState = await api("/api/duel/state");
+    const changed = nextState.started !== state?.started
+      || nextState.step !== state?.step
+      || nextState.opponentJoined !== state?.opponentJoined
+      || nextState.finished !== state?.finished;
+    state = nextState;
+    if (changed) render();
   } catch (error) {
     showError(error.message);
   }

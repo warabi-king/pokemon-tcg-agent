@@ -297,6 +297,11 @@ button { font: inherit; }
 .empty-message { padding: 18px; color: var(--muted); text-align: center; font-size: .82rem; }
 
 .error-banner { margin-bottom: 14px; padding: 11px 14px; color: #7b271d; background: #fbe8e4; border: 1px solid #edb8ae; border-radius: 12px; font-weight: 700; }
+
+.duel-lobby { display: grid; gap: 8px; margin-bottom: 16px; padding: 14px 16px; border: 1px solid #c9d9ca; border-radius: 12px; background: #edf5e8; }
+.duel-lobby.hidden, .invite-panel.hidden { display: none; }
+.invite-panel { display: flex; gap: 8px; align-items: center; }
+.invite-panel input { min-width: 0; flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; color: inherit; background: white; }
 .hidden { display: none !important; }
 
 .card-preview {
@@ -415,6 +420,7 @@ button { font: inherit; }
 }
 
 @media (max-width: 620px) {
+  .invite-panel { align-items: stretch; flex-direction: column; }
   .topbar { align-items: start; }
   .header-actions { flex-direction: column; align-items: end; }
   .app-shell { width: min(100% - 16px, 1600px); margin: 8px auto; gap: 8px; }
