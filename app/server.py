@@ -166,8 +166,9 @@ def require_active_battle(env: Any) -> None:
 class MatchController:
     """Own the single local cabt match used by the browser UI."""
 
-    def __init__(self) -> None:
+    def __init__(self, auto_advance: bool = True) -> None:
         self.lock = BATTLE_LOCK
+        self.auto_advance = auto_advance
         self.env = None
         self.last_observation: dict[str, Any] | None = None
         self.events: list[dict[str, Any]] = []
@@ -191,7 +192,8 @@ class MatchController:
             self.events = []
             self.error = None
             self._capture_observation("対戦開始")
-            self._advance_opponent()
+            if self.auto_advance:
+                self._advance_opponent()
             return self.payload()
 
     def act(self, indices: Any) -> dict[str, Any]:
@@ -223,8 +225,30 @@ class MatchController:
 
             self.env.step([indices, None])
             self._capture_observation("あなた")
-            self._advance_opponent()
+            if self.auto_advance:
+                self._advance_opponent()
             return self.payload()
+
+    def advance_opponent_step(self) -> dict[str, Any]:
+        """Advance exactly one AI selection so cloud clients can render every step."""
+        with self.lock:
+            if self.env is None:
+                raise ValueError("The match has not started.")
+            require_active_battle(self.env)
+            if self.env.done or self.env.state[1].status != "ACTIVE":
+                return self.payload()
+            self._advance_opponent_step_unlocked()
+            return self.payload()
+
+    def _advance_opponent_step_unlocked(self) -> None:
+        observation = plain(self.env.state[1].observation)
+        try:
+            action = opponent_module.agent(observation)
+            self.env.step([None, action])
+        except Exception as exc:
+            self.error = f"AI agent error: {exc}"
+            return
+        self._capture_observation("AI")
 
     def _advance_opponent(self) -> None:
         steps = 0

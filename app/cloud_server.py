@@ -163,6 +163,14 @@ def agent_action():
         return jsonify({"error": str(exc)}), 400
 
 
+@app.post("/api/agent/step")
+def agent_step():
+    try:
+        return jsonify(agent_manager.request(match_token(), "play", "step"))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @app.get("/api/watch/state")
 def watch_state():
     try:

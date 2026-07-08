@@ -12,13 +12,22 @@ class CloudAgentModeIntegrationTests(unittest.TestCase):
         try:
             play, play_state = manager.create("play", [agent])
             self.assertTrue(play_state["started"])
-            if play_state["humanTurn"]:
-                selection = play_state["observation"]["select"]
-                indices = list(range(selection["minCount"]))
-                play_state = manager.request(
-                    play.token, "play", "action", indices=indices
-                )
-                self.assertTrue(play_state["started"])
+            ai_steps = 0
+            for _ in range(20):
+                if play_state["finished"]:
+                    break
+                previous_step = play_state["step"]
+                if play_state["humanTurn"]:
+                    selection = play_state["observation"]["select"]
+                    indices = list(range(selection["minCount"]))
+                    play_state = manager.request(
+                        play.token, "play", "action", indices=indices
+                    )
+                else:
+                    play_state = manager.request(play.token, "play", "step")
+                    ai_steps += 1
+                self.assertGreater(play_state["step"], previous_step)
+            self.assertGreater(ai_steps, 0)
 
             watch, watch_state = manager.create("watch", [agent, agent])
             self.assertTrue(watch_state["started"])

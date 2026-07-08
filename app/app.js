@@ -34,9 +34,11 @@ let selected = new Set();
 let busy = false;
 const watchMode = window.location.pathname === "/watch";
 const duelMode = window.location.pathname === "/duel";
+const cloudAgentMode = window.location.pathname === "/play";
 let autoPlaying = false;
 let autoPlayTimer = null;
 let duelPollTimer = null;
+let opponentPollBusy = false;
 const duelPlayerToken = sessionStorage.getItem("duelPlayerToken") || "";
 const matchStorageKey = watchMode ? "watchMatchToken" : "agentMatchToken";
 let matchToken = sessionStorage.getItem(matchStorageKey) || "";
@@ -760,6 +762,7 @@ async function initialize() {
     if (!state.started && !duelMode) await startNewGame();
     else render();
     if (duelMode) duelPollTimer = window.setInterval(pollDuelState, 1000);
+    if (cloudAgentMode) duelPollTimer = window.setInterval(pollAgentStep, 1000);
   } catch (error) {
     showError(error.message);
   }
@@ -777,6 +780,20 @@ async function pollDuelState() {
     if (changed) render();
   } catch (error) {
     showError(error.message);
+  }
+}
+
+async function pollAgentStep() {
+  if (!cloudAgentMode || busy || opponentPollBusy || !state?.started
+      || state?.finished || state?.humanTurn || state?.error) return;
+  opponentPollBusy = true;
+  try {
+    state = await api("/api/agent/step", { method: "POST", body: "{}" });
+    render();
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    opponentPollBusy = false;
   }
 }
 

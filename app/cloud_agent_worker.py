@@ -13,7 +13,7 @@ def worker_main(connection: Connection, mode: str, agent_names: list[str]) -> No
         from app.server import AgentMatchController, MatchController
 
         if mode == "play":
-            controller = MatchController()
+            controller = MatchController(auto_advance=False)
             controller.new_game(agent_names[0])
         elif mode == "watch":
             controller = AgentMatchController()
@@ -33,6 +33,8 @@ def worker_main(connection: Connection, mode: str, agent_names: list[str]) -> No
                     result = controller.payload()
                 elif operation == "action" and mode == "play":
                     result = controller.act(command.get("indices"))
+                elif operation == "step" and mode == "play":
+                    result = controller.advance_opponent_step()
                 elif operation == "step" and mode == "watch":
                     result = controller.step()
                 else:
