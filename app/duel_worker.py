@@ -83,14 +83,42 @@ class BattleWorker:
         self._capture("SETUP")
 
     def _capture(self, source: str) -> None:
+        observations: list[dict[str, Any] | None] = [None, None]
         for role, state in enumerate(self.env.state):
             observation = plain(state.observation)
             if observation.get("current") is None:
                 continue
+            observations[role] = observation
             self.last_observations[role] = observation
             for log in observation.get("logs") or []:
                 self.events[role].append({"source": source, **log})
             self.events[role] = self.events[role][-120:]
+        self._sync_public_in_play(observations)
+
+    def _sync_public_in_play(
+        self, observations: list[dict[str, Any] | None]
+    ) -> None:
+        """Expose placed Pokemon once both initial Active Pokemon are selected."""
+        public_players: list[dict[str, Any]] = []
+        for owner, observation in enumerate(observations):
+            current = observation.get("current") if observation else None
+            players = current.get("players") if current else None
+            if not isinstance(players, list) or len(players) != 2:
+                return
+            public_players.append(players[owner])
+        if any(
+            not player.get("active")
+            or not isinstance(player["active"][0], dict)
+            or player["active"][0].get("id") is None
+            for player in public_players
+        ):
+            return
+        for observation in observations:
+            if observation is None:
+                continue
+            players = observation["current"]["players"]
+            for owner, public_player in enumerate(public_players):
+                players[owner]["active"] = plain(public_player.get("active") or [])
 
     def state(self, role: int) -> dict[str, Any]:
         if role not in (0, 1):

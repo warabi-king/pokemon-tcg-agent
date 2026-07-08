@@ -90,6 +90,25 @@ class WorkerIntegrationTests(unittest.TestCase):
             seen_observation = [False, False]
             for _ in range(20):
                 states = [manager.state(room.room_id, role) for role in (0, 1)]
+                host_observation = states[0].get("observation")
+                guest_observation = states[1].get("observation")
+                if host_observation and guest_observation:
+                    host_players = host_observation["current"]["players"]
+                    guest_players = guest_observation["current"]["players"]
+                else:
+                    host_players = guest_players = []
+                guest_active = guest_players[0].get("active") if guest_players else None
+                if (
+                    host_players
+                    and host_players[0].get("active")
+                    and guest_active
+                    and isinstance(guest_active[0], dict)
+                    and guest_active[0].get("id") is not None
+                ):
+                    self.assertEqual(
+                        host_players[1]["active"][0].get("id"),
+                        guest_players[0]["active"][0].get("id"),
+                    )
                 for role, state in enumerate(states):
                     seen_observation[role] |= state.get("observation") is not None
                 active_role = next(
