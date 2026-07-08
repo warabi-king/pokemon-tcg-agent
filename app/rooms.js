@@ -44,7 +44,6 @@ $("createForm").addEventListener("submit", async (event) => {
     await api("/api/rooms", {
       method: "POST",
       body: JSON.stringify({
-        pin: $("createPin").value,
         deckA: $("deckA").value,
         deckB: $("deckB").value,
       }),
@@ -62,7 +61,7 @@ $("joinForm").addEventListener("submit", async (event) => {
   try {
     await api("/api/rooms/join", {
       method: "POST",
-      body: JSON.stringify({ roomId: $("roomId").value, pin: $("joinPin").value }),
+      body: JSON.stringify({ roomId: $("roomId").value }),
     });
     window.location.assign("/duel");
   } catch (error) {

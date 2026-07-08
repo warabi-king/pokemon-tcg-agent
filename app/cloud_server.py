@@ -105,7 +105,6 @@ def create_room():
     try:
         body = request.get_json(force=True) or {}
         room = manager.create(
-            str(body.get("pin") or ""),
             [str(body.get("deckA") or ""), str(body.get("deckB") or "")],
         )
         session.clear()
@@ -120,7 +119,7 @@ def create_room():
 def join_room():
     try:
         body = request.get_json(force=True) or {}
-        room = manager.join(str(body.get("roomId") or ""), str(body.get("pin") or ""))
+        room = manager.join(str(body.get("roomId") or ""))
         session.clear()
         session["room_id"] = room.room_id
         session["role"] = 1

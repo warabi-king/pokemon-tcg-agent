@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import multiprocessing
-import re
 import secrets
 import threading
 import time
@@ -16,7 +14,6 @@ from app.duel_worker import worker_main
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PIN_RE = re.compile(r"^[0-9]{4}$")
 ROOM_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
 
@@ -27,10 +24,6 @@ def available_decks() -> list[str]:
         for path in agents_root.iterdir()
         if (path / "src" / "deck.csv").is_file()
     )
-
-
-def pin_digest(pin: str, salt: bytes) -> bytes:
-    return hashlib.pbkdf2_hmac("sha256", pin.encode("ascii"), salt, 120_000)
 
 
 class WorkerClient:
@@ -85,35 +78,12 @@ class WorkerClient:
 @dataclass
 class Room:
     room_id: str
-    pin_salt: bytes
-    pin_hash: bytes
     deck_names: list[str]
     worker: WorkerClient
     player2_joined: bool = False
     created_at: float = field(default_factory=time.monotonic)
     last_activity: float = field(default_factory=time.monotonic)
-    failed_attempts: int = 0
-    attempt_window_started: float = field(default_factory=time.monotonic)
-    locked_until: float = 0.0
     finished_at: float | None = None
-
-    def verify_pin(self, pin: str) -> bool:
-        now = time.monotonic()
-        if now < self.locked_until:
-            raise ValueError("暗証番号の試行回数が上限に達しました。5分後に再試行してください。")
-        if now - self.attempt_window_started > 600:
-            self.failed_attempts = 0
-            self.attempt_window_started = now
-        valid = PIN_RE.fullmatch(pin or "") is not None and secrets.compare_digest(
-            self.pin_hash, pin_digest(pin, self.pin_salt)
-        )
-        if valid:
-            self.failed_attempts = 0
-            return True
-        self.failed_attempts += 1
-        if self.failed_attempts >= 10:
-            self.locked_until = now + 300
-        return False
 
 
 class RoomManager:
@@ -124,7 +94,7 @@ class RoomManager:
 
     def _room_code(self) -> str:
         while True:
-            code = "".join(secrets.choice(ROOM_ALPHABET) for _ in range(6))
+            code = "".join(secrets.choice(ROOM_ALPHABET) for _ in range(8))
             if code not in self.rooms:
                 return code
 
@@ -142,9 +112,7 @@ class RoomManager:
                 room = self.rooms.pop(room_id)
                 room.worker.close()
 
-    def create(self, pin: str, deck_names: list[str]) -> Room:
-        if PIN_RE.fullmatch(pin or "") is None:
-            raise ValueError("暗証番号は半角数字4桁で入力してください。")
+    def create(self, deck_names: list[str]) -> Room:
         choices = set(available_decks())
         if len(deck_names) != 2 or any(name not in choices for name in deck_names):
             raise ValueError("デッキの指定が不正です。")
@@ -153,13 +121,12 @@ class RoomManager:
             if len(self.rooms) >= self.max_rooms:
                 raise ValueError("現在満室です。同時に作成できるルームは5室までです。")
             room_id = self._room_code()
-            salt = secrets.token_bytes(16)
             worker = WorkerClient(deck_names)
-            room = Room(room_id, salt, pin_digest(pin, salt), list(deck_names), worker)
+            room = Room(room_id, list(deck_names), worker)
             self.rooms[room_id] = room
             return room
 
-    def join(self, room_id: str, pin: str) -> Room:
+    def join(self, room_id: str) -> Room:
         self.cleanup()
         normalized = (room_id or "").strip().upper()
         with self.lock:
@@ -168,8 +135,6 @@ class RoomManager:
                 raise ValueError("指定されたルームが見つかりません。")
             if room.player2_joined:
                 raise ValueError("このルームにはすでに2人参加しています。")
-            if not room.verify_pin(pin):
-                raise ValueError("暗証番号が違います。")
             room.player2_joined = True
             room.last_activity = time.monotonic()
             return room

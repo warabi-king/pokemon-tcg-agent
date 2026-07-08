@@ -20,16 +20,17 @@ class FakeWorker:
 
 
 class RoomLimitTests(unittest.TestCase):
-    def test_pin_validation_and_five_room_limit(self) -> None:
+    def test_five_room_limit_and_room_id_length(self) -> None:
         deck = available_decks()[0]
         manager = RoomManager(max_rooms=5)
         with patch("app.room_manager.WorkerClient", FakeWorker):
-            with self.assertRaisesRegex(ValueError, "4桁"):
-                manager.create("123", [deck, deck])
+            room_ids = []
             for index in range(5):
-                manager.create(f"{index:04d}", [deck, deck])
+                room_ids.append(manager.create([deck, deck]).room_id)
+            self.assertTrue(all(len(room_id) == 8 for room_id in room_ids))
+            self.assertEqual(len(set(room_ids)), 5)
             with self.assertRaisesRegex(ValueError, "満室"):
-                manager.create("9999", [deck, deck])
+                manager.create([deck, deck])
 
 
 class WorkerIntegrationTests(unittest.TestCase):
@@ -37,12 +38,10 @@ class WorkerIntegrationTests(unittest.TestCase):
         deck = available_decks()[0]
         manager = RoomManager(max_rooms=2)
         try:
-            room = manager.create("1234", [deck, deck])
-            other_room = manager.create("5678", [deck, deck])
-            with self.assertRaisesRegex(ValueError, "暗証番号"):
-                manager.join(room.room_id, "9999")
-            manager.join(room.room_id.lower(), "1234")
-            manager.join(other_room.room_id, "5678")
+            room = manager.create([deck, deck])
+            other_room = manager.create([deck, deck])
+            manager.join(room.room_id.lower())
+            manager.join(other_room.room_id)
 
             progressed = 0
             seen_observation = [False, False]

@@ -561,7 +561,7 @@ function render() {
     $("duelLobbyMessage").textContent = state.opponentJoined
       ? `ルームコード ${state.roomId}`
       : state.cloudMode
-        ? `ルームコード ${state.roomId} と設定した暗証番号をPlayer 2へ伝えてください。`
+        ? `ルームコード ${state.roomId} をPlayer 2へ伝えてください。`
         : "下の招待リンクをPlayer 2へ共有してください。";
     if (state.invitePath) {
       $("inviteLink").value = `${window.location.origin}${state.invitePath}`;
