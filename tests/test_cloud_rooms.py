@@ -77,6 +77,45 @@ class PlayerTokenTests(unittest.TestCase):
 
 
 class WorkerIntegrationTests(unittest.TestCase):
+    def test_player_two_setup_options_reference_the_visible_hand(self) -> None:
+        deck = available_decks()[0]
+        manager = RoomManager(max_rooms=1)
+        try:
+            room = manager.create([deck, deck])
+            manager.join(room.room_id)
+
+            guest_state = None
+            for _ in range(12):
+                states = [manager.state(room.room_id, role) for role in (0, 1)]
+                if states[1]["humanTurn"]:
+                    selection = states[1]["observation"]["select"]
+                    option = selection["option"][0] if selection.get("option") else {}
+                    if option.get("area") == 2 and "playerIndex" in option:
+                        guest_state = states[1]
+                        break
+                active_role = next(
+                    (role for role, state in enumerate(states) if state["humanTurn"]), None
+                )
+                self.assertIsNotNone(active_role)
+                selection = states[active_role]["observation"]["select"]
+                manager.action(
+                    room.room_id,
+                    active_role,
+                    list(range(selection["minCount"])),
+                    states[active_role]["step"],
+                )
+
+            self.assertIsNotNone(guest_state)
+            observation = guest_state["observation"]
+            option = observation["select"]["option"][0]
+            self.assertEqual(option["playerIndex"], 0)
+            self.assertEqual(option["area"], 2)
+            self.assertIsNotNone(
+                observation["current"]["players"][0]["hand"][option["index"]]
+            )
+        finally:
+            manager.close_all()
+
     def test_two_private_players_can_advance_the_same_match(self) -> None:
         deck = available_decks()[0]
         manager = RoomManager(max_rooms=2)

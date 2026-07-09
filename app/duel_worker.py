@@ -17,6 +17,21 @@ def plain(value: Any) -> Any:
     return json.loads(json.dumps(value))
 
 
+def localize_player_references(value: Any) -> Any:
+    """Flip player index references after swapping the two visible players."""
+    if isinstance(value, list):
+        return [localize_player_references(item) for item in value]
+    if isinstance(value, dict):
+        localized: dict[str, Any] = {}
+        for key, item in value.items():
+            if key.lower().endswith("playerindex") and item in (0, 1):
+                localized[key] = 1 - item
+            else:
+                localized[key] = localize_player_references(item)
+        return localized
+    return value
+
+
 def load_deck(deck_source: str | list[int]) -> list[int]:
     if isinstance(deck_source, list):
         if len(deck_source) != 60 or any(type(card_id) is not int or card_id <= 0 for card_id in deck_source):
@@ -132,6 +147,10 @@ class BattleWorker:
                 if isinstance(players, list) and len(players) == 2:
                     current["players"] = [players[1], players[0]]
                     current["yourIndex"] = 0
+                    if observation.get("select") is not None:
+                        observation["select"] = localize_player_references(
+                            observation["select"]
+                        )
         states = [
             {"status": state.status, "reward": state.reward}
             for state in self.env.state

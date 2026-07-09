@@ -45,6 +45,21 @@ def load_deck(path: Path) -> list[int]:
     return deck
 
 
+def localize_player_references(value: Any) -> Any:
+    """Flip player index references after swapping the two visible players."""
+    if isinstance(value, list):
+        return [localize_player_references(item) for item in value]
+    if isinstance(value, dict):
+        localized: dict[str, Any] = {}
+        for key, item in value.items():
+            if key.lower().endswith("playerindex") and item in (0, 1):
+                localized[key] = 1 - item
+            else:
+                localized[key] = localize_player_references(item)
+        return localized
+    return value
+
+
 # Import the environment first. On Windows the repository SDK has no cg.dll,
 # while kaggle-environments ships one. Reusing that already-initialized library
 # also avoids initializing the cabt engine twice.
@@ -557,6 +572,11 @@ class DuelMatchController:
                     players = observation["current"].get("players")
                     if isinstance(players, list) and len(players) == 2:
                         observation["current"]["players"] = [players[1], players[0]]
+                        observation["current"]["yourIndex"] = 0
+                        if observation.get("select") is not None:
+                            observation["select"] = localize_player_references(
+                                observation["select"]
+                            )
 
             states = [
                 {"status": state.status, "reward": state.reward}
