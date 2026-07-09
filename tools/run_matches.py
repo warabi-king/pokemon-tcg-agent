@@ -1,9 +1,9 @@
 """異なるエージェント同士でローカル対戦を複数回実行し、勝率などの統計を出す。
 
-`tools/run_local_match.py` は main.py のエージェント同士（同一実装）を1回だけ
-対戦させるものですが、こちらは
+`tools/run_local_match.py` は指定agent同士を1回だけ対戦させるものですが、
+こちらは
 
-- 任意の2つのエージェントファイル（`agent(obs_dict)` を定義したPythonファイル）
+- 任意の2つのagent名（`agents/{agent}/src/main.py`）
 - 任意の対戦回数
 - （任意で）先手/後手を1試合ごとに入れ替え
 - （任意で）エージェントごとに別のdeck.csvを使用
@@ -11,24 +11,20 @@
 を指定して、勝率・引き分け率・エラー数を集計します。
 
 使用例:
-    # main.py（現行の提出物）と agent_v1.py を20回対戦させる
-    python3 tools/run_matches.py  --agent1 src/main.py --agent2 src/main.py --games 20
+    # random同士を20回対戦させる
+    python tools/run_matches.py --agent-a random --agent-b random --games 20
 
-    # 名前を指定しつつ、先手/後手を固定して50回対戦
-    python tools/run_matches.py \\
-        --agent1 src/main.py --name1 baseline \\
-        --agent2 src/agent_v1.py --name2 mcts \\
-        --games 50 --no-alternate
+    # rl_mcts_sampleとrandomを比較する
+    python tools/run_matches.py --agent-a rl_mcts_sample --agent-b random --games 50
 
     # エージェントごとに別デッキを使わせる
     python tools/run_matches.py \\
-        --agent1 src/main.py --deck1 src/deck.csv \\
-        --agent2 src/agent_v1.py --deck2 src/deck_v2.csv \\
+        --agent-a rl_mcts_sample --deck1 agents/rl_mcts_sample/src/deck.csv \\
+        --agent-b random --deck2 agents/random/src/deck.csv \\
         --games 30
 
     # 詳細ログをresults/にJSONで保存する
-    python tools/run_matches.py --agent1 src/main.py --agent2 src/agent_v1.py \\
-        --games 20 --save-json
+    python tools/run_matches.py --agent-a random --agent-b random --games 20 --save-json
 """
 
 from __future__ import annotations
@@ -47,7 +43,7 @@ from typing import Callable, Optional
 from kaggle_environments import make
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = ROOT / "src"
+AGENTS_ROOT = ROOT / "agents"
 RESULTS_ROOT = ROOT / "results"
 
 AgentFunc = Callable[[dict], list]
@@ -64,6 +60,33 @@ def _load_module(path: Path, module_name: str) -> ModuleType:
     return module
 
 
+def agent_src_dir(agent_name: str) -> Path:
+    """agent名からsrcディレクトリを返す。"""
+    return AGENTS_ROOT / agent_name / "src"
+
+
+def resolve_agent_paths(
+    agent_name: str | None,
+    agent_file: Path | None,
+    deck_file: Path | None,
+    default_name: str,
+) -> tuple[str, Path, Path, Path]:
+    """agent名またはmain.pyパスから、表示名・main.py・deck.csv・srcを解決する。"""
+    if agent_name:
+        src_root = agent_src_dir(agent_name)
+        return (
+            agent_name,
+            src_root / "main.py",
+            deck_file or src_root / "deck.csv",
+            src_root,
+        )
+
+    path = agent_file or agent_src_dir(default_name) / "main.py"
+    src_root = path.resolve().parent
+    name = default_name if agent_file is None else path.stem
+    return name, path, deck_file or src_root / "deck.csv", src_root
+
+
 def load_deck(path: Path) -> list[int]:
     """deck.csv（カードIDを1行1枚で60行）を読み込む。"""
     if not path.exists():
@@ -77,13 +100,14 @@ def load_deck(path: Path) -> list[int]:
     return deck
 
 
-def load_agent(path: Path, module_name: str, deck: list[int]) -> AgentFunc:
+def load_agent(path: Path, module_name: str, deck: list[int], src_root: Path) -> AgentFunc:
     """指定ファイルから agent(obs_dict) を読み込み、使用デッキを固定する。
 
     main.py 互換の実装（`read_deck_csv()` を持つ）であれば、それを差し替えて
     常に `deck` を返すようにする。これにより env に渡すデッキと、
     エージェントが対戦開始時に申告するデッキを一致させる。
     """
+    sys.path.insert(0, str(src_root))
     module = _load_module(path, module_name)
     if not hasattr(module, "agent"):
         raise AttributeError(f"{path} に agent(obs_dict) が定義されていません。")
@@ -240,25 +264,23 @@ def parse_args() -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "--agent1", type=Path, default=SRC_ROOT / "main.py", help="1体目のエージェントファイル"
-    )
-    parser.add_argument(
-        "--agent2", type=Path, default=SRC_ROOT / "main.py", help="2体目のエージェントファイル"
-    )
+    parser.add_argument("--agent-a", default=None, help="1体目のagent名")
+    parser.add_argument("--agent-b", default=None, help="2体目のagent名")
+    parser.add_argument("--agent1", type=Path, default=None, help="1体目のエージェントファイル")
+    parser.add_argument("--agent2", type=Path, default=None, help="2体目のエージェントファイル")
     parser.add_argument("--name1", type=str, default=None, help="1体目の表示名（省略時はファイル名）")
     parser.add_argument("--name2", type=str, default=None, help="2体目の表示名（省略時はファイル名）")
     parser.add_argument(
         "--deck1",
         type=Path,
-        default=SRC_ROOT / "deck.csv",
-        help="1体目に使わせるdeck.csv（省略時は src/deck.csv）",
+        default=None,
+        help="1体目に使わせるdeck.csv（省略時は agents/{agent-a}/src/deck.csv）",
     )
     parser.add_argument(
         "--deck2",
         type=Path,
-        default=SRC_ROOT / "deck.csv",
-        help="2体目に使わせるdeck.csv（省略時は src/deck.csv）",
+        default=None,
+        help="2体目に使わせるdeck.csv（省略時は agents/{agent-b}/src/deck.csv）",
     )
     parser.add_argument("--games", type=int, default=10, help="対戦回数（デフォルト: 10）")
     parser.add_argument(
@@ -277,26 +299,34 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    name1 = args.name1 or args.agent1.stem
-    name2 = args.name2 or args.agent2.stem
+    resolved_name1, agent1_path, deck1_path, src1 = resolve_agent_paths(
+        args.agent_a, args.agent1, args.deck1, "random"
+    )
+    resolved_name2, agent2_path, deck2_path, src2 = resolve_agent_paths(
+        args.agent_b, args.agent2, args.deck2, "random"
+    )
+
+    name1 = args.name1 or resolved_name1
+    name2 = args.name2 or resolved_name2
     if name1 == name2:
         name1 += "#1"
         name2 += "#2"
 
-    agent1_path = args.agent1.resolve()
-    agent2_path = args.agent2.resolve()
-    deck1_path = args.deck1.resolve()
-    deck2_path = args.deck2.resolve()
+    agent1_path = agent1_path.resolve()
+    agent2_path = agent2_path.resolve()
+    deck1_path = deck1_path.resolve()
+    deck2_path = deck2_path.resolve()
+    src1 = src1.resolve()
+    src2 = src2.resolve()
 
-    # cg パッケージ（cg.api など）をどのエージェントからも import できるようにする
-    sys.path.insert(0, str(SRC_ROOT))
-    os.chdir(SRC_ROOT)
+    # deck.csvなどの相対パス参照に対応するため、1体目のsrcで実行する。
+    os.chdir(src1)
 
     deck1 = load_deck(deck1_path)
     deck2 = load_deck(deck2_path)
 
-    agent1 = load_agent(agent1_path, "agent_module_1", deck1)
-    agent2 = load_agent(agent2_path, "agent_module_2", deck2)
+    agent1 = load_agent(agent1_path, "agent_module_1", deck1, src1)
+    agent2 = load_agent(agent2_path, "agent_module_2", deck2, src2)
 
     print(f"{name1}: {agent1_path} (deck: {deck1_path})")
     print(f"{name2}: {agent2_path} (deck: {deck2_path})")
