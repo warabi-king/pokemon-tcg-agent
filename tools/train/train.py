@@ -143,6 +143,59 @@ def collect_self_play_samples(
     return sample_list
 
 
+def collect_cross_play_samples(
+    model_a,
+    model_b,
+    deck: list[int],
+    games: int,
+    search_count: int,
+    lambda_value: float,
+) -> tuple[list[LearnSample], list[LearnSample]]:
+    """モデルAとモデルBで交互に対戦し、それぞれの学習サンプルを返す。
+
+    戻り値は (samples_for_A, samples_for_B)。
+    """
+    samples_a: list[LearnSample] = []
+    samples_b: list[LearnSample] = []
+
+    for _ in progress(games, "Cross-play Data Collecting... "):
+        obs, start_data = battle_start(deck, deck)
+        raise_for_deck_error(start_data)
+        per_player_samples: list[list[LearnSample]] = [[], []]
+        while True:
+            if obs["current"]["result"] >= 0:
+                break
+
+            if obs["current"]["yourIndex"] == 0:
+                selected, sample = mcts_agent(obs, deck, model_a, search_count=search_count)
+            else:
+                selected, sample = mcts_agent(obs, deck, model_b, search_count=search_count)
+
+            if sample is not None:
+                per_player_samples[obs["current"]["yourIndex"]].append(sample)
+
+            obs = battle_select(selected)
+
+        battle_finish()
+
+        for player_index in range(2):
+            if obs["current"]["result"] == 2:
+                value = 0.0
+            else:
+                value = 1.0 if player_index == obs["current"]["result"] else -1.0
+
+            for sample in reversed(per_player_samples[player_index]):
+                label = (value + sample.value) * 0.5
+                value = value * lambda_value + sample.value * (1.0 - lambda_value)
+                sample.value = label
+                if player_index == 0:
+                    samples_a.append(sample)
+                else:
+                    samples_b.append(sample)
+
+    return samples_a, samples_b
+
+
 def train_one_iteration(
     model,
     optimizer,
@@ -284,12 +337,144 @@ def parse_args() -> argparse.Namespace:
         default=SRC_ROOT / "model.pth",
         help="提出用に採用する最終モデル保存先",
     )
+    parser.add_argument(
+        "--dual",
+        action="store_true",
+        help="2モデルを同一プロセスで交互対戦させて両方更新するモード",
+    )
+    parser.add_argument(
+        "--opponent-model",
+        type=Path,
+        default=None,
+        help="(dual) 相手モデルの初期重みを読み込むパス。省略時はランダム初期化。",
+    )
+    parser.add_argument(
+        "--opponent-output",
+        type=Path,
+        default=SRC_ROOT / "model_b.pth",
+        help="(dual) 相手モデルの最終保存先",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     """学習処理の入口。"""
     args = parse_args()
+    if args.dual:
+        # Dual training: maintain two models (A,B), collect cross-play samples,
+        # and update both models within the same process.
+        metrics_path_a = args.metrics_file or args.log_dir / "a" / "train_metrics.csv"
+        metrics_path_b = args.log_dir / "b" / "train_metrics.csv"
+        deck = read_deck_csv()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        model_a = create_model().to(device)
+        model_b = create_model().to(device)
+        if args.opponent_model and args.opponent_model.exists():
+            state = torch.load(args.opponent_model, map_location=device)
+            model_b.load_state_dict(state)
+
+        opt_a = torch.optim.AdamW(model_a.parameters(), lr=args.lr)
+        opt_b = torch.optim.AdamW(model_b.parameters(), lr=args.lr)
+
+        # per-model checkpoint/log dirs
+        ckpt_a = args.checkpoint_dir / "a"
+        ckpt_b = args.checkpoint_dir / "b"
+        log_a = args.log_dir / "a"
+        log_b = args.log_dir / "b"
+        ckpt_a.mkdir(parents=True, exist_ok=True)
+        ckpt_b.mkdir(parents=True, exist_ok=True)
+        log_a.mkdir(parents=True, exist_ok=True)
+        log_b.mkdir(parents=True, exist_ok=True)
+        args.output_model.parent.mkdir(parents=True, exist_ok=True)
+        args.opponent_output.parent.mkdir(parents=True, exist_ok=True)
+
+        for iteration in range(args.iterations):
+            started = time.time()
+            # save checkpoints
+            cp_a = ckpt_a / f"model_{iteration}.pth"
+            cp_b = ckpt_b / f"model_{iteration}.pth"
+            torch.save(model_a.state_dict(), cp_a)
+            torch.save(model_b.state_dict(), cp_b)
+            print(f"Checkpoint saved: {cp_a}, {cp_b}")
+
+            # evaluation vs random
+            model_a.eval()
+            model_b.eval()
+            with torch.inference_mode():
+                if args.eval_games > 0:
+                    wa, la, da = evaluate(model_a, deck, args.eval_games, args.search_count)
+                    wb, lb, db = evaluate(model_b, deck, args.eval_games, args.search_count)
+                    decided_a = wa + la
+                    decided_b = wb + lb
+                    win_rate_a = 100.0 * wa / decided_a if decided_a else 0.0
+                    win_rate_b = 100.0 * wb / decided_b if decided_b else 0.0
+                    print(f"Eval A winrate {win_rate_a:.1f}% (W/L/D={wa}/{la}/{da})")
+                    print(f"Eval B winrate {win_rate_b:.1f}% (W/L/D={wb}/{lb}/{db})")
+                else:
+                    wa = la = da = wb = lb = db = 0
+
+                # collect cross-play samples
+                samples_a, samples_b = collect_cross_play_samples(
+                    model_a, model_b, deck, args.self_play_games, args.search_count, args.lambda_value
+                )
+
+            print(f"Training Start. samples A={len(samples_a)} B={len(samples_b)}")
+            stats_a = train_one_iteration(model_a, opt_a, samples_a, args.batch_size, device)
+            stats_b = train_one_iteration(model_b, opt_b, samples_b, args.batch_size, device)
+            elapsed = time.time() - started
+            print(
+                f"Training Finish. A batches={stats_a.batches} loss={stats_a.loss:.6f} "
+                f"B batches={stats_b.batches} loss={stats_b.loss:.6f} elapsed={elapsed:.1f}s"
+            )
+
+            append_metrics(
+                metrics_path_a,
+                {
+                    "iteration": iteration,
+                    "eval_games": args.eval_games,
+                    "eval_win": wa,
+                    "eval_lose": la,
+                    "eval_draw": da,
+                    "eval_win_rate": 100.0 * wa / (wa + la) if (wa + la) else 0.0,
+                    "self_play_games": args.self_play_games,
+                    "samples": len(samples_a),
+                    "batches": stats_a.batches,
+                    "loss": stats_a.loss,
+                    "loss_value": stats_a.loss_value,
+                    "loss_policy": stats_a.loss_policy,
+                    "elapsed_seconds": elapsed,
+                    "checkpoint_path": cp_a,
+                    "model_path": args.output_model,
+                },
+            )
+
+            append_metrics(
+                metrics_path_b,
+                {
+                    "iteration": iteration,
+                    "eval_games": args.eval_games,
+                    "eval_win": wb,
+                    "eval_lose": lb,
+                    "eval_draw": db,
+                    "eval_win_rate": 100.0 * wb / (wb + lb) if (wb + lb) else 0.0,
+                    "self_play_games": args.self_play_games,
+                    "samples": len(samples_b),
+                    "batches": stats_b.batches,
+                    "loss": stats_b.loss,
+                    "loss_value": stats_b.loss_value,
+                    "loss_policy": stats_b.loss_policy,
+                    "elapsed_seconds": elapsed,
+                    "checkpoint_path": cp_b,
+                    "model_path": args.opponent_output,
+                },
+            )
+
+        # save final models
+        torch.save(model_a.state_dict(), args.output_model)
+        torch.save(model_b.state_dict(), args.opponent_output)
+        print(f"Final models saved: {args.output_model}, {args.opponent_output}")
+        return
     metrics_path = args.metrics_file or args.log_dir / "train_metrics.csv"
     deck = read_deck_csv()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
