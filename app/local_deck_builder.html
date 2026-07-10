@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>高機能デッキビルダー | PokeTCG</title>
+  <link rel="stylesheet" href="/static/local_deck_builder.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p>LOCAL DECK BUILDER</p>
+      <h1>高機能デッキビルダー</h1>
+    </div>
+    <div class="header-actions">
+      <input id="deckFile" type="file" accept=".csv,text/csv">
+      <button id="download" disabled>deck.csv</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="workspace">
+      <div class="filters">
+        <input id="search" type="search" placeholder="カード名、効果、ワザ、IDで検索">
+        <select id="kindFilter"><option value="">種類</option></select>
+        <select id="ruleFilter"><option value="">ルール</option></select>
+        <select id="categoryFilter"><option value="">カテゴリ</option></select>
+        <select id="typeFilter"><option value="">タイプ</option></select>
+        <select id="sortMode">
+          <option value="id">ID順</option>
+          <option value="name">名前順</option>
+          <option value="count">採用枚数順</option>
+        </select>
+      </div>
+
+      <div class="result-bar">
+        <strong id="resultCount">0枚</strong>
+        <button id="resetFilters" class="ghost">絞り込み解除</button>
+      </div>
+
+      <div id="cards" class="card-grid" aria-live="polite"></div>
+    </section>
+
+    <aside class="deck-panel">
+      <div class="deck-heading">
+        <div>
+          <p>DECK</p>
+          <h2>選択中</h2>
+        </div>
+        <strong id="deckCount">0 / 60</strong>
+      </div>
+      <div class="deck-meter"><span id="deckMeter"></span></div>
+      <div id="validationResult" class="validation-result" aria-live="polite"></div>
+      <div id="deckList" class="deck-list"></div>
+      <div class="deck-actions">
+        <button id="validateDeck" class="primary">制約チェック</button>
+        <button id="clear" class="ghost">クリア</button>
+        <button id="copyList" class="ghost">一覧コピー</button>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="detailDialog">
+    <button id="closeDetail" class="icon-button" aria-label="閉じる">×</button>
+    <div id="detailBody"></div>
+  </dialog>
+
+  <script src="/static/local_deck_builder.js"></script>
+</body>
+</html>
