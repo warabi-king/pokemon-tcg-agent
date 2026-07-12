@@ -30,7 +30,7 @@ gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
     --role roles/storage.objectViewer
 if ($LASTEXITCODE -ne 0) { throw "Could not make card images publicly readable." }
 
-gcloud storage cp ".cloud-card-assets/cards/*.webp" "gs://$Bucket/cards/" `
+gcloud storage cp "docs/card-assets/cards/*.webp" "gs://$Bucket/cards/" `
     --cache-control "public,max-age=31536000,immutable"
 if ($LASTEXITCODE -ne 0) { throw "Card image upload failed." }
 

@@ -6,7 +6,6 @@ result.html
 result_kaggle.html
 results/
 dist/
-.cloud-card-assets/
 submission.tar.gz
 agents/*/train/checkpoints/
 agents/*/train/logs/

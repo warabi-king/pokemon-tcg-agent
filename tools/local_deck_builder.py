@@ -18,7 +18,7 @@ from flask import Flask, jsonify, send_from_directory
 ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = ROOT / "app"
 DATA_PATH = ROOT / "data" / "JP_Card_Data.csv"
-CARD_ROOT = ROOT / ".cloud-card-assets" / "cards"
+CARD_ROOT = ROOT / "docs" / "card-assets" / "cards"
 
 COL_ID = "カード ID"
 COL_NAME = "カード名"

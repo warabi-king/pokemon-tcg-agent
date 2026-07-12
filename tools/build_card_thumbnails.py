@@ -11,7 +11,7 @@ from PIL import Image
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=Path("docs/cards"))
-    parser.add_argument("--output", type=Path, default=Path(".cloud-card-assets/cards"))
+    parser.add_argument("--output", type=Path, default=Path("docs/card-assets/cards"))
     parser.add_argument("--width", type=int, default=320)
     parser.add_argument("--quality", type=int, default=72)
     args = parser.parse_args()

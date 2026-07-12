@@ -136,7 +136,7 @@ results/{agent-a}_vs_{agent-b}/result_kaggle.html
 
 高機能デッキビルダーは、GCP反映用のブラウザ対戦UIとは分離したローカル専用ツールです。
 `data/JP_Card_Data.csv` をカード検索データとして読み込み、カード画像は
-`.cloud-card-assets/cards/` のWebP画像を使います。
+`docs/card-assets/cards/` のWebP画像を使います。
 
 ```powershell
 .\.venv\Scripts\python.exe tools\local_deck_builder.py
