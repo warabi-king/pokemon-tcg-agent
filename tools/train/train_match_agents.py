@@ -11,6 +11,7 @@ import argparse
 import csv
 from dataclasses import dataclass, field
 import itertools
+import os
 from pathlib import Path
 import random
 import sys
@@ -338,16 +339,23 @@ def make_pair_stats(iteration: int, agents: list[AgentState], include_self: bool
     return stats
 
 
-def save_checkpoint(agent: AgentState, checkpoint_dir: Path, iteration: int) -> Path:
-    path = checkpoint_dir / agent.name / f"model_{iteration}.pth"
+def save_state_dict_atomic(state_dict: dict[str, torch.Tensor], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(agent.model.state_dict(), path)
+    temporary_path = path.with_name(f".{path.stem}.{os.getpid()}.tmp{path.suffix}")
+    torch.save(state_dict, temporary_path)
+    temporary_path.replace(path)
+
+
+def save_checkpoint(agent: AgentState, checkpoint_dir: Path, run_name: str, iteration: int) -> Path:
+    path = checkpoint_dir / agent.name / f"model_{iteration}.pth"
+    if run_name:
+        path = checkpoint_dir / run_name / agent.name / f"model_{iteration}.pth"
+    save_state_dict_atomic(agent.model.state_dict(), path)
     return path
 
 
 def save_final_model(agent: AgentState) -> None:
-    agent.model_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(agent.model.state_dict(), agent.model_path)
+    save_state_dict_atomic(agent.model.state_dict(), agent.model_path)
 
 
 def parse_args() -> argparse.Namespace:
@@ -364,7 +372,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Train only this subdirectory name. Can be passed multiple times.",
     )
-    parser.add_argument("--iterations", type=int, default=1)
+    parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--games-per-pair", type=int, default=2)
     parser.add_argument("--search-count", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=128)
@@ -386,6 +394,11 @@ def parse_args() -> argparse.Namespace:
         "--checkpoint-dir",
         type=Path,
         default=REPO_ROOT / "agents" / "match_agents" / "train" / "checkpoints",
+    )
+    parser.add_argument(
+        "--run-name",
+        default=None,
+        help="Checkpoint run directory name. Defaults to a timestamp to avoid overwriting old checkpoints.",
     )
     parser.add_argument(
         "--log-dir",
@@ -410,6 +423,7 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     metrics_path = args.metrics_file or args.log_dir / "train_metrics.csv"
     pair_metrics_path = args.pair_metrics_file or args.log_dir / "pair_metrics.csv"
+    run_name = args.run_name or time.strftime("%Y%m%d_%H%M%S")
 
     agents = load_agents(args, device)
     pair_indices = list(itertools.combinations(range(len(agents)), 2))
@@ -432,7 +446,7 @@ def main() -> None:
             agent.model.eval()
 
         checkpoint_paths = {
-            agent.name: save_checkpoint(agent, args.checkpoint_dir, iteration)
+            agent.name: save_checkpoint(agent, args.checkpoint_dir, run_name, iteration)
             for agent in agents
         }
 

@@ -9,3 +9,5 @@ dist/
 submission.tar.gz
 agents/*/train/checkpoints/
 agents/*/train/logs/
+
+agents/match_agents/*/src/

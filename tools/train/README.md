@@ -102,11 +102,14 @@ agents/match_agents/
 
 ```text
 agents/match_agents/{agent}/model.pth
-agents/match_agents/train/checkpoints/{agent}/model_{iteration}.pth
+agents/match_agents/train/checkpoints/{run-name}/{agent}/model_{iteration}.pth
 agents/match_agents/train/logs/train_metrics.csv
 agents/match_agents/train/logs/pair_metrics.csv
 agents/match_agents/train/logs/match_*.png
 ```
+
+`--run-name` を省略すると、checkpointは実行時刻のディレクトリへ保存されます。
+過去の `model_2.pth` などを直接上書きしないため、Windowsのファイルロックによる保存失敗を避けやすくなります。
 
 ## グラフだけ再生成
 
@@ -130,3 +133,37 @@ agents/match_agents/train/logs/match_*.png
 .venv\Scripts\python.exe tools/train/train_match_agents.py --dry-run
 ```
 
+## match_agentsを提出形式にする
+
+`agents/match_agents/00` などで学習した `deck.csv` と `model.pth` を使い、提出可能な `src/` と `tar.gz` を作る場合は、リポジトリ直下から以下を実行します。
+
+```powershell
+.venv\Scripts\python.exe tools/prepare_match_agent_submission.py --agent 00
+```
+
+このコマンドは以下を行います。
+
+```text
+1. agents/rl_mcts/src から main.py, cg/, rl_mcts/ をコピー
+2. agents/match_agents/00/deck.csv と model.pth を src/ へコピー
+3. tools/build_submission.py を呼び出して tar.gz を作成
+```
+
+出力例:
+
+```text
+agents/match_agents/00/src/
+dist/submission_match_agent_00.tar.gz
+```
+
+全agentをまとめて作る場合:
+
+```powershell
+.venv\Scripts\python.exe tools/prepare_match_agent_submission.py --all
+```
+
+`src/` の作成だけ確認したい場合:
+
+```powershell
+.venv\Scripts\python.exe tools/prepare_match_agent_submission.py --agent 00 --no-build
+```
