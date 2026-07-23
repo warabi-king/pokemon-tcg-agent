@@ -13,7 +13,7 @@ from rl_mcts.model import MyModel, create_model
 class RlMctsAgent:
     """学習済みモデルを使ってMCTSで手を選ぶagent。"""
 
-    def __init__(self, model_path: Path | None = None, search_count: int = 10) -> None:
+    def __init__(self, model_path: Path | None = None, search_count: int = 50) -> None:
         src_root = Path(__file__).resolve().parents[1]
         self.model_path = model_path or src_root / "model.pth"
         self.search_count = search_count
