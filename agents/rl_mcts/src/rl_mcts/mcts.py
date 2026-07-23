@@ -12,6 +12,7 @@ from rl_mcts.features import SparseVector, get_decoder_input, get_encoder_input
 from rl_mcts.model import MyModel
 
 SEARCH_COUNT = 10
+WORLD_COUNT = 10
 MAX_ACTIONS = 64
 
 
@@ -165,18 +166,19 @@ def create_node(
     return node, LearnSample(value, policy, sv_enc, sv_dec)
 
 
-def mcts_agent(
-    obs_dict: dict,
+def search_one_world(
+    obs: "Observation",
     your_deck: list[int],
     model: MyModel,
-    search_count: int = SEARCH_COUNT,
-) -> tuple[list[int], LearnSample | None]:
-    """MCTSで手を選び、root局面の学習サンプルを返す。"""
-    obs = to_observation_class(obs_dict)
-    if obs.select is None:
-        return your_deck, None
+    your_index: int,
+    search_count: int,
+) -> tuple[Node, LearnSample | None]:
+    """隠れ情報を1通りに決定化(determinize)し、その1世界でMCTS探索を行う。
 
-    your_index = obs.current.yourIndex
+    毎回 search_begin を引き直すため、呼び出しごとに異なる世界線でツリーを張る。
+    集計に使う root.children の訪問数・累計値だけを利用するので、探索終了後
+    (search_end 後) でも安全に統計を読める。
+    """
     state = obs.current
     active = state.players[1 - your_index].active
     search_state = search_begin(
@@ -192,7 +194,7 @@ def mcts_agent(
     try:
         root, sample = create_node(None, search_state, your_index, your_deck, model)
         if not root.children:
-            return random.sample(list(range(len(obs.select.option))), obs.select.maxCount), sample
+            return root, sample
 
         for _ in range(search_count):
             current = root
@@ -227,33 +229,82 @@ def mcts_agent(
                     current.backprop(current.value)
                     break
 
-        max_child: Child | None = None
-        max_visit = -1
-        min_value = 10.0
-        for child in root.children:
-            if child.node is None:
-                continue
-            if max_visit < child.node.visit:
-                max_child = child
-                max_visit = child.node.visit
-            v = child.node.total / max(child.node.visit, 1)
-            if min_value > v:
-                min_value = v
-
-        if max_child is None:
-            max_child = max(root.children, key=lambda child: child.prob)
-            min_value = root.total / max(root.visit, 1)
-
-        if sample is not None:
-            sample.value = root.total / max(root.visit, 1)
-            for i, child in enumerate(root.children):
-                v = sample.value
-                if child.node is None:
-                    v = min_value - v - 0.03
-                else:
-                    v = child.node.total / max(child.node.visit, 1) - v
-                sample.policy[i] = max(-1.0, min(1.0, v))
-
-        return max_child.select, sample
+        return root, sample
     finally:
         search_end()
+
+
+def mcts_agent(
+    obs_dict: dict,
+    your_deck: list[int],
+    model: MyModel,
+    search_count: int = SEARCH_COUNT,
+    world_count: int = WORLD_COUNT,
+) -> tuple[list[int], LearnSample | None]:
+    """情報集合MCTS(ISMCTS)風に複数世界を張り、root統計を平均して手を選ぶ。
+
+    world_count 個の決定化世界でそれぞれ search_count 回の探索を行い、root候補手ごとに
+    訪問数・累計値を世界横断で集計する。ばらつく隠れ情報を平均化した最善手を選ぶ。
+    root観測は全世界で共通なので、children は同順・同数で index を揃えて集計できる。
+    """
+    obs = to_observation_class(obs_dict)
+    if obs.select is None:
+        return your_deck, None
+
+    your_index = obs.current.yourIndex
+
+    child_count = 0
+    ref_children: list[Child] = []          # select/prob は世界非依存なので参照用に保持
+    agg_visit: list[int] = []               # 候補手ごとの総訪問数(全世界合算)
+    agg_total: list[float] = []             # 候補手ごとの累計評価値(全世界合算)
+    root_visit = 0
+    root_total = 0.0
+    sample: LearnSample | None = None
+
+    for _ in range(max(world_count, 1)):
+        root, s = search_one_world(obs, your_deck, model, your_index, search_count)
+        if sample is None and s is not None:
+            sample = s
+        if not root.children:
+            continue
+        if not ref_children:
+            ref_children = root.children
+            child_count = len(root.children)
+            agg_visit = [0] * child_count
+            agg_total = [0.0] * child_count
+        root_visit += root.visit
+        root_total += root.total
+        for i, child in enumerate(root.children):
+            if child.node is not None:
+                agg_visit[i] += child.node.visit
+                agg_total[i] += child.node.total
+
+    if not ref_children:
+        return random.sample(list(range(len(obs.select.option))), obs.select.maxCount), sample
+
+    # 集計訪問数が最大の手を選ぶ。どの世界でも展開されなかった場合はNN事前分布で代替。
+    best_i = max(range(child_count), key=lambda i: agg_visit[i])
+    if agg_visit[best_i] <= 0:
+        best_i = max(range(child_count), key=lambda i: ref_children[i].prob)
+
+    if sample is not None:
+        value = root_total / max(root_visit, 1)
+        min_value = 10.0
+        for i in range(child_count):
+            if agg_visit[i] <= 0:
+                continue
+            v = agg_total[i] / agg_visit[i]
+            if min_value > v:
+                min_value = v
+        if min_value == 10.0:
+            min_value = value
+
+        sample.value = value
+        for i in range(child_count):
+            if agg_visit[i] <= 0:
+                v = min_value - value - 0.03
+            else:
+                v = agg_total[i] / agg_visit[i] - value
+            sample.policy[i] = max(-1.0, min(1.0, v))
+
+    return ref_children[best_i].select, sample

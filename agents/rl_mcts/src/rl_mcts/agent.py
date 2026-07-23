@@ -6,17 +6,23 @@ import torch
 
 from cg.api import Observation, to_observation_class
 from rl_mcts.deck import read_deck_csv
-from rl_mcts.mcts import mcts_agent
+from rl_mcts.mcts import WORLD_COUNT, mcts_agent
 from rl_mcts.model import MyModel, create_model
 
 
 class RlMctsAgent:
     """学習済みモデルを使ってMCTSで手を選ぶagent。"""
 
-    def __init__(self, model_path: Path | None = None, search_count: int = 50) -> None:
+    def __init__(
+        self,
+        model_path: Path | None = None,
+        search_count: int = 50,
+        world_count: int = WORLD_COUNT,
+    ) -> None:
         src_root = Path(__file__).resolve().parents[1]
         self.model_path = model_path or src_root / "model.pth"
         self.search_count = search_count
+        self.world_count = world_count
         self.model: MyModel | None = None
 
     def select_action(self, obs_dict: dict) -> list[int]:
@@ -36,6 +42,7 @@ class RlMctsAgent:
                 read_deck_csv(),
                 model,
                 search_count=self.search_count,
+                world_count=self.world_count,
             )
         return selected
 
