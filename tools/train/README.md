@@ -22,6 +22,11 @@
   - `train_match_agents.py` の複数agent用ログをPNGグラフ化します。
   - agent別の勝率、loss、サンプル数、batch数、相手別勝率ヒートマップを出力します。
 
+- `train_imitation.py`
+  - Kaggle公式配布のエピソードJSON（リプレイログ）を使った模倣学習スクリプトです。
+  - MCTS探索は行わず、実際に選ばれた手を正解クラスとした交差エントロピーでpolicyを、
+    そのエピソードの実際の勝敗をラベルにしたHuberLossでvalueを学習します。
+
 ## 単体学習
 
 ```powershell
@@ -110,6 +115,61 @@ agents/match_agents/train/logs/match_*.png
 
 `--run-name` を省略すると、checkpointは実行時刻のディレクトリへ保存されます。
 過去の `model_2.pth` などを直接上書きしないため、Windowsのファイルロックによる保存失敗を避けやすくなります。
+
+## 模倣学習（公式リプレイ）
+
+事前にKaggleの日次エピソードデータセット（例: `pokemon-tcg-ai-battle-episodes-2026-07-23`）を
+ダウンロードしておきます。`--episodes`には展開済みディレクトリと`.zip`のどちらも渡せます
+（`.zip`ならディスク展開せずそのまま読みます）。
+
+```powershell
+.venv\Scripts\python.exe tools/train/train_imitation.py `
+  --episodes path\to\pokemon-tcg-ai-battle-episodes-2026-07-23.zip `
+  --epochs 5 `
+  --batch-size 128
+```
+
+まず少数だけで動作確認したい場合:
+
+```powershell
+.venv\Scripts\python.exe tools/train/train_imitation.py `
+  --episodes path\to\episodes.zip `
+  --max-episodes 5 `
+  --epochs 2 `
+  --batch-size 32
+```
+
+主な引数:
+
+```text
+--episodes        エピソードJSONのディレクトリ or .zip（必須）
+--max-episodes    読み込むエピソード数の上限（省略時は全件）
+--max-samples     収集する学習サンプル数の上限（省略時は無制限）
+--val-ratio       検証用に取り分ける割合（デフォルト0.05）
+--epochs          学習エポック数（デフォルト5）
+--batch-size      バッチサイズ（デフォルト128）
+--lr              AdamWのlearning rate（デフォルト3e-4）
+--initial-model   続きから学習する場合の初期重み
+--output-model    保存先（デフォルト agents/rl_mcts/train/checkpoints/imitation_model.pth）
+--metrics-file    CSVログ保存先（デフォルト agents/rl_mcts/train/logs/imitation_metrics.csv）
+```
+
+`--output-model`のデフォルトは提出用の`agents/rl_mcts/src/model.pth`を誤って
+上書きしないよう、checkpoints配下にしています。結果を提出物として使う場合は
+`--output-model agents/rl_mcts/src/model.pth`を明示的に指定してください。
+
+主な出力:
+
+```text
+agents/rl_mcts/train/checkpoints/imitation_model.pth
+agents/rl_mcts/train/logs/imitation_metrics.csv
+```
+
+`imitation_metrics.csv`の主な列:
+
+```text
+epoch, batches, loss, loss_value, loss_policy, train_accuracy, val_accuracy, elapsed_seconds
+```
 
 ## グラフだけ再生成
 
