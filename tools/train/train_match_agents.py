@@ -653,6 +653,11 @@ def main() -> None:
         raise ValueError("--workers must be 0 or greater")
 
     rng = random.Random(args.seed)
+    if args.seed is not None:
+        random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     metrics_path = args.metrics_file or args.log_dir / "train_metrics.csv"
     pair_metrics_path = args.pair_metrics_file or args.log_dir / "pair_metrics.csv"
