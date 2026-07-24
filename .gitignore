@@ -11,3 +11,4 @@ agents/*/train/checkpoints/
 agents/*/train/logs/
 
 tools/deck_generator/daily_dataset/
+tools/deck_generator/generated/
