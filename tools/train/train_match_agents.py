@@ -531,7 +531,29 @@ def save_state_dict_atomic(state_dict: dict[str, torch.Tensor], path: Path) -> N
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_name(f".{path.stem}.{os.getpid()}.tmp{path.suffix}")
     torch.save(state_dict, temporary_path)
-    temporary_path.replace(path)
+    last_error: PermissionError | None = None
+    for attempt in range(10):
+        try:
+            if path.exists():
+                path.chmod(0o666)
+            temporary_path.replace(path)
+            return
+        except PermissionError as error:
+            last_error = error
+            time.sleep(0.2 * (attempt + 1))
+
+    try:
+        if path.exists():
+            path.unlink()
+        temporary_path.replace(path)
+        return
+    except PermissionError as error:
+        last_error = error
+
+    raise PermissionError(
+        f"Could not replace model file after retries: {temporary_path} -> {path}. "
+        "Another process may still be holding the target file open."
+    ) from last_error
 
 
 def save_checkpoint(agent: AgentState, checkpoint_dir: Path, run_name: str, iteration: int) -> Path:
