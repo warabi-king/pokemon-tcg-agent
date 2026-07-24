@@ -121,6 +121,38 @@ python tools/run_matches.py --agent-a rl_mcts_sample --agent-b random --games 10
 python tools/run_matches_round_robin.py --games 20 --workers 4
 ```
 
+libcg・特徴量生成を複数CPUプロセスで並列化し、NN評価だけを中央のGPUへ集約する場合は
+`worker-batched` backendを使います。各CPU workerは独立したlibcgを所有するため、
+盤面遷移同士は直列化されません。worker間の要求を中央で再結合し、小batch時は
+8モデルをmodel軸へ積んだ1つのGPU演算、大batch時はモデル別batchへ自動切替します。
+
+```bash
+python tools/run_matches_round_robin.py \
+  --backend worker-batched --device cuda --workers 0 \
+  --batch-wait-ms 2 --lanes 0 --batch-size 128 \
+  --games 1 \
+  --agent a00=agents/rl_mcts_match_00/src/main.py \
+  --agent a01=agents/rl_mcts_match_01/src/main.py
+```
+
+`worker-batched --workers 0`ではlaneごとに独立workerを作ります。したがって
+8エージェント・1ラウンドなら36 workerです。`--batch-wait-ms`を増やすとGPU batchは大きくなりますが、
+要求が少ない場面の待ち時間も増えます。`--lanes 0`は全試合を同時laneへ載せます。
+8エージェントでは自己対戦込みで1ラウンド36組なので、`--games k`は合計`36*k`試合・
+`36*k` laneになります。
+
+CUDA上で複数モデルのNN評価を試合横断でまとめる場合は、`cuda-ensemble` backendを
+使います。モデル当たりの要求が小さいwaveはmodel軸へstackし、大きいwaveは
+per-model batchへ自動で切り替わります。カード効果と盤面遷移は共有libcgで処理します。
+
+```bash
+python tools/run_matches_round_robin.py \
+  --backend cuda-ensemble --device cuda \
+  --lanes 128 --batch-size 128 --games 4 --no-self \
+  --agent a00=agents/rl_mcts_match_00/src/main.py \
+  --agent a01=agents/rl_mcts_match_01/src/main.py
+```
+
 出力先:
 
 ```text
@@ -178,6 +210,69 @@ agents/rl_mcts_sample/train/train.py
 python agents/rl_mcts_sample/train/train.py
 python agents/rl_mcts/train/train.py --plot
 ```
+
+3つのラウンドロビンagentを、1つのlibcgと試合横断CPUバッチ推論で中央学習する場合:
+
+```bash
+.venv/bin/python tools/run_train_round_robin.py \
+  --agent agents/rl_mcts_r_robin1 \
+  --agent agents/rl_mcts_r_robin2 \
+  --agent agents/rl_mcts_r_robin3 \
+  --backend shared-cpu-batch \
+  --device cpu --inference-device cpu \
+  --iterations 5 --games 100 \
+  --lanes 128 --inference-batch-size 128 \
+  --batch-size 128 --search-count 10
+```
+
+各iterationでは自己対戦を含む6組を同時進行し、同一モデルのNN評価要求を
+CPUの1回のforwardへまとめます。チェックポイントとメトリクスは
+`results/train_round_robin_central/central_*/` に保存され、更新後の重みは各agentの
+`src/model.pth` に反映されます。動作確認だけ行い、重みを反映しない場合は
+`--no-persist` を追加してください。
+
+`agents/match_agents/00`〜`07` のデッキと初期重みから8体の学習agentを
+初回生成する場合:
+
+```bash
+.venv/bin/python tools/create_match_training_agents.py
+```
+
+生成される `rl_mcts_match_00`〜`07` を、全agentのLossが0.03以下になるまで
+共有libcg＋CPUバッチで学習する例:
+
+```bash
+.venv/bin/python tools/run_train_round_robin.py \
+  --agent agents/rl_mcts_match_00 \
+  --agent agents/rl_mcts_match_01 \
+  --agent agents/rl_mcts_match_02 \
+  --agent agents/rl_mcts_match_03 \
+  --agent agents/rl_mcts_match_04 \
+  --agent agents/rl_mcts_match_05 \
+  --agent agents/rl_mcts_match_06 \
+  --agent agents/rl_mcts_match_07 \
+  --backend shared-cpu-batch \
+  --device cpu --inference-device cpu \
+  --iterations 12 --games 5 --search-count 10 \
+  --lanes 128 --inference-batch-size 128 --batch-size 128 \
+  --target-loss 0.03 --min-iterations 3 --loss-patience 2
+```
+
+全8体が閾値以下になった状態を指定回数連続で確認すると早期終了します。
+Loss履歴はrun directory直下の `loss_history.csv` と `loss.png` に保存されます。
+
+バッチごとのLossをリアルタイム表示しながら実行する場合は、
+`notebooks/train_match_agents_live.ipynb` をJupyterで開きます。設定セルを実行した後、
+最後のセルを実行すると学習プロセスが開始され、同じセル内のMatplotlibグラフ、
+各agentのLoss表、実行ログが1秒ごとに更新されます。
+
+```bash
+python -m pip install -r requirements.txt
+jupyter lab notebooks/train_match_agents_live.ipynb
+```
+
+学習側は各バッチ後に `live_loss_batches.csv`、収集・学習中の状態を
+`live_status.json` へ保存します。Notebookを閉じてもこれらの生データはrun directoryに残ります。
 
 PyTorchなど特定の学習・推論依存があるagentは、必要な依存関係を `requirements.txt` と
 各agentの `README.md` に明記します。

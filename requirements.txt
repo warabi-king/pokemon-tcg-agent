@@ -1,3 +1,5 @@
 kaggle-environments==1.30.2
 torch==2.12.1
 matplotlib==3.11.0
+ipykernel
+jupyterlab

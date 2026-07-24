@@ -717,11 +717,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--games", type=int, default=10, help="1対戦カードあたりの対戦回数")
     parser.add_argument(
         "--backend",
-        choices=("legacy", "batched", "gpu-tree"),
+        choices=(
+            "legacy",
+            "batched",
+            "worker-batched",
+            "cuda-streams",
+            "cuda-ensemble",
+            "gpu-tree",
+        ),
         default="legacy",
         help=(
             "legacyは1試合ずつkaggle環境で実行。batchedは1つのlibcgで複数試合を保持し、"
-            "MCTSのNN評価を試合横断でGPUバッチ化する。gpu-treeは探索木もdevice "
+            "MCTSのNN評価を試合横断でGPUバッチ化する。worker-batchedは複数CPU processで"
+            "libcgと特徴量を並列生成し、NN要求だけを中央GPUへ集約する。cuda-streamsは異なるモデルを"
+            "専用CUDA streamへ並行投入する。cuda-ensembleは小batch時に全モデルの重みを"
+            "stackしたvmap演算を使い、大batch時はper-model CUDAへ自動切替する。"
+            "gpu-treeは探索木もdevice "
             "Tensorへ常駐させる（デフォルト: legacy）"
         ),
     )
@@ -729,7 +740,10 @@ def parse_args() -> argparse.Namespace:
         "--workers",
         type=int,
         default=0,
-        help="legacy backendの並列ワーカー数。0は自動（最大4）（デフォルト: 0）",
+        help=(
+            "CPUワーカー数。0はlegacyでは最大4を自動選択し、"
+            "worker-batchedではlaneごとに1 worker（デフォルト: 0）"
+        ),
     )
     parser.add_argument(
         "--device",
@@ -745,8 +759,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lanes",
         type=int,
-        default=128,
-        help="batched backendで同時に保持する最大試合数（デフォルト: 128）",
+        default=0,
+        help=(
+            "batched backendで同時に保持する最大試合数。"
+            "0は総試合数（全組み合わせを一度に実行）（デフォルト: 0）"
+        ),
     )
     parser.add_argument(
         "--search-count",
@@ -759,6 +776,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="batched backendの乱数seed（デフォルト: 0）",
+    )
+    parser.add_argument(
+        "--batch-wait-ms",
+        type=float,
+        default=2.0,
+        help="worker-batchedで他workerのNN要求を待つ最大時間ms（デフォルト: 2.0）",
     )
     parser.add_argument(
         "--no-self",
@@ -829,8 +852,15 @@ def main() -> None:
         pairings = list(itertools.combinations_with_replacement(names, 2))
 
     total_games = len(pairings) * args.games
+    if args.lanes < 0:
+        raise SystemExit("--lanes は0以上で指定してください。")
+    # 0は全試合をlaneへ載せる。8エージェント・自己対戦込みなら
+    # 1ラウンド36試合なので、--games kに対して36*k laneになる。
+    lanes = total_games if args.lanes == 0 else min(args.lanes, total_games)
     workers = 0
-    if args.backend == "legacy":
+    if args.backend == "worker-batched" and args.workers == 0:
+        workers = lanes
+    elif args.backend in ("legacy", "worker-batched"):
         try:
             workers = resolve_worker_count(args.workers, total_games)
         except ValueError as exc:
@@ -840,12 +870,17 @@ def main() -> None:
         f"legacy, 並列ワーカー={workers}"
         if args.backend == "legacy"
         else (
-            f"batched, device={args.device}, lanes={args.lanes}, "
-            f"batch-size={args.batch_size}"
-            if args.backend == "batched"
+            f"worker-batched, CPUワーカー={workers}, device={args.device}, "
+            f"lanes={lanes}, batch-size={args.batch_size}, wait={args.batch_wait_ms:g}ms"
+            if args.backend == "worker-batched"
             else (
-                f"gpu-tree, device={args.device}, lanes={args.lanes}, "
+                f"{args.backend}, device={args.device}, lanes={lanes}, "
                 f"batch-size={args.batch_size}"
+                if args.backend in ("batched", "cuda-streams", "cuda-ensemble")
+                else (
+                    f"gpu-tree, device={args.device}, lanes={lanes}, "
+                    f"batch-size={args.batch_size}"
+                )
             )
         )
     )
@@ -859,7 +894,29 @@ def main() -> None:
     overall: dict[str, OverallRecord] = {name: OverallRecord(name=name) for name in names}
     started = time.time()
     batched_output = None
-    if args.backend == "gpu-tree":
+    if args.backend == "worker-batched":
+        from batched_tournament import run_worker_batched_tournament
+
+        batched_output = run_worker_batched_tournament(
+            specs=specs,
+            pairings=pairings,
+            num_games=args.games,
+            alternate_sides=not args.no_alternate,
+            device_name=args.device,
+            batch_size=args.batch_size,
+            lanes=lanes,
+            search_count=args.search_count,
+            seed=args.seed,
+            cpu_workers=workers,
+            batch_wait_ms=args.batch_wait_ms,
+        )
+        h2h_map, all_game_logs = aggregate_tournament_results(
+            pairings,
+            batched_output.results,
+            num_games=args.games,
+            verbose=not args.quiet,
+        )
+    elif args.backend == "gpu-tree":
         from gpu_tree_tournament import run_gpu_tree_tournament
 
         batched_output = run_gpu_tree_tournament(
@@ -869,7 +926,7 @@ def main() -> None:
             alternate_sides=not args.no_alternate,
             device_name=args.device,
             batch_size=args.batch_size,
-            lanes=args.lanes,
+            lanes=lanes,
             search_count=args.search_count,
             seed=args.seed,
         )
@@ -879,8 +936,16 @@ def main() -> None:
             num_games=args.games,
             verbose=not args.quiet,
         )
-    elif args.backend == "batched":
+    elif args.backend in ("batched", "cuda-streams", "cuda-ensemble"):
         from batched_tournament import run_batched_tournament
+
+        if args.backend in ("cuda-streams", "cuda-ensemble") and args.device not in (
+            "auto",
+            "cuda",
+        ):
+            raise SystemExit(
+                f"{args.backend} backendの--deviceはcudaまたはautoにしてください。"
+            )
 
         batched_output = run_batched_tournament(
             specs=specs,
@@ -889,9 +954,11 @@ def main() -> None:
             alternate_sides=not args.no_alternate,
             device_name=args.device,
             batch_size=args.batch_size,
-            lanes=args.lanes,
+            lanes=lanes,
             search_count=args.search_count,
             seed=args.seed,
+            parallel_cuda_models=args.backend == "cuda-streams",
+            cuda_ensemble_models=args.backend == "cuda-ensemble",
         )
         h2h_map, all_game_logs = aggregate_tournament_results(
             pairings,
@@ -983,7 +1050,7 @@ def main() -> None:
 
     if batched_output is not None:
         profile = batched_output.profile
-        print("\n=== batched backend profile ===")
+        print(f"\n=== {args.backend} backend profile ===")
         print(f"device: {batched_output.device}")
         print(
             f"NN: {profile.nn_seconds:.3f}秒 / {profile.nn_evaluations}評価 / "
@@ -1000,6 +1067,24 @@ def main() -> None:
             f"step={profile.battle_step_seconds:.3f}秒/{profile.battle_steps}回, "
             f"特徴量生成={profile.feature_seconds:.3f}秒"
         )
+        if args.backend == "cuda-ensemble":
+            print(
+                "CUDA wave: "
+                f"model-axis={profile.cuda_ensemble_waves}, "
+                f"per-model={profile.cuda_per_model_waves}"
+            )
+        if args.backend == "worker-batched":
+            print(
+                f"CPU workers: {profile.cpu_workers}, "
+                f"worker NN待ち合計={profile.remote_wait_seconds:.3f}秒, "
+                f"中央batch待機={profile.batch_collect_seconds:.3f}秒, "
+                f"IPC request={profile.ipc_messages}回"
+            )
+            print(
+                "CUDA wave: "
+                f"model-axis={profile.cuda_ensemble_waves}, "
+                f"per-model={profile.cuda_per_model_waves}"
+            )
         if hasattr(profile, "gpu_tree_seconds"):
             print(
                 f"GPU tree: {profile.gpu_tree_seconds:.3f}秒, "
