@@ -1,17 +1,21 @@
 # tools/train
 
-## continuous match training server
+## 常時対戦学習サーバ
 
-`train_match_server.py` is the main entry point. It keeps running, re-scans
-`agents/match_agents` before every generation, randomly chooses two distinct
-agents, plays two games with first/second order swapped, trains both selected
-models, and saves per-agent metrics.
+`train_match_server.py` がメインの起動スクリプトです。サーバは起動し続け、
+各世代の前に `agents/match_agents` を再スキャンします。その中からランダムに
+異なる2つのエージェントを選び、先攻後攻を入れ替えて2試合を行い、選ばれた
+両方のモデルを学習します。
+
+Windowsでの簡易確認:
 
 ```powershell
 .venv\Scripts\python.exe tools/train/train_match_server.py `
   --max-generations 1 `
   --search-count 1
 ```
+
+macOSで常時実行する場合:
 
 ```bash
 python3 tools/train/train_match_server.py \
@@ -20,9 +24,9 @@ python3 tools/train/train_match_server.py \
   --batch-size 128
 ```
 
-## support modules
+## 補助モジュール
 
-`train_match_agents.py` and `train.py` remain because the server reuses their
-game collection, sample labeling, checkpoint saving, and training functions.
+`train_match_agents.py` と `train.py` は、サーバが既存の対戦収集、サンプルの
+ラベル付け、checkpoint保存、学習処理を再利用するために残しています。
 
-The model and cabt runtime are loaded from `agents/rl_mcts/src`.
+モデル定義と cabt 実行環境は `agents/rl_mcts/src` から読み込みます。

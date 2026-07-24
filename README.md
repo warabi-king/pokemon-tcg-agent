@@ -1,9 +1,9 @@
 # pokemon-tcg match training server
 
-This repository is trimmed to run the continuous match-training server for
-Pokemon TCG match agents.
+このリポジトリは、Pokemon TCG の match agent 同士を常時対戦・学習させる
+サーバを動かすための最小構成です。
 
-## Layout
+## 構成
 
 ```text
 agents/
@@ -23,13 +23,14 @@ tools/train/
 requirements.txt
 ```
 
-`agents/match_agents/{agent}` directories are discovered dynamically. Any
-subdirectory with a 60-card `deck.csv` is treated as one trainable agent. New
-agent directories can be added while the server is running.
+`agents/match_agents/{agent}` の各フォルダをエージェントとして扱います。
+60枚のカードIDを持つ `deck.csv` があるサブディレクトリは、自動的に学習対象
+として検出されます。サーバ実行中に新しいエージェントフォルダを追加しても、
+次の世代から再スキャンされます。
 
-## Run
+## 実行
 
-Windows smoke test:
+Windowsでの簡易確認:
 
 ```powershell
 .venv\Scripts\python.exe tools/train/train_match_server.py `
@@ -37,7 +38,7 @@ Windows smoke test:
   --search-count 1
 ```
 
-macOS long-running server:
+macOSで常時実行する場合:
 
 ```bash
 python3 tools/train/train_match_server.py \
@@ -46,11 +47,11 @@ python3 tools/train/train_match_server.py \
   --batch-size 128
 ```
 
-Each generation randomly selects two distinct agents, plays two games with
-first/second order swapped, trains both selected models, and saves results under
-each agent directory.
+1世代では、ランダムに異なる2つのエージェントを選び、先攻後攻を入れ替えて
+2試合行います。その後、両エージェントをその世代の対戦サンプルで学習し、
+各エージェントフォルダへ結果を保存します。
 
-## Outputs
+## 出力
 
 ```text
 agents/match_agents/{agent}/model.pth
@@ -58,4 +59,4 @@ agents/match_agents/{agent}/train/logs/train_metrics.csv
 agents/match_agents/{agent}/train/logs/match_results.csv
 ```
 
-Use `Ctrl+C` to stop after the current generation.
+停止するときは `Ctrl+C` を押します。現在の世代が終わったところで停止します。
