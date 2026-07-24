@@ -10,6 +10,7 @@ import torch
 from cg.api import SearchState, search_begin, search_end, search_step, to_observation_class
 from rl_mcts.features import SparseVector, get_decoder_input, get_encoder_input
 from rl_mcts.model import MyModel
+from rl_mcts.opponent import infer_opponent_deck, predict_facedown_active, sample_from_deck
 
 SEARCH_COUNT = 10
 MAX_ACTIONS = 64
@@ -178,15 +179,17 @@ def mcts_agent(
 
     your_index = obs.current.yourIndex
     state = obs.current
+    opponent_index = 1 - your_index
+    opponent_deck = infer_opponent_deck(state, opponent_index, obs.logs)
     active = state.players[1 - your_index].active
     search_state = search_begin(
         obs,
         your_deck=random.sample(your_deck, min(len(your_deck), state.players[your_index].deckCount)),
         your_prize=random.sample(your_deck, min(len(your_deck), len(state.players[your_index].prize))),
-        opponent_deck=[1072] * state.players[1 - your_index].deckCount,
-        opponent_prize=[1] * len(state.players[1 - your_index].prize),
-        opponent_hand=[1] * state.players[1 - your_index].handCount,
-        opponent_active=[1072] if len(active) > 0 and active[0] is None else [],
+        opponent_deck=sample_from_deck(opponent_deck, state.players[opponent_index].deckCount),
+        opponent_prize=sample_from_deck(opponent_deck, len(state.players[opponent_index].prize)),
+        opponent_hand=sample_from_deck(opponent_deck, state.players[opponent_index].handCount),
+        opponent_active=predict_facedown_active(opponent_deck) if len(active) > 0 and active[0] is None else [],
     )
 
     try:

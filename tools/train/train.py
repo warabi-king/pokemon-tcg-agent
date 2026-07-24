@@ -11,7 +11,8 @@ import sys
 import time
 from typing import Iterator
 
-AGENT_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+AGENT_ROOT = REPO_ROOT / "agents" / "rl_mcts"
 SRC_ROOT = AGENT_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
