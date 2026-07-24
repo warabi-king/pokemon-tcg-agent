@@ -1,5 +1,25 @@
 # tools/train
 
+## train_match_agents parallel game collection
+
+`train_match_agents.py` supports process-parallel game collection with
+`--workers`.
+
+```powershell
+.venv\Scripts\python.exe tools/train/train_match_agents.py `
+  --iterations 5 `
+  --games-per-pair 4 `
+  --search-count 10 `
+  --batch-size 128 `
+  --workers 4 `
+  --plot
+```
+
+Use `--workers 1` for the previous sequential behavior. Use `--workers 0` to
+choose up to the CPU count, capped by the number of games in the iteration.
+Worker processes load each iteration's checkpoint and return training samples;
+model updates still run in the parent process after all games finish.
+
 `rl_mcts` 系モデルの学習と学習ログ可視化を行うスクリプト群です。
 
 ## ファイル
