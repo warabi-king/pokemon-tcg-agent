@@ -22,8 +22,16 @@
   - `train_match_agents.py` の複数agent用ログをPNGグラフ化します。
   - agent別の勝率、loss、サンプル数、batch数、相手別勝率ヒートマップを出力します。
 
+- `preprocess_episodes.py`
+  - Kaggle公式配布のエピソードJSON（リプレイログ、複数日分）を模倣学習サンプルに変換し、
+    シャード（`.pkl`、既定2万件/ファイル）としてディスクへ保存します。
+  - 一度に全サンプルをメモリに載せないため、数万〜数十万試合規模でも処理できます。
+  - `tools/group_decks.py`が出力したグループJSONを指定すると、特定のデッキアーキタイプの
+    対戦データだけを抽出できます。
+
 - `train_imitation.py`
-  - Kaggle公式配布のエピソードJSON（リプレイログ）を使った模倣学習スクリプトです。
+  - `preprocess_episodes.py`が作ったシャードを使った模倣学習スクリプトです。
+  - シャード単位でストリーミング学習するため、常時メモリ上に持つのは1シャード分だけです。
   - MCTS探索は行わず、実際に選ばれた手を正解クラスとした交差エントロピーでpolicyを、
     そのエピソードの実際の勝敗をラベルにしたHuberLossでvalueを学習します。
 
@@ -119,33 +127,63 @@ agents/match_agents/train/logs/match_*.png
 ## 模倣学習（公式リプレイ）
 
 事前にKaggleの日次エピソードデータセット（例: `pokemon-tcg-ai-battle-episodes-2026-07-23`）を
-ダウンロードしておきます。`--episodes`には展開済みディレクトリと`.zip`のどちらも渡せます
-（`.zip`ならディスク展開せずそのまま読みます）。
+必要な日数分ダウンロードしておきます。`--episodes`には展開済みディレクトリと`.zip`のどちらも、
+複数日分まとめても渡せます（`.zip`ならディスク展開せずそのまま読みます）。
+
+流れは「前処理（シャード作成）→ 学習」の2段階です。前処理を独立させているのは、
+JSON解析とエンコードのコストを毎エポック払わずに済ませるためです。
+
+### 1. 前処理（シャード作成）
 
 ```powershell
-.venv\Scripts\python.exe tools/train/train_imitation.py `
-  --episodes path\to\pokemon-tcg-ai-battle-episodes-2026-07-23.zip `
-  --epochs 5 `
-  --batch-size 128
+.venv\Scripts\python.exe tools/train/preprocess_episodes.py `
+  --episodes path\to\day1.zip path\to\day2.zip path\to\day3.zip `
+  --output-dir shards\all `
+  --shard-size 20000
 ```
 
 まず少数だけで動作確認したい場合:
 
 ```powershell
-.venv\Scripts\python.exe tools/train/train_imitation.py `
-  --episodes path\to\episodes.zip `
-  --max-episodes 5 `
-  --epochs 2 `
-  --batch-size 32
+.venv\Scripts\python.exe tools/train/preprocess_episodes.py `
+  --episodes path\to\day1.zip `
+  --max-episodes 50 `
+  --output-dir shards\test
 ```
 
 主な引数:
 
 ```text
---episodes        エピソードJSONのディレクトリ or .zip（必須）
---max-episodes    読み込むエピソード数の上限（省略時は全件）
+--episodes        エピソードJSONのディレクトリ or .zip（複数指定可、必須）
+--output-dir      シャードの保存先（必須）
+--shard-size      1シャードあたりのサンプル数上限（デフォルト20000）
+--max-episodes    全ソース合計で読み込むエピソード数の上限（省略時は全件）
 --max-samples     収集する学習サンプル数の上限（省略時は無制限）
---val-ratio       検証用に取り分ける割合（デフォルト0.05）
+--deck-groups     tools/group_decks.pyが出力したJSON（特定デッキだけ抽出する場合）
+--target-group    --deck-groups内のgroup_id
+```
+
+主な出力:
+
+```text
+shards/all/shard_00000.pkl, shard_00001.pkl, ...
+shards/all/manifest.json
+```
+
+### 2. 学習
+
+```powershell
+.venv\Scripts\python.exe tools/train/train_imitation.py `
+  --shards shards\all `
+  --epochs 3 `
+  --batch-size 128
+```
+
+主な引数:
+
+```text
+--shards          preprocess_episodes.pyの--output-dir（必須）
+--val-shards      検証用に取り分けるシャード数（デフォルト1）
 --epochs          学習エポック数（デフォルト5）
 --batch-size      バッチサイズ（デフォルト128）
 --lr              AdamWのlearning rate（デフォルト3e-4）
@@ -169,6 +207,23 @@ agents/rl_mcts/train/logs/imitation_metrics.csv
 
 ```text
 epoch, batches, loss, loss_value, loss_policy, train_accuracy, val_accuracy, elapsed_seconds
+```
+
+### デッキアーキタイプ単位で学習する
+
+`tools/group_decks.py`（リポジトリ直下、詳細は後述）で作った`deck_groups.json`を使うと、
+特定のデッキアーキタイプの対戦データだけで前処理・学習できます。
+
+```powershell
+.venv\Scripts\python.exe tools/train/preprocess_episodes.py `
+  --episodes path\to\day1.zip path\to\day2.zip `
+  --deck-groups deck_groups.json --target-group 0 `
+  --output-dir shards\group0
+
+.venv\Scripts\python.exe tools/train/train_imitation.py `
+  --shards shards\group0 `
+  --epochs 3 `
+  --output-model agents\rl_mcts\train\checkpoints\imitation_group0.pth
 ```
 
 ## グラフだけ再生成
