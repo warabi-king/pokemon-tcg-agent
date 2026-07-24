@@ -108,6 +108,19 @@ python tools/run_local_match.py --agent-a rl_mcts_sample --agent-b random
 python tools/run_matches.py --agent-a rl_mcts_sample --agent-b random --games 20
 ```
 
+複数試合はデフォルトでCPU数に応じて最大4ワーカーへ分配されます。ワーカー数を
+明示する場合は `--workers`、従来どおり直列で実行する場合は `--workers 1` を使います。
+
+```bash
+python tools/run_matches.py --agent-a rl_mcts_sample --agent-b random --games 100 --workers 4
+```
+
+総当たり戦も同じ指定で、対戦カードをまたいで全試合を並列実行できます。
+
+```bash
+python tools/run_matches_round_robin.py --games 20 --workers 4
+```
+
 出力先:
 
 ```text

@@ -75,6 +75,16 @@ def raise_for_deck_error(start_data) -> None:
     raise ValueError(error)
 
 
+def load_deck_csv(path: Path) -> list[int]:
+    """deck.csvを読み込んでカードIDリストを返す。"""
+    if not path.exists():
+        raise FileNotFoundError(f"Deck file not found: {path}")
+    deck = [int(line.strip()) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if len(deck) != 60:
+        raise ValueError(f"deck.csv must contain 60 cards, but got {len(deck)}: {path}")
+    return deck
+
+
 def evaluate(model, deck: list[int], games: int, search_count: int) -> tuple[int, int, int]:
     """ランダムagent相手に評価する。戻り値は win, lose, draw。"""
     results = [0, 0, 0]
@@ -146,20 +156,22 @@ def collect_self_play_samples(
 def collect_cross_play_samples(
     model_a,
     model_b,
-    deck: list[int],
+    deck_a: list[int],
+    deck_b: list[int],
     games: int,
     search_count: int,
     lambda_value: float,
 ) -> tuple[list[LearnSample], list[LearnSample]]:
-    """モデルAとモデルBで交互に対戦し、それぞれの学習サンプルを返す。
+    """モデルAとモデルBを対戦させ、A側とB側の学習サンプルを返す。
 
+    A側は player0、B側は player1 として対戦が組まれます。
     戻り値は (samples_for_A, samples_for_B)。
     """
     samples_a: list[LearnSample] = []
     samples_b: list[LearnSample] = []
 
     for _ in progress(games, "Cross-play Data Collecting... "):
-        obs, start_data = battle_start(deck, deck)
+        obs, start_data = battle_start(deck_a, deck_b)
         raise_for_deck_error(start_data)
         per_player_samples: list[list[LearnSample]] = [[], []]
         while True:
@@ -167,9 +179,9 @@ def collect_cross_play_samples(
                 break
 
             if obs["current"]["yourIndex"] == 0:
-                selected, sample = mcts_agent(obs, deck, model_a, search_count=search_count)
+                selected, sample = mcts_agent(obs, deck_a, model_a, search_count=search_count)
             else:
-                selected, sample = mcts_agent(obs, deck, model_b, search_count=search_count)
+                selected, sample = mcts_agent(obs, deck_b, model_b, search_count=search_count)
 
             if sample is not None:
                 per_player_samples[obs["current"]["yourIndex"]].append(sample)
@@ -285,7 +297,7 @@ def append_metrics(metrics_path: Path, row: dict[str, object]) -> None:
         "eval_lose",
         "eval_draw",
         "eval_win_rate",
-        "self_play_games",
+        "games",
         "samples",
         "batches",
         "loss",
@@ -307,7 +319,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iterations", type=int, default=5, help="学習iteration数")
     parser.add_argument("--eval-games", type=int, default=50, help="各iterationの評価試合数")
-    parser.add_argument("--self-play-games", type=int, default=100, help="各iterationの自己対戦数")
+    parser.add_argument("--games", type=int, default=100, help="各iterationの対戦（self/cross）試合数")
     parser.add_argument("--batch-size", type=int, default=128, help="学習batch size")
     parser.add_argument("--search-count", type=int, default=10, help="MCTS探索回数")
     parser.add_argument("--lr", type=float, default=3e-4, help="AdamW learning rate")
@@ -343,10 +355,28 @@ def parse_args() -> argparse.Namespace:
         help="2モデルを同一プロセスで交互対戦させて両方更新するモード",
     )
     parser.add_argument(
+        "--deck-a",
+        type=Path,
+        default=None,
+        help="(dual) model A に使う deck.csv のパス。省略時は現在の agent の deck.csv。",
+    )
+    parser.add_argument(
+        "--deck-b",
+        type=Path,
+        default=None,
+        help="(dual) model B に使う deck.csv のパス。省略時は現在の agent の deck.csv。",
+    )
+    parser.add_argument(
         "--opponent-model",
         type=Path,
         default=None,
         help="(dual) 相手モデルの初期重みを読み込むパス。省略時はランダム初期化。",
+    )
+    parser.add_argument(
+        "--init-model",
+        type=Path,
+        default=None,
+        help="モデルA（単体実行時は唯一のモデル）の初期重みを読み込むパス。省略時はランダム初期化。",
     )
     parser.add_argument(
         "--opponent-output",
@@ -365,11 +395,17 @@ def main() -> None:
         # and update both models within the same process.
         metrics_path_a = args.metrics_file or args.log_dir / "a" / "train_metrics.csv"
         metrics_path_b = args.log_dir / "b" / "train_metrics.csv"
-        deck = read_deck_csv()
+        default_deck = read_deck_csv()
+        deck_a = default_deck if args.deck_a is None else load_deck_csv(args.deck_a)
+        deck_b = default_deck if args.deck_b is None else load_deck_csv(args.deck_b)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         model_a = create_model().to(device)
         model_b = create_model().to(device)
+        # load initial weights if provided
+        if args.init_model and args.init_model.exists():
+            state = torch.load(args.init_model, map_location=device)
+            model_a.load_state_dict(state)
         if args.opponent_model and args.opponent_model.exists():
             state = torch.load(args.opponent_model, map_location=device)
             model_b.load_state_dict(state)
@@ -403,8 +439,8 @@ def main() -> None:
             model_b.eval()
             with torch.inference_mode():
                 if args.eval_games > 0:
-                    wa, la, da = evaluate(model_a, deck, args.eval_games, args.search_count)
-                    wb, lb, db = evaluate(model_b, deck, args.eval_games, args.search_count)
+                    wa, la, da = evaluate(model_a, deck_a, args.eval_games, args.search_count)
+                    wb, lb, db = evaluate(model_b, deck_b, args.eval_games, args.search_count)
                     decided_a = wa + la
                     decided_b = wb + lb
                     win_rate_a = 100.0 * wa / decided_a if decided_a else 0.0
@@ -416,7 +452,13 @@ def main() -> None:
 
                 # collect cross-play samples
                 samples_a, samples_b = collect_cross_play_samples(
-                    model_a, model_b, deck, args.self_play_games, args.search_count, args.lambda_value
+                    model_a,
+                    model_b,
+                    deck_a,
+                    deck_b,
+                    args.games,
+                    args.search_count,
+                    args.lambda_value,
                 )
 
             print(f"Training Start. samples A={len(samples_a)} B={len(samples_b)}")
@@ -437,7 +479,7 @@ def main() -> None:
                     "eval_lose": la,
                     "eval_draw": da,
                     "eval_win_rate": 100.0 * wa / (wa + la) if (wa + la) else 0.0,
-                    "self_play_games": args.self_play_games,
+                    "games": args.games,
                     "samples": len(samples_a),
                     "batches": stats_a.batches,
                     "loss": stats_a.loss,
@@ -458,7 +500,7 @@ def main() -> None:
                     "eval_lose": lb,
                     "eval_draw": db,
                     "eval_win_rate": 100.0 * wb / (wb + lb) if (wb + lb) else 0.0,
-                    "self_play_games": args.self_play_games,
+                    "games": args.games,
                     "samples": len(samples_b),
                     "batches": stats_b.batches,
                     "loss": stats_b.loss,
@@ -479,6 +521,9 @@ def main() -> None:
     deck = read_deck_csv()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = create_model().to(device)
+    if args.init_model and args.init_model.exists():
+        state = torch.load(args.init_model, map_location=device)
+        model.load_state_dict(state)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     args.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -505,7 +550,7 @@ def main() -> None:
             samples = collect_self_play_samples(
                 model,
                 deck,
-                args.self_play_games,
+                args.games,
                 args.search_count,
                 args.lambda_value,
             )
@@ -531,7 +576,7 @@ def main() -> None:
                 "eval_lose": lose,
                 "eval_draw": draw,
                 "eval_win_rate": win_rate,
-                "self_play_games": args.self_play_games,
+                "games": args.games,
                 "samples": len(samples),
                 "batches": train_stats.batches,
                 "loss": train_stats.loss,

@@ -98,7 +98,11 @@ python tools/run_local_match.py --agent-a rl_mcts_sample --agent-b random
 
 ```bash
 python tools/run_matches.py --agent-a rl_mcts_sample --agent-b random --games 20
+python tools/run_matches.py --agent-a rl_mcts_sample --agent-b random --games 100 --workers 4
 ```
+
+複数試合と総当たり戦はデフォルトで最大4ワーカーのプロセス並列になる。メモリ使用量を
+抑えたい場合や問題の切り分けでは `--workers 1` を指定する。
 
 提出ファイル作成:
 
