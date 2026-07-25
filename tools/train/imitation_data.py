@@ -27,14 +27,16 @@ from rl_mcts.mcts import enumerate_actions  # noqa: E402
 # (enc_index, enc_value, enc_offset, dec_index, dec_value, dec_offset, chosen_index, value)
 SampleTuple = tuple[list[int], list[float], list[int], list[int], list[float], list[int], int, float]
 
-DeckFilter = Callable[[list[int]], bool]
+DeckFilter = Callable[[list[int], list[int]], bool]
 
 
 def extract_samples_from_episode(data: bytes, deck_filter: DeckFilter | None = None) -> list[SampleTuple]:
     """1エピソード分のJSONから学習サンプルを取り出す。
 
-    deck_filterを指定すると、そのプレイヤーのデッキがdeck_filter(deck)でTrueを返す
-    場合だけ採用する(デッキグループでの絞り込みに使う)。
+    deck_filterを指定すると、そのプレイヤーの(your_deck, opponent_deck)で
+    deck_filter(your_deck, opponent_deck)がTrueを返す場合だけ採用する
+    (デッキグループでの絞り込みに使う。自分のデッキ基準・相手のデッキ基準の
+    どちらでも絞り込めるように両方を渡す)。
     """
     j = json.loads(data)
     rewards = j.get("rewards")
@@ -52,7 +54,8 @@ def extract_samples_from_episode(data: bytes, deck_filter: DeckFilter | None = N
     samples: list[SampleTuple] = []
     for player in range(2):
         your_deck = decks[player]
-        if deck_filter is not None and not deck_filter(your_deck):
+        opponent_deck = decks[1 - player]
+        if deck_filter is not None and not deck_filter(your_deck, opponent_deck):
             continue
 
         value = float(rewards[player])

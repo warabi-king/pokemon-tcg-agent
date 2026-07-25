@@ -161,6 +161,9 @@ JSON解析とエンコードのコストを毎エポック払わずに済ませ�
 --max-samples     収集する学習サンプル数の上限（省略時は無制限）
 --deck-groups     tools/group_decks.pyが出力したJSON（特定デッキだけ抽出する場合）
 --target-group    --deck-groups内のgroup_id
+--role            own（既定）: 対象グループのデッキを使うプレイヤーの手を集める
+                  opponent: 対象グループのデッキと対戦した相手プレイヤーの手を集める
+                  （--deck-groups/--target-groupと併用時のみ有効）
 ```
 
 主な出力:
@@ -225,6 +228,36 @@ epoch, batches, loss, loss_value, loss_policy, train_accuracy, val_accuracy, ela
   --epochs 3 `
   --output-model agents\rl_mcts\train\checkpoints\imitation_group0.pth
 ```
+
+### 対戦相手側も学習する（1対1のペアagent）
+
+上の手順では、対象グループのデッキを使ったプレイヤー側の手だけを集めています。
+同じ対戦データの中で、対象グループのデッキと戦った相手プレイヤーの手は
+既定では前処理の対象外になり使われません。
+
+`--role opponent` を付けて前処理・学習すると、その「対象グループのデッキ相手に
+どう指すか」を学んだagentを別モデルとして作れます。グループ0番用のagentと、
+グループ0番のデッキ相手用のagentが1対1で揃います。
+
+```powershell
+.venv\Scripts\python.exe tools/train/preprocess_episodes.py `
+  --episodes path\to\day1.zip path\to\day2.zip `
+  --deck-groups deck_groups.json --target-group 0 --role opponent `
+  --output-dir shards\group0_opponent
+
+.venv\Scripts\python.exe tools/train/train_imitation.py `
+  --shards shards\group0_opponent `
+  --epochs 3 `
+  --output-model agents\rl_mcts\train\checkpoints\imitation_group0_opponent.pth
+```
+
+`--role`を省略、または`own`を指定した場合はこれまで通りの挙動（対象グループの
+デッキを使う側の手を集める）です。`manifest.json`の`role`フィールドで
+どちら向けに前処理したシャードかを確認できます。
+
+`tools/run_local_match.py`や`tools/run_matches.py`で
+`imitation_group0.pth` vs `imitation_group0_opponent.pth`のように対戦させれば、
+実際の対戦データに基づいたアーキタイプ対アーキタイプの検証ができます。
 
 ## グラフだけ再生成
 

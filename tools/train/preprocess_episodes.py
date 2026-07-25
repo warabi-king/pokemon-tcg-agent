@@ -7,6 +7,13 @@ train_imitation.py がストリーミングで読み込む。
 --deck-groups/--target-group を指定すると、tools/group_decks.py が出力したグループのうち
 指定した1グループのデッキを使った対戦データだけを抽出する。
 
+--role で、絞り込みをどちらの視点で行うか選べる。
+"own"(既定)は自分のデッキが対象グループのプレイヤーの手を集める
+(そのデッキアーキタイプを使うagent用)。"opponent"は対象グループのデッキを
+相手にしたプレイヤーの手を集める(そのデッキアーキタイプに対する応手を
+学ぶagent用)。同じ対象グループに対して両方を前処理すれば、
+「アーキタイプを使うagent」と「アーキタイプと戦うagent」を1対1で用意できる。
+
 使い方:
     # 全データを対象に前処理
     python tools/train/preprocess_episodes.py \
@@ -14,11 +21,18 @@ train_imitation.py がストリーミングで読み込む。
         --output-dir shards/all \
         --shard-size 20000
 
-    # デッキグループ0番だけを対象に前処理
+    # デッキグループ0番を使う側だけを対象に前処理
     python tools/train/preprocess_episodes.py \
         --episodes day1.zip day2.zip day3.zip \
         --deck-groups deck_groups.json --target-group 0 \
         --output-dir shards/group0 \
+        --shard-size 20000
+
+    # デッキグループ0番と対戦した相手側だけを対象に前処理
+    python tools/train/preprocess_episodes.py \
+        --episodes day1.zip day2.zip day3.zip \
+        --deck-groups deck_groups.json --target-group 0 --role opponent \
+        --output-dir shards/group0_opponent \
         --shard-size 20000
 
     少数だけで動作確認する場合:
@@ -44,7 +58,7 @@ from episode_io import iter_multi_source  # noqa: E402
 from imitation_data import extract_samples_from_episode  # noqa: E402
 
 
-def build_deck_filter(deck_groups_path: Path, target_group: int):
+def build_deck_filter(deck_groups_path: Path, target_group: int, role: str):
     data = json.loads(deck_groups_path.read_text(encoding="utf-8"))
     group = next((g for g in data["top_groups"] if g["group_id"] == target_group), None)
     if group is None:
@@ -53,10 +67,12 @@ def build_deck_filter(deck_groups_path: Path, target_group: int):
     target_signature = frozenset(group["signature"])
     is_pokemon, _ = load_card_info()
 
-    def deck_filter(deck: list[int]) -> bool:
+    def deck_filter(your_deck: list[int], opponent_deck: list[int]) -> bool:
+        deck = your_deck if role == "own" else opponent_deck
         return deck_signature(deck, is_pokemon) == target_signature
 
-    return deck_filter, group["label"]
+    label = group["label"] if role == "own" else f"{group['label']} 対戦相手"
+    return deck_filter, label
 
 
 def parse_args() -> argparse.Namespace:
@@ -68,6 +84,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--deck-groups", type=Path, default=None, help="tools/group_decks.pyが出力したJSON")
     parser.add_argument("--target-group", type=int, default=None, help="--deck-groups内のgroup_id")
+    parser.add_argument(
+        "--role",
+        choices=["own", "opponent"],
+        default="own",
+        help="own: 対象グループのデッキを使うプレイヤーの手を集める(既定)。"
+        "opponent: 対象グループのデッキと対戦した相手プレイヤーの手を集める。",
+    )
     return parser.parse_args()
 
 
@@ -75,11 +98,13 @@ def main() -> None:
     args = parse_args()
     if (args.deck_groups is None) != (args.target_group is None):
         raise SystemExit("--deck-groups と --target-group は両方指定するか、両方省略してください。")
+    if args.deck_groups is None and args.role != "own":
+        raise SystemExit("--role opponent は --deck-groups/--target-group と併用してください。")
 
     deck_filter = None
     label = "全デッキ"
     if args.deck_groups is not None:
-        deck_filter, label = build_deck_filter(args.deck_groups, args.target_group)
+        deck_filter, label = build_deck_filter(args.deck_groups, args.target_group, args.role)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -136,6 +161,7 @@ def main() -> None:
 
     manifest = {
         "label": label,
+        "role": args.role,
         "episodes": episode_count,
         "samples": total_samples,
         "shards": shard_index,
