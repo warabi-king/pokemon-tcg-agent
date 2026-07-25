@@ -239,9 +239,32 @@ tools/train/train_imitation.py       シャードを使って模倣学習する
 tools/train/train.py                 rl_mctsの自己対戦(MCTS)学習を行う
 tools/train/train_match_agents.py    agents/match_agents/配下の複数agentを総当たり自己対戦させながら学習する
 tools/train/plot_metrics.py          train.pyの学習ログ(CSV)からPNGグラフを作る
-tools/run_train_round_robin.py       複数agentのtrain.py実行を総当たりで組み合わせて呼び出す
+tools/run_train_round_robin.py       複数agentのtrain.py実行をサブプロセスとして総当たりで組み合わせて呼び出す
 tools/run_train_using_template.py    共通のtrain.pyテンプレートを別agentディレクトリに適用して学習する
 ```
+
+GPUバッチ推論で自己対戦データ収集を高速化する場合（`develop_naoki`ブランチから選択的に取り込み）:
+
+```text
+tools/run_train_round_robin_batched.py   中央管理・GPUバッチ推論対応の総当たり学習実行スクリプト。
+                                          run_train_round_robin.pyとは別物（サブプロセスを呼ばず、
+                                          各agentを同一プロセス内で扱う）。
+                                          --backend shared-batch/shared-cpu-batchで複数試合のNN評価を
+                                          batched_training.py経由でバッチ化し、GPUへまとめて渡す。
+tools/batched_tournament.py              batched系のコア実装（NN評価バッチ化、GPU device Tensor管理）
+tools/batched_training.py                上記を使った自己対戦学習サンプル収集
+tools/live_loss_recorder.py              学習中のバッチlossを逐次CSV/JSONへ記録する
+                                          （Notebookなどからのライブ監視用）
+
+使用例:
+  python tools/run_train_round_robin_batched.py \
+    --agent agents/rl_mcts \
+    --iterations 5 --games 100 --search-count 10 \
+    --backend shared-batch --device cuda
+```
+
+`tools/gpu_simulator.py`・`tools/gpu_tree_tournament.py`（GPU上でカード効果やMCTS木そのものを
+再現する実験的エンジン）は未完成かつ上記の学習パスに必須ではないため取り込んでいません。
 
 ## 既存sample
 
