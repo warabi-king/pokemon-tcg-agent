@@ -106,12 +106,19 @@ tools/deck_generator/generated/deck_mlp.pt
 - `--samples-per-deck N`: 1つのデッキから作る部分観測サンプル数。
 - `--min-observed N`: 観測済みカード枚数の最小値。
 - `--max-observed N`: 観測済みカード枚数の最大値。
+- `--max-decks N`: `deck_candidates.jsonl` から学習に使うデッキ数の上限。
 - `--device cpu`: CPUで実行する。
 
 軽量な動作確認:
 
 ```powershell
 .\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp.py train --epochs 1 --batch-size 64 --hidden-size 64 --layers 1 --samples-per-deck 1 --output tools\deck_generator\generated\debug_deck_mlp.pt --device cpu
+```
+
+デッキ数を絞って学習する場合:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp.py train --max-decks 50000
 ```
 
 ## 4. MLPでデッキを推論する

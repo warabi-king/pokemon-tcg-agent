@@ -118,6 +118,7 @@ def parse_args() -> argparse.Namespace:
     train.add_argument("--samples-per-deck", type=int, default=4)
     train.add_argument("--min-observed", type=int, default=1)
     train.add_argument("--max-observed", type=int, default=24)
+    train.add_argument("--max-decks", type=int, help="Use at most this many decks from the index.")
     train.add_argument("--valid-ratio", type=float, default=0.1)
     train.add_argument("--seed", type=int, default=0)
     train.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -173,6 +174,16 @@ def read_deck_candidates(path: Path) -> list[list[int]]:
     return decks
 
 
+def sample_decks(decks: list[list[int]], max_decks: int | None, seed: int) -> list[list[int]]:
+    if max_decks is None or max_decks >= len(decks):
+        return decks
+    if max_decks <= 0:
+        raise ValueError("--max-decks must be positive")
+    indices = list(range(len(decks)))
+    random.Random(seed).shuffle(indices)
+    return [decks[index] for index in indices[:max_decks]]
+
+
 def build_card_id_set(decks: list[list[int]]) -> list[int]:
     card_ids: set[int] = set()
     for deck in decks:
@@ -218,7 +229,8 @@ def deck_loss(
 def train_model(args: argparse.Namespace) -> int:
     torch.manual_seed(args.seed)
     card_meta = load_card_meta(args.card_data)
-    decks = read_deck_candidates(args.index)
+    all_decks = read_deck_candidates(args.index)
+    decks = sample_decks(all_decks, args.max_decks, args.seed)
     known_card_ids = build_card_id_set(decks)
     vocab_size = max(max(known_card_ids), max(card_meta, default=0)) + 1
     deck_counts = decks_to_tensor(decks, vocab_size)
@@ -314,6 +326,8 @@ def train_model(args: argparse.Namespace) -> int:
             },
             "metrics": {
                 "best_valid_loss": best_valid,
+                "source_decks": len(all_decks),
+                "used_decks": len(decks),
                 "train_decks": int(train_counts.size(0)),
                 "valid_decks": int(valid_counts.size(0)),
             },
