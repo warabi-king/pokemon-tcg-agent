@@ -138,3 +138,20 @@ checkpointを明示する場合:
 推論時は、既に見えているカード枚数を必ず満たしたうえで、
 予測されたカードcountをもとに60枚へ丸めます。
 その際、同名4枚制限、基本エネルギー例外、ACE SPEC 1枚制限を考慮します。
+
+## 5. 同一デッキを勝利数で集約する
+
+`deck_candidates.jsonl` の同一デッキをまとめ、元episode JSONの `rewards` から
+勝利数、敗北数、引き分け数、試合数、勝率を集計します。
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\deck_completion.py aggregate-wins
+```
+
+デフォルトの出力先:
+
+```text
+tools/deck_generator/generated/deck_candidates_by_wins.jsonl
+```
+
+出力は勝利数が多い順に並びます。

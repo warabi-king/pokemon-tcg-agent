@@ -18,6 +18,7 @@ DEFAULT_DATASET_DIR = SCRIPT_DIR / "daily_dataset"
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "generated"
 DEFAULT_INDEX = DEFAULT_OUTPUT_DIR / "deck_candidates.jsonl"
 DEFAULT_SUMMARY = DEFAULT_OUTPUT_DIR / "deck_candidates_summary.json"
+DEFAULT_WIN_AGGREGATE = DEFAULT_OUTPUT_DIR / "deck_candidates_by_wins.jsonl"
 DEFAULT_CARD_DATA = ROOT / "data" / "EN_Card_Data.csv"
 DECK_SIZE = 60
 
@@ -66,6 +67,15 @@ def parse_args() -> argparse.Namespace:
     complete.add_argument("--samples", type=int, default=1)
     complete.add_argument("--seed", type=int, default=0)
     complete.add_argument("--json", action="store_true", help="Print JSON instead of card IDs.")
+
+    aggregate = subparsers.add_parser(
+        "aggregate-wins",
+        help="Aggregate same decks by win count using episode rewards.",
+    )
+    aggregate.add_argument("--index", type=Path, default=DEFAULT_INDEX)
+    aggregate.add_argument("--output", type=Path, default=DEFAULT_WIN_AGGREGATE)
+    aggregate.add_argument("--limit", type=int, help="Write only the top N aggregated decks.")
+    aggregate.add_argument("--progress-interval", type=int, default=10000)
 
     return parser.parse_args()
 
@@ -168,6 +178,14 @@ def counter_to_fill_sequence(counts: Counter[int], limit_per_card: int = DECK_SI
 
 def deck_counts(cards: list[int]) -> dict[str, int]:
     return {str(card_id): count for card_id, count in sorted(Counter(cards).items())}
+
+
+def deck_key(counts: dict[str, int]) -> str:
+    return json.dumps(
+        {str(card_id): counts[str(card_id)] for card_id in sorted(map(int, counts))},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
 
 def build_index(args: argparse.Namespace) -> int:
@@ -349,12 +367,138 @@ def complete(args: argparse.Namespace) -> int:
     return 0
 
 
+def resolve_record_zip(index_path: Path, record: dict[str, Any]) -> Path:
+    zip_value = Path(record["zip"])
+    if zip_value.is_absolute():
+        return zip_value
+    candidates = [
+        SCRIPT_DIR / zip_value,
+        index_path.parent / zip_value,
+        ROOT / zip_value,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def reward_to_result(reward: int | float | None) -> str:
+    if reward is None:
+        return "draw"
+    if reward > 0:
+        return "win"
+    if reward < 0:
+        return "loss"
+    return "draw"
+
+
+def aggregate_wins(args: argparse.Namespace) -> int:
+    aggregates: dict[str, dict[str, Any]] = {}
+    reward_cache: dict[tuple[str, str], list[int | float | None]] = {}
+    zip_cache: dict[str, zipfile.ZipFile] = {}
+    processed = 0
+    missing_rewards = 0
+
+    try:
+        with args.index.open("r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                processed += 1
+                key = deck_key(record["deck_counts"])
+                item = aggregates.get(key)
+                if item is None:
+                    item = {
+                        "deck": record["deck"],
+                        "deck_counts": record["deck_counts"],
+                        "games": 0,
+                        "wins": 0,
+                        "losses": 0,
+                        "draws": 0,
+                        "teams": {},
+                        "first_seen": {
+                            "date": record["date"],
+                            "episode_file": record["episode_file"],
+                            "player_index": record["player_index"],
+                        },
+                    }
+                    aggregates[key] = item
+
+                zip_path = resolve_record_zip(args.index, record)
+                zip_key = str(zip_path)
+                cache_key = (zip_key, record["episode_file"])
+                rewards = reward_cache.get(cache_key)
+                if rewards is None:
+                    try:
+                        zf = zip_cache.get(zip_key)
+                        if zf is None:
+                            zf = zipfile.ZipFile(zip_path)
+                            zip_cache[zip_key] = zf
+                        with zf.open(record["episode_file"]) as episode_file:
+                            episode = json.load(episode_file)
+                        rewards = episode.get("rewards", [])
+                    except Exception as exc:  # noqa: BLE001
+                        missing_rewards += 1
+                        rewards = []
+                        print(
+                            f"warning: failed to read reward for {zip_path}:{record['episode_file']}: {exc}",
+                            file=sys.stderr,
+                        )
+                    reward_cache[cache_key] = rewards
+
+                player_index = int(record["player_index"])
+                reward = rewards[player_index] if player_index < len(rewards) else None
+                result = reward_to_result(reward)
+                item["games"] += 1
+                if result == "win":
+                    item["wins"] += 1
+                elif result == "loss":
+                    item["losses"] += 1
+                else:
+                    item["draws"] += 1
+                if record.get("team"):
+                    team_counts = item["teams"]
+                    team_counts[record["team"]] = team_counts.get(record["team"], 0) + 1
+
+                if args.progress_interval and processed % args.progress_interval == 0:
+                    print(
+                        f"processed {processed} records, unique decks {len(aggregates)}",
+                        flush=True,
+                    )
+    finally:
+        for zf in zip_cache.values():
+            zf.close()
+
+    rows = list(aggregates.values())
+    for row in rows:
+        row["win_rate"] = row["wins"] / row["games"] if row["games"] else 0.0
+        row["teams"] = dict(sorted(row["teams"].items(), key=lambda pair: (-pair[1], pair[0])))
+    rows.sort(key=lambda row: (-row["wins"], -row["win_rate"], -row["games"], row["deck"]))
+    if args.limit is not None:
+        rows = rows[: args.limit]
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open("w", encoding="utf-8", newline="\n") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+    print(f"processed {processed} candidate records")
+    print(f"aggregated {len(aggregates)} unique decks")
+    print(f"wrote {len(rows)} rows to {args.output}")
+    if missing_rewards:
+        print(f"missing reward episodes: {missing_rewards}", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     if args.command == "build-index":
         return build_index(args)
     if args.command == "complete":
         return complete(args)
+    if args.command == "aggregate-wins":
+        return aggregate_wins(args)
     raise AssertionError(args.command)
 
 
