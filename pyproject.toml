@@ -1,0 +1,19 @@
+[project]
+name = "pokemon-tcg-agent"
+version = "0.1.0"
+description = "Pokemon TCG AI Battle Challenge agent development"
+authors = [
+    {name = "nomukoh",email = "tekuteku54kn@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "kaggle-environments (==1.30.2)",
+    "torch (==2.12.1)",
+    "matplotlib (==3.11.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

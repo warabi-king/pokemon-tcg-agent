@@ -123,8 +123,14 @@ def create_node(
     your_index: int,
     your_deck: list[int],
     model: MyModel,
+    opponent_model: MyModel | None = None,
 ) -> tuple[Node, LearnSample | None]:
-    """探索状態からMCTSノードを作り、必要ならNN評価と学習サンプルを作る。"""
+    """探索状態からMCTSノードを作り、必要ならNN評価と学習サンプルを作る。
+
+    opponent_modelを指定すると、相手の手番のノード評価にはmodelの代わりに
+    opponent_modelを使う(「相手はこう指すはず」という専用モデルで相手の応手を
+    シミュレートする)。省略時(None)はmodelを両者に使う、これまでと同じ挙動になる。
+    """
     node = Node(parent, search_state)
 
     obs = search_state.observation
@@ -145,9 +151,11 @@ def create_node(
         node.backprop(node.value)
         return node, None
 
+    active_model = model if state.yourIndex == your_index else (opponent_model or model)
+
     sv_enc = get_encoder_input(obs, your_deck)
     sv_dec = get_decoder_input(obs, actions)
-    value, policy = eval_nn(sv_enc, sv_dec, model)
+    value, policy = eval_nn(sv_enc, sv_dec, active_model)
     v = value
     if state.yourIndex != your_index:
         v = -v
@@ -171,8 +179,14 @@ def mcts_agent(
     your_deck: list[int],
     model: MyModel,
     search_count: int = SEARCH_COUNT,
+    opponent_model: MyModel | None = None,
 ) -> tuple[list[int], LearnSample | None]:
-    """MCTSで手を選び、root局面の学習サンプルを返す。"""
+    """MCTSで手を選び、root局面の学習サンプルを返す。
+
+    opponent_modelを指定すると、探索木の中で相手の手番のノードだけ
+    opponent_modelで評価する(「相手はこう指すはず」という専用モデルを使った
+    シミュレーション)。省略時(None)はmodelを両者に使う、これまでと同じ挙動。
+    """
     obs = to_observation_class(obs_dict)
     if obs.select is None:
         return your_deck, None
@@ -193,7 +207,7 @@ def mcts_agent(
     )
 
     try:
-        root, sample = create_node(None, search_state, your_index, your_deck, model)
+        root, sample = create_node(None, search_state, your_index, your_deck, model, opponent_model)
         if not root.children:
             return random.sample(list(range(len(obs.select.option))), obs.select.maxCount), sample
 
@@ -222,7 +236,9 @@ def mcts_agent(
 
                 if best_child.node is None:
                     next_state = search_step(current.state.searchId, best_child.select)
-                    best_child.node, _ = create_node(current, next_state, your_index, your_deck, model)
+                    best_child.node, _ = create_node(
+                        current, next_state, your_index, your_deck, model, opponent_model
+                    )
                     break
 
                 current = best_child.node

@@ -11,3 +11,5 @@ agents/*/train/checkpoints/
 agents/*/train/logs/
 
 agents/match_agents/*/src/
+episodes/
+shards/

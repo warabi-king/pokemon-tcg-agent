@@ -2,6 +2,12 @@
 
 SDKにカードメタデータAPIが含まれる場合はそれを使う。
 含まれない場合は、Kaggle Dataから取得したカードCSVを読む。
+
+使い方:
+    python tools/inspect_cards.py
+
+出力は標準出力にカード1件ずつ表示されるだけなので、絞り込みたい場合は
+grepなどと組み合わせる（例: `python tools/inspect_cards.py | grep Pikachu`）。
 """
 
 from __future__ import annotations

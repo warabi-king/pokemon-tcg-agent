@@ -11,13 +11,25 @@ from rl_mcts.model import MyModel, create_model
 
 
 class RlMctsAgent:
-    """学習済みモデルを使ってMCTSで手を選ぶagent。"""
+    """学習済みモデルを使ってMCTSで手を選ぶagent。
 
-    def __init__(self, model_path: Path | None = None, search_count: int = 50) -> None:
+    opponent_model_pathを指定すると、探索木の中で相手の手番のノード評価だけ
+    別モデル(「相手はこう指すはず」という専用モデル)を使う。省略時(None)は
+    これまで通りmodelを自分/相手の両方に使う(既存コードと完全互換)。
+    """
+
+    def __init__(
+        self,
+        model_path: Path | None = None,
+        search_count: int = 50,
+        opponent_model_path: Path | None = None,
+    ) -> None:
         src_root = Path(__file__).resolve().parents[1]
         self.model_path = model_path or src_root / "model.pth"
+        self.opponent_model_path = opponent_model_path
         self.search_count = search_count
         self.model: MyModel | None = None
+        self.opponent_model: MyModel | None = None
 
     def select_action(self, obs_dict: dict) -> list[int]:
         """現在局面から合法手を選ぶ。"""
@@ -29,6 +41,7 @@ class RlMctsAgent:
             return []
 
         model = self.get_model()
+        opponent_model = self.get_opponent_model()
 
         with torch.inference_mode():
             selected, _ = mcts_agent(
@@ -36,6 +49,7 @@ class RlMctsAgent:
                 read_deck_csv(),
                 model,
                 search_count=self.search_count,
+                opponent_model=opponent_model,
             )
         return selected
 
@@ -55,3 +69,19 @@ class RlMctsAgent:
         model.eval()
         self.model = model
         return self.model
+
+    def get_opponent_model(self) -> MyModel | None:
+        """相手用モデルを遅延読み込みする。未指定ならNone(=自分のモデルを使う)を返す。"""
+        if self.opponent_model_path is None:
+            return None
+        if self.opponent_model is not None:
+            return self.opponent_model
+        if not self.opponent_model_path.exists():
+            raise FileNotFoundError(f"opponent_model_path が見つかりません: {self.opponent_model_path}")
+
+        model = create_model()
+        state = torch.load(self.opponent_model_path, map_location=torch.device("cpu"))
+        model.load_state_dict(state)
+        model.eval()
+        self.opponent_model = model
+        return self.opponent_model

@@ -24,25 +24,36 @@ Pokémon TCG AI Battle Challenge Simulation向けのAIエージェント開発�
 │   │   │   ├── deck.csv
 │   │   │   └── cg/
 │   │   └── README.md
-│   └── rl_mcts_sample/
-│       ├── src/          # 提出対象
-│       │   ├── main.py
-│       │   ├── deck.csv
-│       │   ├── cg/
-│       │   └── rl_mcts/
-│       ├── train/        # 提出に含めない学習用コード
-│       └── README.md
-│   └── rl_mcts/
-│       ├── src/          # rl_mcts_sampleから派生した改善用agent
-│       ├── train/        # CSV/PNGログ付き学習コード
-│       └── README.md
-├── tools/                # agent横断の補助ツール
+│   ├── rl_mcts_sample/
+│   │   ├── src/          # 提出対象
+│   │   │   ├── main.py
+│   │   │   ├── deck.csv
+│   │   │   ├── cg/
+│   │   │   └── rl_mcts/
+│   │   ├── train/        # 提出に含めない学習用コード
+│   │   └── README.md
+│   ├── rl_mcts/
+│   │   ├── src/          # rl_mcts_sampleから派生した改善用agent
+│   │   ├── train/        # CSV/PNGログ付き学習コード（checkpoints/・logs/はGit対象外）
+│   │   └── README.md
+│   └── match_agents/     # デッキアーキタイプ単位の複数agent（例: imitation_group0）
+│       └── {agent-name}/
+│           ├── deck.csv  # そのagent固有のデッキ
+│           ├── model.pth # そのagent固有の重み
+│           └── src/      # prepare_match_agent_submission.pyが生成。Git対象外
+├── tools/                # agent横断の補助ツール（一覧は「ツール一覧」節を参照）
+│   └── train/            # 学習・前処理系ツール（詳細はtools/train/README.md）
 ├── sample_submission/    # Kaggle配布sample。参照用
 ├── data/                 # Kaggle DataのカードCSV
 ├── docs/                 # Kaggle DataのPDF資料
+├── episodes/             # Kaggleの日次対戦リプレイ(.zip)。Git管理対象外
+├── shards/                # preprocess_episodes.pyが出力する学習用シャード。Git管理対象外
 ├── dist/                 # 提出アーカイブ出力先。Git管理対象外
-├── results/              # ローカル対戦結果。Git管理対象外
-├── requirements.txt
+├── results/              # ローカルの対戦結果・学習ログ・デッキ集計結果。Git管理対象外
+│   ├── logs/             # 各種スクリプトの実行ログ
+│   └── deck_analysis/    # group_decks.pyが出力するdeck_groups.json等
+├── requirements.txt      # pip用の依存定義（venv + pipで進める場合）
+├── pyproject.toml / poetry.lock / poetry.toml  # Poetry用の依存定義（.venvをプロジェクト直下に作る場合）
 └── AGENTS.md
 ```
 
@@ -86,6 +97,18 @@ python -m pip install -r requirements.txt
 ```
 
 `requirements.txt` では `kaggle-environments==1.30.2` を使っています。
+
+Poetryで進める場合（GPU利用など、他プロジェクトと環境を分離したい場合はこちら）:
+
+```bash
+poetry config virtualenvs.in-project true --local
+poetry env use 3.11
+poetry install
+poetry run python tools/run_local_match.py --agent random
+```
+
+`.venv`はプロジェクト直下に作られ、`pyproject.toml`/`poetry.lock`で依存を管理します。
+`requirements.txt`と依存内容は揃えていますが、片方だけ更新した場合はもう片方にも反映してください。
 
 ## ローカル対戦
 
@@ -171,6 +194,54 @@ PyTorchなど特定の学習・推論依存があるagentは、必要な依存�
 
 学習済み重みを提出に使う場合は、採用する重みだけを `agents/{agent-name}/src/` に置きます。
 途中checkpointやログは `agents/{agent-name}/train/checkpoints/` や `logs/` に置き、Gitには含めません。
+
+## ツール一覧
+
+`tools/` 配下のagent横断ツールです。詳しい使い方は各ファイル冒頭のdocstringを参照してください。
+
+対戦・評価:
+
+```text
+tools/run_local_match.py             同じ/異なるagent同士で1試合だけ実行する
+tools/run_matches.py                 2agentで複数試合実行し、勝率などを集計する
+tools/run_matches_round_robin.py     3agent以上を総当たりさせ、対戦カードごとの結果と
+                                      総合成績を集計する（--agent name=path[:deck]を複数指定）
+tools/compare_models.py              同じagent実装のまま、model.pthを2つ比較対戦させる
+                                      （改善前後の重みを比較するときに使う）
+```
+
+提出関連:
+
+```text
+tools/build_submission.py                agents/{agent-name}/src/ から提出用tar.gzを作る
+tools/prepare_match_agent_submission.py  agents/match_agents/{name}/のdeck.csv・model.pthから
+                                          提出可能なsrc/一式を組み立て、tar.gzも作る
+```
+
+デッキ・カードデータ関連:
+
+```text
+tools/inspect_cards.py       cabt SDK(またはdata/配下のCSV)からカードメタデータを一覧表示する
+tools/deck_signature.py      デッキを主要ポケモンの集合でアーキタイプ化する共通ロジック
+                              （group_decks.py/preprocess_episodes.pyが内部で使うライブラリ。
+                              単体実行はしない）
+tools/episode_io.py          日次エピソードデータ(展開済みディレクトリ or .zip)を横断して
+                              読むための共通ヘルパー（同上、ライブラリ用途）
+tools/group_decks.py         複数日分のエピソードからデッキ使用頻度を集計し、アーキタイプ単位の
+                              グループ(deck_groups.json)を作る。詳細はtools/train/README.md
+```
+
+学習・並列実行関連（詳細は `tools/train/README.md` を参照）:
+
+```text
+tools/train/preprocess_episodes.py   エピソードJSONを模倣学習用シャードに変換する
+tools/train/train_imitation.py       シャードを使って模倣学習する
+tools/train/train.py                 rl_mctsの自己対戦(MCTS)学習を行う
+tools/train/train_match_agents.py    agents/match_agents/配下の複数agentを総当たり自己対戦させながら学習する
+tools/train/plot_metrics.py          train.pyの学習ログ(CSV)からPNGグラフを作る
+tools/run_train_round_robin.py       複数agentのtrain.py実行を総当たりで組み合わせて呼び出す
+tools/run_train_using_template.py    共通のtrain.pyテンプレートを別agentディレクトリに適用して学習する
+```
 
 ## 既存sample
 
