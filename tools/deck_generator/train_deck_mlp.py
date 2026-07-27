@@ -538,16 +538,18 @@ def allowed_to_add(card_id: int, deck: list[int], card_meta: dict[int, CardMeta]
 def complete_from_prediction(
     observed_cards: list[int],
     predicted_counts: torch.Tensor,
+    count_scales: torch.Tensor,
     known_card_ids: list[int],
     card_meta: dict[int, CardMeta],
 ) -> list[int]:
     deck = list(observed_cards[:DECK_SIZE])
     observed_counts = Counter(deck)
-    scores = predicted_counts.detach().cpu().tolist()
+    scales = count_scales.detach().cpu().clamp_min(1.0).tolist()
+    scores = (predicted_counts.detach().cpu() / count_scales.detach().cpu().clamp_min(1.0)).tolist()
 
     for card_id, observed_count in observed_counts.items():
         if card_id < len(scores):
-            scores[card_id] = max(scores[card_id], float(observed_count))
+            scores[card_id] = max(scores[card_id], float(observed_count) / scales[card_id])
 
     while len(deck) < DECK_SIZE:
         best_card = None
@@ -555,7 +557,8 @@ def complete_from_prediction(
         for card_id in known_card_ids:
             if card_id >= len(scores) or not allowed_to_add(card_id, deck, card_meta):
                 continue
-            value = scores[card_id] - deck.count(card_id) * 0.35
+            current_ratio = deck.count(card_id) / scales[card_id]
+            value = scores[card_id] - current_ratio * 0.35
             if value > best_value:
                 best_value = value
                 best_card = card_id
@@ -592,7 +595,7 @@ def predict(args: argparse.Namespace) -> int:
 
     card_meta = meta_from_checkpoint(config)
     known_card_ids = [int(card_id) for card_id in config["known_card_ids"]]
-    deck = complete_from_prediction(observed_cards, predicted, known_card_ids, card_meta)
+    deck = complete_from_prediction(observed_cards, predicted, count_scales, known_card_ids, card_meta)
     output = {
         "observed": observed_cards,
         "deck": deck,
