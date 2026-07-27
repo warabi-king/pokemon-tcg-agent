@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import random
 from collections import Counter
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from typing import Any
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -30,6 +31,7 @@ class DeckRecord:
     win_rate: float = 0.5
     games: int = 1
     wins: int = 0
+    cluster_wins: int = 0
     cluster_weight: float = 1.0
 
 
@@ -135,30 +137,27 @@ def parse_args() -> argparse.Namespace:
         "--win-rate-weight",
         type=float,
         default=0.0,
-        help="Increase loss weight for high win-rate decks. 0 disables weighting.",
-    )
-    train.add_argument(
-        "--cluster-weight-power",
-        type=float,
-        default=1.0,
-        help="Apply cluster_weight from the index. 0 disables cluster weighting.",
+        help="Increase loss weight for high win-rate decks with log1p(win_rate). 0 disables weighting.",
     )
     train.add_argument(
         "--deck-sampling",
-        choices=["random", "wins", "win-rate"],
-        default="random",
-        help="How to choose decks when --max-decks is set.",
+        choices=["cluster-weight", "cluster-wins"],
+        default="cluster-weight",
+        help=(
+            "How to sample decks. "
+            "cluster-weight uses cluster_weight; cluster-wins also multiplies by 1 + log1p(cluster_wins)."
+        ),
     )
     train.add_argument("--valid-ratio", type=float, default=0.1)
     train.add_argument("--seed", type=int, default=0)
-    train.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    train.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
 
     predict = subparsers.add_parser("predict", help="Predict a completed 60-card deck from observed cards.")
     predict.add_argument("--checkpoint", type=Path, default=DEFAULT_MODEL)
     predict.add_argument("--observed", action="append", default=[], help="Comma-separated observed card IDs.")
     predict.add_argument("--observed-file", type=Path, help="File containing one observed card ID per line.")
     predict.add_argument("--json", action="store_true")
-    predict.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    predict.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
 
     return parser.parse_args()
 
@@ -204,6 +203,7 @@ def read_deck_candidates(path: Path) -> list[DeckRecord]:
                     win_rate=float(raw.get("win_rate", 0.5)),
                     games=int(raw.get("games", 1)),
                     wins=int(raw.get("wins", 0)),
+                    cluster_wins=int(raw.get("cluster_wins", raw.get("wins", 0))),
                     cluster_weight=float(raw.get("cluster_weight", 1.0)),
                 )
             )
@@ -222,13 +222,28 @@ def sample_records(
         return records
     if max_decks <= 0:
         raise ValueError("--max-decks must be positive")
-    if sampling == "wins":
-        return sorted(records, key=lambda record: (-record.wins, -record.win_rate, -record.games))[:max_decks]
-    if sampling == "win-rate":
-        return sorted(records, key=lambda record: (-record.win_rate, -record.wins, -record.games))[:max_decks]
-    indices = list(range(len(records)))
-    random.Random(seed).shuffle(indices)
-    return [records[index] for index in indices[:max_decks]]
+
+    weights = [deck_sampling_weight(record, sampling) for record in records]
+    indices = weighted_sample_without_replacement(weights, max_decks, seed)
+    return [records[index] for index in indices]
+
+
+def deck_sampling_weight(record: DeckRecord, sampling: str) -> float:
+    weight = max(record.cluster_weight, 1e-12)
+    if sampling == "cluster-wins":
+        weight *= 1.0 + math.log1p(max(record.cluster_wins, 0))
+    return weight
+
+
+def weighted_sample_without_replacement(weights: list[float], sample_size: int, seed: int) -> list[int]:
+    rng = random.Random(seed)
+    keyed_indices: list[tuple[float, int]] = []
+    for index, weight in enumerate(weights):
+        safe_weight = max(float(weight), 1e-12)
+        u = max(rng.random(), 1e-12)
+        keyed_indices.append((math.log(u) / safe_weight, index))
+    keyed_indices.sort(reverse=True)
+    return [index for _, index in keyed_indices[:sample_size]]
 
 
 def build_card_id_set(decks: list[list[int]]) -> list[int]:
@@ -249,33 +264,48 @@ def decks_to_tensor(decks: list[list[int]], vocab_size: int) -> torch.Tensor:
 def weights_to_tensor(
     records: list[DeckRecord],
     win_rate_weight: float,
-    cluster_weight_power: float,
 ) -> torch.Tensor:
     weights = torch.ones(len(records), dtype=torch.float32)
     for index, record in enumerate(records):
         weight = 1.0
-        if cluster_weight_power > 0:
-            weight *= max(record.cluster_weight, 1e-6) ** cluster_weight_power
         if win_rate_weight > 0:
-            weight *= 1.0 + win_rate_weight * max(0.0, min(1.0, record.win_rate))
+            weight *= 1.0 + win_rate_weight * math.log1p(max(0.0, min(1.0, record.win_rate)))
         weights[index] = weight
     return weights
 
 
-def split_tensors(
-    data: torch.Tensor,
-    weights: torch.Tensor,
+def split_records(
+    records: list[DeckRecord],
     valid_ratio: float,
     seed: int,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    indices = list(range(data.size(0)))
+) -> tuple[list[DeckRecord], list[DeckRecord]]:
+    indices = list(range(len(records)))
     random.Random(seed).shuffle(indices)
     valid_size = max(1, int(len(indices) * valid_ratio))
     valid_indices = indices[:valid_size]
     train_indices = indices[valid_size:]
     if not train_indices:
         train_indices, valid_indices = indices, indices
-    return data[train_indices], weights[train_indices], data[valid_indices], weights[valid_indices]
+    return [records[index] for index in train_indices], [records[index] for index in valid_indices]
+
+
+def dataset_sampling_weights(
+    records: list[DeckRecord],
+    samples_per_deck: int,
+    sampling: str,
+) -> torch.Tensor:
+    weights: list[float] = []
+    for record in records:
+        weights.extend([deck_sampling_weight(record, sampling)] * samples_per_deck)
+    return torch.tensor(weights, dtype=torch.double)
+
+
+def resolve_device(device: str) -> torch.device:
+    if device == "gpu":
+        if not torch.cuda.is_available():
+            raise RuntimeError("--device gpu was specified, but CUDA is not available")
+        return torch.device("cuda")
+    return torch.device("cpu")
 
 
 def deck_loss(
@@ -301,17 +331,14 @@ def train_model(args: argparse.Namespace) -> int:
     card_meta = load_card_meta(args.card_data)
     all_records = read_deck_candidates(args.index)
     records = sample_records(all_records, args.max_decks, args.seed, args.deck_sampling)
+    train_records, valid_records = split_records(records, args.valid_ratio, args.seed)
     decks = [record.deck for record in records]
     known_card_ids = build_card_id_set(decks)
     vocab_size = max(max(known_card_ids), max(card_meta, default=0)) + 1
-    deck_counts = decks_to_tensor(decks, vocab_size)
-    deck_weights = weights_to_tensor(records, args.win_rate_weight, args.cluster_weight_power)
-    train_counts, train_weights, valid_counts, valid_weights = split_tensors(
-        deck_counts,
-        deck_weights,
-        args.valid_ratio,
-        args.seed,
-    )
+    train_counts = decks_to_tensor([record.deck for record in train_records], vocab_size)
+    valid_counts = decks_to_tensor([record.deck for record in valid_records], vocab_size)
+    train_weights = weights_to_tensor(train_records, args.win_rate_weight)
+    valid_weights = weights_to_tensor(valid_records, args.win_rate_weight)
 
     train_dataset = PartialDeckDataset(
         train_counts,
@@ -329,10 +356,15 @@ def train_model(args: argparse.Namespace) -> int:
         max_observed=args.max_observed,
         seed=args.seed + 1_000_000,
     )
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    train_sampler = WeightedRandomSampler(
+        weights=dataset_sampling_weights(train_records, args.samples_per_deck, args.deck_sampling),
+        num_samples=len(train_dataset),
+        replacement=True,
+    )
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler)
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size)
 
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
     model = DeckMLP(
         input_size=vocab_size + 1,
         output_size=vocab_size,
@@ -396,8 +428,8 @@ def train_model(args: argparse.Namespace) -> int:
                 "positive_weight": args.positive_weight,
                 "sum_loss_weight": args.sum_loss_weight,
                 "win_rate_weight": args.win_rate_weight,
-                "cluster_weight_power": args.cluster_weight_power,
                 "deck_sampling": args.deck_sampling,
+                "device_option": args.device,
                 "known_card_ids": known_card_ids,
                 "card_meta": {
                     str(card_id): {
@@ -416,7 +448,10 @@ def train_model(args: argparse.Namespace) -> int:
                 "valid_decks": int(valid_counts.size(0)),
                 "mean_win_rate": sum(record.win_rate for record in records) / len(records),
                 "mean_cluster_weight": sum(record.cluster_weight for record in records) / len(records),
-                "mean_sample_weight": float(deck_weights.mean().item()),
+                "mean_cluster_wins": sum(record.cluster_wins for record in records) / len(records),
+                "mean_loss_weight": float(train_weights.mean().item()),
+                "mean_deck_sampling_weight": sum(deck_sampling_weight(record, args.deck_sampling) for record in records)
+                / len(records),
             },
         },
         args.output,
@@ -493,7 +528,8 @@ def complete_from_prediction(
 
 
 def predict(args: argparse.Namespace) -> int:
-    checkpoint = torch.load(args.checkpoint, map_location=args.device)
+    device = resolve_device(args.device)
+    checkpoint = torch.load(args.checkpoint, map_location=device)
     config = checkpoint["config"]
     vocab_size = int(config["vocab_size"])
     model = DeckMLP(
@@ -502,7 +538,7 @@ def predict(args: argparse.Namespace) -> int:
         hidden_size=int(config["hidden_size"]),
         layers=int(config["layers"]),
         dropout=float(config["dropout"]),
-    ).to(args.device)
+    ).to(device)
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
 
@@ -511,7 +547,7 @@ def predict(args: argparse.Namespace) -> int:
     for card_id in observed_cards:
         if 0 <= card_id < vocab_size:
             observed[card_id] += 1.0
-    x = torch.cat([observed / COUNT_SCALE, torch.tensor([len(observed_cards) / DECK_SIZE])]).to(args.device)
+    x = torch.cat([observed / COUNT_SCALE, torch.tensor([len(observed_cards) / DECK_SIZE])]).to(device)
     with torch.no_grad():
         predicted = torch.clamp(model(x.unsqueeze(0))[0] * COUNT_SCALE, min=0.0)
 
