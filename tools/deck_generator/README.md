@@ -122,6 +122,10 @@ tools/deck_generator/generated/deck_mlp.pt
 - `--max-observed N`: 観測済みカード枚数の最大値。
 - `--max-decks N`: 学習に使う候補デッキ数の上限。
 - `--deck-sampling cluster-weight|cluster-wins`: デッキ選択確率の計算方法。
+  デフォルトは`cluster-weight`
+  `cluster-weight`:`P ∝ cluster_weight`
+  `cluster-wins`:`P ∝ cluster_weight * (1 + log1p(cluster_wins))`
+
 - `--win-rate-weight N`: 勝率が高いデッキの loss 重みを増やす。`0` で無効。
 - `--device gpu`: GPU を使う。指定しない場合は CPU。
 
