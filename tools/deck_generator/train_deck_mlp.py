@@ -30,6 +30,7 @@ class DeckRecord:
     win_rate: float = 0.5
     games: int = 1
     wins: int = 0
+    cluster_weight: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,12 @@ def parse_args() -> argparse.Namespace:
         help="Increase loss weight for high win-rate decks. 0 disables weighting.",
     )
     train.add_argument(
+        "--cluster-weight-power",
+        type=float,
+        default=1.0,
+        help="Apply cluster_weight from the index. 0 disables cluster weighting.",
+    )
+    train.add_argument(
         "--deck-sampling",
         choices=["random", "wins", "win-rate"],
         default="random",
@@ -197,6 +204,7 @@ def read_deck_candidates(path: Path) -> list[DeckRecord]:
                     win_rate=float(raw.get("win_rate", 0.5)),
                     games=int(raw.get("games", 1)),
                     wins=int(raw.get("wins", 0)),
+                    cluster_weight=float(raw.get("cluster_weight", 1.0)),
                 )
             )
     if not records:
@@ -238,12 +246,19 @@ def decks_to_tensor(decks: list[list[int]], vocab_size: int) -> torch.Tensor:
     return rows
 
 
-def weights_to_tensor(records: list[DeckRecord], win_rate_weight: float) -> torch.Tensor:
+def weights_to_tensor(
+    records: list[DeckRecord],
+    win_rate_weight: float,
+    cluster_weight_power: float,
+) -> torch.Tensor:
     weights = torch.ones(len(records), dtype=torch.float32)
-    if win_rate_weight <= 0:
-        return weights
     for index, record in enumerate(records):
-        weights[index] = 1.0 + win_rate_weight * max(0.0, min(1.0, record.win_rate))
+        weight = 1.0
+        if cluster_weight_power > 0:
+            weight *= max(record.cluster_weight, 1e-6) ** cluster_weight_power
+        if win_rate_weight > 0:
+            weight *= 1.0 + win_rate_weight * max(0.0, min(1.0, record.win_rate))
+        weights[index] = weight
     return weights
 
 
@@ -290,7 +305,7 @@ def train_model(args: argparse.Namespace) -> int:
     known_card_ids = build_card_id_set(decks)
     vocab_size = max(max(known_card_ids), max(card_meta, default=0)) + 1
     deck_counts = decks_to_tensor(decks, vocab_size)
-    deck_weights = weights_to_tensor(records, args.win_rate_weight)
+    deck_weights = weights_to_tensor(records, args.win_rate_weight, args.cluster_weight_power)
     train_counts, train_weights, valid_counts, valid_weights = split_tensors(
         deck_counts,
         deck_weights,
@@ -381,6 +396,7 @@ def train_model(args: argparse.Namespace) -> int:
                 "positive_weight": args.positive_weight,
                 "sum_loss_weight": args.sum_loss_weight,
                 "win_rate_weight": args.win_rate_weight,
+                "cluster_weight_power": args.cluster_weight_power,
                 "deck_sampling": args.deck_sampling,
                 "known_card_ids": known_card_ids,
                 "card_meta": {
@@ -399,6 +415,7 @@ def train_model(args: argparse.Namespace) -> int:
                 "train_decks": int(train_counts.size(0)),
                 "valid_decks": int(valid_counts.size(0)),
                 "mean_win_rate": sum(record.win_rate for record in records) / len(records),
+                "mean_cluster_weight": sum(record.cluster_weight for record in records) / len(records),
                 "mean_sample_weight": float(deck_weights.mean().item()),
             },
         },

@@ -77,6 +77,20 @@ def parse_args() -> argparse.Namespace:
     aggregate.add_argument("--limit", type=int, help="Write only the top N aggregated decks.")
     aggregate.add_argument("--progress-interval", type=int, default=10000)
 
+    cluster = subparsers.add_parser(
+        "cluster-weights",
+        help="Cluster similar decks and add inverse-frequency training weights.",
+    )
+    cluster.add_argument("--input", type=Path, default=DEFAULT_WIN_AGGREGATE)
+    cluster.add_argument("--output", type=Path, default=DEFAULT_WIN_AGGREGATE)
+    cluster.add_argument(
+        "--threshold",
+        type=float,
+        default=0.75,
+        help="Histogram intersection similarity threshold. 0.75 means 45/60 cards overlap.",
+    )
+    cluster.add_argument("--progress-interval", type=int, default=1000)
+
     return parser.parse_args()
 
 
@@ -186,6 +200,17 @@ def deck_key(counts: dict[str, int]) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def count_histogram(record: dict[str, Any]) -> dict[int, int]:
+    return {int(card_id): int(count) for card_id, count in record["deck_counts"].items()}
+
+
+def histogram_intersection_similarity(a: dict[int, int], b: dict[int, int]) -> float:
+    if len(a) > len(b):
+        a, b = b, a
+    overlap = sum(min(count, b.get(card_id, 0)) for card_id, count in a.items())
+    return overlap / DECK_SIZE
 
 
 def build_index(args: argparse.Namespace) -> int:
@@ -491,6 +516,96 @@ def aggregate_wins(args: argparse.Namespace) -> int:
     return 0
 
 
+def cluster_weight(total_decks: int, cluster_members: int, cluster_count: int) -> float:
+    if cluster_members <= 0 or cluster_count <= 0:
+        return 1.0
+    return total_decks / (cluster_members * cluster_count)
+
+
+def cluster_weights(args: argparse.Namespace) -> int:
+    records = load_index(args.input)
+    if not records:
+        print(f"No records in {args.input}", file=sys.stderr)
+        return 1
+
+    records.sort(key=lambda row: (-int(row.get("wins", 0)), -float(row.get("win_rate", 0.0)), -int(row.get("games", 0))))
+    histograms = [count_histogram(record) for record in records]
+    assignments: list[int | None] = [None] * len(records)
+    clusters: list[dict[str, Any]] = []
+
+    for i, record in enumerate(records):
+        if assignments[i] is not None:
+            continue
+        cluster_id = len(clusters)
+        representative = histograms[i]
+        member_indices = [i]
+        assignments[i] = cluster_id
+        for j in range(i + 1, len(records)):
+            if assignments[j] is not None:
+                continue
+            if histogram_intersection_similarity(representative, histograms[j]) >= args.threshold:
+                assignments[j] = cluster_id
+                member_indices.append(j)
+
+        games = sum(int(records[index].get("games", 0)) for index in member_indices)
+        wins = sum(int(records[index].get("wins", 0)) for index in member_indices)
+        losses = sum(int(records[index].get("losses", 0)) for index in member_indices)
+        draws = sum(int(records[index].get("draws", 0)) for index in member_indices)
+        clusters.append(
+            {
+                "cluster_id": cluster_id,
+                "representative_index": i,
+                "member_indices": member_indices,
+                "members": len(member_indices),
+                "games": games,
+                "wins": wins,
+                "losses": losses,
+                "draws": draws,
+                "win_rate": wins / games if games else 0.0,
+            }
+        )
+
+        if args.progress_interval and len(clusters) % args.progress_interval == 0:
+            print(f"clusters {len(clusters)}, assigned {sum(value is not None for value in assignments)}", flush=True)
+
+    total_decks = len(records)
+    cluster_count = len(clusters)
+    for cluster in clusters:
+        cluster["weight"] = cluster_weight(total_decks, cluster["members"], cluster_count)
+        for index in cluster["member_indices"]:
+            records[index]["cluster_id"] = cluster["cluster_id"]
+            records[index]["cluster_members"] = cluster["members"]
+            records[index]["cluster_games"] = cluster["games"]
+            records[index]["cluster_wins"] = cluster["wins"]
+            records[index]["cluster_losses"] = cluster["losses"]
+            records[index]["cluster_draws"] = cluster["draws"]
+            records[index]["cluster_win_rate"] = cluster["win_rate"]
+            records[index]["cluster_weight"] = cluster["weight"]
+            records[index]["cluster_similarity_threshold"] = args.threshold
+            records[index]["cluster_weight_formula"] = "total_decks/(cluster_members*cluster_count)"
+            records[index].pop("cluster_weight_mode", None)
+            records[index].pop("cluster_min_weight", None)
+            records[index].pop("cluster_max_weight", None)
+
+    records.sort(
+        key=lambda row: (
+            int(row["cluster_id"]),
+            -int(row.get("wins", 0)),
+            -float(row.get("win_rate", 0.0)),
+            -int(row.get("games", 0)),
+        )
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open("w", encoding="utf-8", newline="\n") as f:
+        for record in records:
+            f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+    print(f"read {len(records)} decks from {args.input}")
+    print(f"created {len(clusters)} clusters with threshold {args.threshold}")
+    print(f"wrote clustered decks to {args.output}")
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     if args.command == "build-index":
@@ -499,6 +614,8 @@ def main() -> int:
         return complete(args)
     if args.command == "aggregate-wins":
         return aggregate_wins(args)
+    if args.command == "cluster-weights":
+        return cluster_weights(args)
     raise AssertionError(args.command)
 
 
