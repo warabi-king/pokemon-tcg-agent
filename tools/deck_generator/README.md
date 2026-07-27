@@ -182,3 +182,61 @@ checkpoint を指定する場合:
 ```
 
 推論時は、観測済みカード枚数を必ず満たすように、予測されたカード count をもとに 60 枚へ丸めます。カードを追加する順位は `predicted_count / count_scale` の正規化済みスコアで決めるため、基本エネルギーの `count_scale` が大きいだけで過剰に選ばれることを抑えます。その際、同名 4 枚制限、基本エネルギー例外、ACE SPEC 1 枚制限を考慮します。
+
+## 7. word2vec/CBOW 形式でデッキ生成モデルを学習する
+
+`train_deck_word2vec.py` は、MLP ではなく word2vec の CBOW に近い形式でデッキ生成を学習します。
+各カード ID を one-hot トークンとして扱い、1つのデッキから一部のカードを文脈として取り出し、その文脈から伏せた1枚のカード ID を分類で予測します。
+
+学習時の入力と出力は次の形です。
+
+```text
+デッキ内の文脈カード one-hot count -> 伏せたカード ID
+```
+
+モデル内部では、文脈カードの one-hot count とカード埋め込み行列を掛けて平均文脈ベクトルを作り、その文脈ベクトルから次に入りやすいカードを予測します。
+生成時は、観測済みカードを文脈にして1枚ずつカードを追加し、60枚になるまで繰り返します。
+
+デフォルトでは `generated/deck_candidates_by_wins.jsonl` を使って学習し、`generated/deck_word2vec.pt` に保存します。
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_word2vec.py train
+```
+
+軽量な動作確認:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_word2vec.py train --epochs 1 --batch-size 32 --embedding-dim 16 --samples-per-deck 1 --max-decks 20 --output tools\deck_generator\generated\debug_deck_word2vec.pt
+```
+
+主な学習オプション:
+
+- `--embedding-dim N`: カード埋め込みベクトルの次元数。
+- `--samples-per-deck N`: 1デッキから作る CBOW サンプル数。
+- `--min-context N`: 文脈として使うカード枚数の最小値。
+- `--max-context N`: 文脈として使うカード枚数の最大値。最大は59。
+- `--max-decks N`: 学習に使うデッキ数の上限。
+- `--deck-sampling cluster-weight|cluster-wins`: 学習デッキのサンプリング重み。
+- `--win-rate-weight N`: 勝率が高いデッキの loss 重みを増やす。
+- `--device gpu`: GPU を使う。
+
+生成:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_word2vec.py generate --observed 741,742,743 --json
+```
+
+checkpoint を指定する場合:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_word2vec.py generate --checkpoint tools\deck_generator\generated\deck_word2vec.pt --observed 741,742,743 --json
+```
+
+`predict` は `generate` の別名として使えます。
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_word2vec.py predict --observed 741,742,743 --json
+```
+
+生成時は、同名4枚制限、基本エネルギー例外、ACE SPEC 1枚制限を考慮してカードを追加します。
+`--temperature 0` では greedy に選び、`--temperature` に正の値を指定すると `--top-k` 件から確率的にサンプリングします。
