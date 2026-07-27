@@ -111,6 +111,8 @@ tools/deck_generator/generated/deck_mlp.pt
 
 学習時のデッキ選択は、`--max-decks` の有無に関わらず `cluster_weight` で重み付けされます。つまり、多く登場する類似デッキのクラスタは、学習バッチに出にくくなります。
 
+カード枚数の正規化はカードごとに異なります。通常カードは `4`、ACE SPEC は `1`、基本エネルギーは学習データ中のそのカードの最大採用枚数を上限として、`count / card_max_count` の形にします。この `card_max_count` は checkpoint の `count_scales` に保存され、推論時の逆変換にも使われます。
+
 主な学習オプション:
 
 - `--epochs N`: 学習 epoch 数。

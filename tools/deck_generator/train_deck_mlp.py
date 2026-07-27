@@ -22,7 +22,7 @@ DEFAULT_WIN_INDEX = SCRIPT_DIR / "generated" / "deck_candidates_by_wins.jsonl"
 DEFAULT_CARD_DATA = ROOT / "data" / "EN_Card_Data.csv"
 DEFAULT_MODEL = SCRIPT_DIR / "generated" / "deck_mlp.pt"
 DECK_SIZE = 60
-COUNT_SCALE = 4.0
+DEFAULT_CARD_SCALE = 4.0
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,7 @@ class PartialDeckDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     def __init__(
         self,
         deck_counts: torch.Tensor,
+        count_scales: torch.Tensor,
         deck_weights: torch.Tensor,
         samples_per_deck: int,
         min_observed: int,
@@ -80,6 +81,7 @@ class PartialDeckDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         seed: int,
     ) -> None:
         self.deck_counts = deck_counts
+        self.count_scales = count_scales
         self.deck_weights = deck_weights
         self.samples_per_deck = samples_per_deck
         self.min_observed = min_observed
@@ -105,11 +107,11 @@ class PartialDeckDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 
         observed_feature = torch.cat(
             [
-                observed / COUNT_SCALE,
+                observed / self.count_scales,
                 torch.tensor([observed_total / DECK_SIZE], dtype=torch.float32),
             ]
         )
-        return observed_feature, target / COUNT_SCALE, self.deck_weights[deck_index]
+        return observed_feature, target / self.count_scales, self.deck_weights[deck_index]
 
 
 def parse_args() -> argparse.Namespace:
@@ -261,6 +263,34 @@ def decks_to_tensor(decks: list[list[int]], vocab_size: int) -> torch.Tensor:
     return rows
 
 
+def build_count_scales(
+    card_meta: dict[int, CardMeta],
+    deck_counts: torch.Tensor,
+    vocab_size: int,
+) -> torch.Tensor:
+    scales = torch.full((vocab_size,), DEFAULT_CARD_SCALE, dtype=torch.float32)
+    max_counts = deck_counts.max(dim=0).values if deck_counts.numel() else torch.zeros(vocab_size, dtype=torch.float32)
+    for card_id in range(vocab_size):
+        meta = card_meta.get(card_id)
+        if meta and meta.is_ace_spec:
+            scales[card_id] = 1.0
+        elif meta and meta.is_basic_energy:
+            scales[card_id] = max(1.0, float(max_counts[card_id].item()))
+    return scales
+
+
+def count_scales_from_config(config: dict[str, Any], vocab_size: int) -> torch.Tensor:
+    raw_scales = config.get("count_scales")
+    if raw_scales:
+        scales = torch.tensor(raw_scales, dtype=torch.float32)
+        if scales.numel() < vocab_size:
+            padding = torch.full((vocab_size - scales.numel(),), DEFAULT_CARD_SCALE, dtype=torch.float32)
+            scales = torch.cat([scales, padding])
+        return scales[:vocab_size].clamp_min(1.0)
+    legacy_scale = float(config.get("count_scale", DEFAULT_CARD_SCALE))
+    return torch.full((vocab_size,), legacy_scale, dtype=torch.float32)
+
+
 def weights_to_tensor(
     records: list[DeckRecord],
     win_rate_weight: float,
@@ -311,6 +341,7 @@ def resolve_device(device: str) -> torch.device:
 def deck_loss(
     pred: torch.Tensor,
     target: torch.Tensor,
+    count_scales: torch.Tensor,
     sample_weight: torch.Tensor,
     positive_weight: float,
     sum_loss_weight: float,
@@ -319,8 +350,8 @@ def deck_loss(
     weights = torch.ones_like(target)
     weights = weights + (target > 0).float() * positive_weight
     count_loss_by_sample = (element_loss * weights).mean(dim=1)
-    pred_sum = torch.relu(pred).sum(dim=1)
-    target_sum = target.sum(dim=1)
+    pred_sum = (torch.relu(pred) * count_scales).sum(dim=1)
+    target_sum = (target * count_scales).sum(dim=1)
     sum_loss_by_sample = F.smooth_l1_loss(pred_sum, target_sum, reduction="none")
     loss_by_sample = count_loss_by_sample + sum_loss_by_sample * sum_loss_weight
     return (loss_by_sample * sample_weight).sum() / sample_weight.sum().clamp_min(1e-6)
@@ -335,6 +366,8 @@ def train_model(args: argparse.Namespace) -> int:
     decks = [record.deck for record in records]
     known_card_ids = build_card_id_set(decks)
     vocab_size = max(max(known_card_ids), max(card_meta, default=0)) + 1
+    all_counts = decks_to_tensor(decks, vocab_size)
+    count_scales = build_count_scales(card_meta, all_counts, vocab_size)
     train_counts = decks_to_tensor([record.deck for record in train_records], vocab_size)
     valid_counts = decks_to_tensor([record.deck for record in valid_records], vocab_size)
     train_weights = weights_to_tensor(train_records, args.win_rate_weight)
@@ -342,6 +375,7 @@ def train_model(args: argparse.Namespace) -> int:
 
     train_dataset = PartialDeckDataset(
         train_counts,
+        count_scales,
         train_weights,
         samples_per_deck=args.samples_per_deck,
         min_observed=args.min_observed,
@@ -350,6 +384,7 @@ def train_model(args: argparse.Namespace) -> int:
     )
     valid_dataset = PartialDeckDataset(
         valid_counts,
+        count_scales,
         valid_weights,
         samples_per_deck=max(1, args.samples_per_deck // 2),
         min_observed=args.min_observed,
@@ -365,6 +400,7 @@ def train_model(args: argparse.Namespace) -> int:
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size)
 
     device = resolve_device(args.device)
+    count_scales_device = count_scales.to(device)
     model = DeckMLP(
         input_size=vocab_size + 1,
         output_size=vocab_size,
@@ -385,7 +421,7 @@ def train_model(args: argparse.Namespace) -> int:
             y = y.to(device)
             sample_weight = sample_weight.to(device)
             pred = model(x)
-            loss = deck_loss(pred, y, sample_weight, args.positive_weight, args.sum_loss_weight)
+            loss = deck_loss(pred, y, count_scales_device, sample_weight, args.positive_weight, args.sum_loss_weight)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -401,7 +437,7 @@ def train_model(args: argparse.Namespace) -> int:
                 y = y.to(device)
                 sample_weight = sample_weight.to(device)
                 pred = model(x)
-                loss = deck_loss(pred, y, sample_weight, args.positive_weight, args.sum_loss_weight)
+                loss = deck_loss(pred, y, count_scales_device, sample_weight, args.positive_weight, args.sum_loss_weight)
                 valid_loss += float(loss.item())
                 valid_batches += 1
 
@@ -424,7 +460,7 @@ def train_model(args: argparse.Namespace) -> int:
                 "hidden_size": args.hidden_size,
                 "layers": args.layers,
                 "dropout": args.dropout,
-                "count_scale": COUNT_SCALE,
+                "count_scales": [float(value) for value in count_scales.tolist()],
                 "positive_weight": args.positive_weight,
                 "sum_loss_weight": args.sum_loss_weight,
                 "win_rate_weight": args.win_rate_weight,
@@ -452,6 +488,8 @@ def train_model(args: argparse.Namespace) -> int:
                 "mean_loss_weight": float(train_weights.mean().item()),
                 "mean_deck_sampling_weight": sum(deck_sampling_weight(record, args.deck_sampling) for record in records)
                 / len(records),
+                "min_count_scale": float(count_scales.min().item()),
+                "max_count_scale": float(count_scales.max().item()),
             },
         },
         args.output,
@@ -532,6 +570,7 @@ def predict(args: argparse.Namespace) -> int:
     checkpoint = torch.load(args.checkpoint, map_location=device)
     config = checkpoint["config"]
     vocab_size = int(config["vocab_size"])
+    count_scales = count_scales_from_config(config, vocab_size).to(device)
     model = DeckMLP(
         input_size=vocab_size + 1,
         output_size=vocab_size,
@@ -547,9 +586,9 @@ def predict(args: argparse.Namespace) -> int:
     for card_id in observed_cards:
         if 0 <= card_id < vocab_size:
             observed[card_id] += 1.0
-    x = torch.cat([observed / COUNT_SCALE, torch.tensor([len(observed_cards) / DECK_SIZE])]).to(device)
+    x = torch.cat([observed.to(device) / count_scales, torch.tensor([len(observed_cards) / DECK_SIZE], device=device)])
     with torch.no_grad():
-        predicted = torch.clamp(model(x.unsqueeze(0))[0] * COUNT_SCALE, min=0.0)
+        predicted = torch.clamp(model(x.unsqueeze(0))[0] * count_scales, min=0.0)
 
     card_meta = meta_from_checkpoint(config)
     known_card_ids = [int(card_id) for card_id in config["known_card_ids"]]
