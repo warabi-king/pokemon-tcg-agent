@@ -19,7 +19,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_INDEX = SCRIPT_DIR / "generated" / "deck_candidates_by_wins.jsonl"
 DEFAULT_CARD_DATA = ROOT / "data" / "EN_Card_Data.csv"
-DEFAULT_MODEL = SCRIPT_DIR / "generated" / "deck_word2vec.pt"
+DEFAULT_WORD2VEC = SCRIPT_DIR / "generated" / "deck_word2vec.pt"
+DEFAULT_MODEL = SCRIPT_DIR / "generated" / "deck_transformer_cbow.pt"
 DECK_SIZE = 60
 
 
@@ -49,48 +50,69 @@ class CardMeta:
         return "ACE SPEC" in f"{self.name} {self.rule}".upper()
 
 
-class DeckCBOW(torch.nn.Module):
-    """CBOW-style model: one-hot card counts -> averaged embeddings -> target card."""
-
-    def __init__(self, vocab_size: int, embedding_dim: int, dropout: float) -> None:
+class DeckTransformerCBOW(torch.nn.Module):
+    def __init__(
+        self,
+        vocab_size: int,
+        embedding_dim: int,
+        heads: int,
+        layers: int,
+        ff_dim: int,
+        dropout: float,
+        pad_id: int,
+        bos_id: int,
+    ) -> None:
         super().__init__()
-        self.card_embedding = torch.nn.Parameter(torch.empty(vocab_size, embedding_dim))
+        self.vocab_size = vocab_size
+        self.pad_id = pad_id
+        self.bos_id = bos_id
+        self.token_embedding = torch.nn.Embedding(vocab_size + 2, embedding_dim, padding_idx=pad_id)
+        encoder_layer = torch.nn.TransformerEncoderLayer(
+            d_model=embedding_dim,
+            nhead=heads,
+            dim_feedforward=ff_dim,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+        )
+        self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=layers, enable_nested_tensor=False)
         self.output = torch.nn.Linear(embedding_dim + 1, vocab_size)
-        self.dropout = torch.nn.Dropout(dropout)
-        torch.nn.init.normal_(self.card_embedding, mean=0.0, std=0.02)
 
-    def forward(self, context_counts: torch.Tensor) -> torch.Tensor:
-        context_total = context_counts.sum(dim=1, keepdim=True).clamp_min(1.0)
-        context_embedding = context_counts @ self.card_embedding
-        context_embedding = context_embedding / context_total
-        context_ratio = (context_total / DECK_SIZE).clamp(max=1.0)
-        x = torch.cat([context_embedding, context_ratio], dim=1)
-        return self.output(self.dropout(x))
+    def forward(self, token_ids: torch.Tensor, padding_mask: torch.Tensor) -> torch.Tensor:
+        x = self.token_embedding(token_ids)
+        encoded = self.encoder(x, src_key_padding_mask=padding_mask)
+        valid = (~padding_mask).unsqueeze(-1).float()
+        pooled = (encoded * valid).sum(dim=1) / valid.sum(dim=1).clamp_min(1.0)
+        card_count = ((token_ids != self.pad_id) & (token_ids != self.bos_id)).sum(dim=1, keepdim=True).float()
+        context_ratio = (card_count / DECK_SIZE).clamp(max=1.0)
+        return self.output(torch.cat([pooled, context_ratio], dim=1))
 
 
-class DeckCBOWDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]):
+class DeckTransformerDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]):
     def __init__(
         self,
         records: list[DeckRecord],
-        vocab_size: int,
+        max_context: int,
+        pad_id: int,
+        bos_id: int,
         samples_per_deck: int,
         min_context: int,
-        max_context: int,
         deck_loss_weights: torch.Tensor,
         seed: int,
     ) -> None:
         self.records = records
-        self.vocab_size = vocab_size
+        self.max_context = max_context
+        self.pad_id = pad_id
+        self.bos_id = bos_id
         self.samples_per_deck = samples_per_deck
         self.min_context = min_context
-        self.max_context = max_context
         self.deck_loss_weights = deck_loss_weights
         self.seed = seed
 
     def __len__(self) -> int:
         return len(self.records) * self.samples_per_deck
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         deck_index = index // self.samples_per_deck
         rng = random.Random(self.seed + index)
         deck = self.records[deck_index].deck
@@ -101,13 +123,14 @@ class DeckCBOWDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]):
         context_size = rng.randint(self.min_context, min(self.max_context, len(context_pool)))
         context_cards = rng.sample(context_pool, context_size)
 
-        context_counts = torch.zeros(self.vocab_size, dtype=torch.float32)
-        for card_id in context_cards:
-            if 0 <= card_id < self.vocab_size:
-                context_counts[card_id] += 1.0
-
+        tokens = [self.bos_id] + context_cards
+        max_tokens = self.max_context + 1
+        token_ids = torch.full((max_tokens,), self.pad_id, dtype=torch.long)
+        token_ids[: len(tokens)] = torch.tensor(tokens, dtype=torch.long)
+        padding_mask = token_ids == self.pad_id
         return (
-            context_counts,
+            token_ids,
+            padding_mask,
             torch.tensor(target_card, dtype=torch.long),
             self.deck_loss_weights[deck_index],
         )
@@ -116,25 +139,30 @@ class DeckCBOWDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Train or query a CBOW/word2vec-style deck generator. "
-            "Each card ID is treated as a one-hot token, and context cards in a deck "
-            "are averaged through a learned embedding matrix to predict a held-out card."
+            "Train or query a CBOW Transformer deck generator. "
+            "The model uses card embeddings from deck_word2vec.pt, no positional encoding, "
+            "TransformerEncoder pooling, and next-card classification."
         )
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    train = subparsers.add_parser("train", help="Train CBOW model from deck candidate JSONL.")
+    train = subparsers.add_parser("train", help="Train CBOW Transformer from deck candidate JSONL.")
     train.add_argument("--index", type=Path, default=DEFAULT_INDEX)
     train.add_argument("--card-data", type=Path, default=DEFAULT_CARD_DATA)
+    train.add_argument("--word2vec-checkpoint", type=Path, default=DEFAULT_WORD2VEC)
+    train.add_argument("--random-init", action="store_true", help="Do not require a word2vec checkpoint.")
     train.add_argument("--output", type=Path, default=DEFAULT_MODEL)
     train.add_argument("--epochs", type=int, default=20)
-    train.add_argument("--batch-size", type=int, default=512)
-    train.add_argument("--embedding-dim", type=int, default=128)
+    train.add_argument("--batch-size", type=int, default=256)
+    train.add_argument("--embedding-dim", type=int, default=0, help="0 uses the word2vec embedding dimension.")
+    train.add_argument("--heads", type=int, default=4)
+    train.add_argument("--layers", type=int, default=2)
+    train.add_argument("--ff-dim", type=int, default=512)
     train.add_argument("--dropout", type=float, default=0.1)
     train.add_argument("--lr", type=float, default=1e-3)
     train.add_argument("--weight-decay", type=float, default=1e-5)
-    train.add_argument("--samples-per-deck", type=int, default=16)
-    train.add_argument("--min-context", type=int, default=1) # 59の方がいい？
+    train.add_argument("--samples-per-deck", type=int, default=8)
+    train.add_argument("--min-context", type=int, default=1)
     train.add_argument("--max-context", type=int, default=59)
     train.add_argument("--max-decks", type=int, help="Use at most this many decks from the index.")
     train.add_argument("--valid-ratio", type=float, default=0.1)
@@ -153,9 +181,8 @@ def parse_args() -> argparse.Namespace:
 
     generate = subparsers.add_parser("generate", help="Generate a 60-card deck from observed card IDs.")
     add_generation_args(generate)
-    predict = subparsers.add_parser("predict", help="Alias of generate for compatibility with train_deck_mlp.py.")
+    predict = subparsers.add_parser("predict", help="Alias of generate.")
     add_generation_args(predict)
-
     return parser.parse_args()
 
 
@@ -261,16 +288,6 @@ def sample_records(
     return [records[index] for index in indices]
 
 
-def weights_to_tensor(records: list[DeckRecord], win_rate_weight: float) -> torch.Tensor:
-    weights = torch.ones(len(records), dtype=torch.float32)
-    for index, record in enumerate(records):
-        weight = 1.0
-        if win_rate_weight > 0:
-            weight *= 1.0 + win_rate_weight * math.log1p(max(0.0, min(1.0, record.win_rate)))
-        weights[index] = weight
-    return weights
-
-
 def split_records(
     records: list[DeckRecord],
     valid_ratio: float,
@@ -284,6 +301,16 @@ def split_records(
     if not train_indices:
         train_indices, valid_indices = indices, indices
     return [records[index] for index in train_indices], [records[index] for index in valid_indices]
+
+
+def weights_to_tensor(records: list[DeckRecord], win_rate_weight: float) -> torch.Tensor:
+    weights = torch.ones(len(records), dtype=torch.float32)
+    for index, record in enumerate(records):
+        weight = 1.0
+        if win_rate_weight > 0:
+            weight *= 1.0 + win_rate_weight * math.log1p(max(0.0, min(1.0, record.win_rate)))
+        weights[index] = weight
+    return weights
 
 
 def dataset_sampling_weights(records: list[DeckRecord], samples_per_deck: int, sampling: str) -> torch.Tensor:
@@ -301,14 +328,37 @@ def resolve_device(device: str) -> torch.device:
     return torch.device("cpu")
 
 
+def load_word2vec_embedding(path: Path, device: torch.device) -> tuple[torch.Tensor, dict[str, Any]]:
+    checkpoint = torch.load(path, map_location=device)
+    state = checkpoint["model_state"]
+    if "card_embedding" not in state:
+        raise ValueError(f"{path} does not contain model_state['card_embedding']")
+    return state["card_embedding"].detach().float().cpu(), checkpoint.get("config", {})
+
+
+def initialize_card_embeddings(
+    model: DeckTransformerCBOW,
+    pretrained: torch.Tensor | None,
+    device: torch.device,
+) -> None:
+    with torch.no_grad():
+        torch.nn.init.normal_(model.token_embedding.weight, mean=0.0, std=0.02)
+        model.token_embedding.weight[model.pad_id].zero_()
+        if pretrained is None:
+            return
+        rows = min(pretrained.size(0), model.vocab_size)
+        cols = min(pretrained.size(1), model.token_embedding.embedding_dim)
+        model.token_embedding.weight[:rows, :cols] = pretrained[:rows, :cols].to(device)
+
+
 def weighted_cross_entropy(logits: torch.Tensor, target: torch.Tensor, sample_weight: torch.Tensor) -> torch.Tensor:
     loss_by_sample = F.cross_entropy(logits, target, reduction="none")
     return (loss_by_sample * sample_weight).sum() / sample_weight.sum().clamp_min(1e-6)
 
 
 def evaluate_model(
-    model: DeckCBOW,
-    loader: DataLoader[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+    model: DeckTransformerCBOW,
+    loader: DataLoader[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
     device: torch.device,
 ) -> tuple[float, float, float]:
     model.eval()
@@ -318,11 +368,12 @@ def evaluate_model(
     top5 = 0.0
     total_examples = 0
     with torch.no_grad():
-        for context_counts, target, sample_weight in loader:
-            context_counts = context_counts.to(device)
+        for token_ids, padding_mask, target, sample_weight in loader:
+            token_ids = token_ids.to(device)
+            padding_mask = padding_mask.to(device)
             target = target.to(device)
             sample_weight = sample_weight.to(device)
-            logits = model(context_counts)
+            logits = model(token_ids, padding_mask)
             loss_by_sample = F.cross_entropy(logits, target, reduction="none")
             total_loss += float((loss_by_sample * sample_weight).sum().item())
             total_weight += float(sample_weight.sum().item())
@@ -337,40 +388,72 @@ def evaluate_model(
     )
 
 
-def train_model(args: argparse.Namespace) -> int:
+def validate_train_args(args: argparse.Namespace) -> None:
     if args.min_context < 0:
         raise ValueError("--min-context must be non-negative")
     if args.max_context < args.min_context:
         raise ValueError("--max-context must be greater than or equal to --min-context")
     if args.max_context > DECK_SIZE - 1:
         raise ValueError(f"--max-context must be at most {DECK_SIZE - 1}")
+    if args.heads <= 0:
+        raise ValueError("--heads must be positive")
+    if args.layers <= 0:
+        raise ValueError("--layers must be positive")
+    if args.embedding_dim < 0:
+        raise ValueError("--embedding-dim must be non-negative")
 
+
+def train_model(args: argparse.Namespace) -> int:
+    validate_train_args(args)
     torch.manual_seed(args.seed)
+    device = resolve_device(args.device)
+
+    pretrained: torch.Tensor | None = None
+    word2vec_config: dict[str, Any] = {}
+    if args.random_init:
+        embedding_dim = args.embedding_dim or 128
+    else:
+        pretrained, word2vec_config = load_word2vec_embedding(args.word2vec_checkpoint, device)
+        embedding_dim = args.embedding_dim or int(pretrained.size(1))
+        if pretrained.size(1) != embedding_dim:
+            raise ValueError(
+                "--embedding-dim must match deck_word2vec.pt card_embedding dimension "
+                f"({pretrained.size(1)}) unless --random-init is used"
+            )
+
+    if embedding_dim % args.heads != 0:
+        raise ValueError("--embedding-dim must be divisible by --heads")
+
     card_meta = load_card_meta(args.card_data)
     all_records = read_deck_candidates(args.index)
     records = sample_records(all_records, args.max_decks, args.seed, args.deck_sampling)
     train_records, valid_records = split_records(records, args.valid_ratio, args.seed)
     decks = [record.deck for record in records]
     known_card_ids = build_card_id_set(decks)
-    vocab_size = max(max(known_card_ids), max(card_meta, default=0)) + 1
+    max_pretrained_id = int(pretrained.size(0) - 1) if pretrained is not None else 0
+    vocab_size = max(max(known_card_ids), max(card_meta, default=0), max_pretrained_id) + 1
+    pad_id = vocab_size
+    bos_id = vocab_size + 1
 
     train_weights = weights_to_tensor(train_records, args.win_rate_weight)
     valid_weights = weights_to_tensor(valid_records, args.win_rate_weight)
-    train_dataset = DeckCBOWDataset(
+    train_dataset = DeckTransformerDataset(
         train_records,
-        vocab_size,
+        max_context=args.max_context,
+        pad_id=pad_id,
+        bos_id=bos_id,
         samples_per_deck=args.samples_per_deck,
         min_context=args.min_context,
-        max_context=args.max_context,
         deck_loss_weights=train_weights,
         seed=args.seed,
     )
-    valid_dataset = DeckCBOWDataset(
+    valid_dataset = DeckTransformerDataset(
         valid_records,
-        vocab_size,
+        max_context=args.max_context,
+        pad_id=pad_id,
+        bos_id=bos_id,
         samples_per_deck=max(1, args.samples_per_deck // 4),
         min_context=args.min_context,
-        max_context=args.max_context,
         deck_loss_weights=valid_weights,
         seed=args.seed + 1_000_000,
     )
@@ -382,8 +465,17 @@ def train_model(args: argparse.Namespace) -> int:
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler)
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size)
 
-    device = resolve_device(args.device)
-    model = DeckCBOW(vocab_size, args.embedding_dim, args.dropout).to(device)
+    model = DeckTransformerCBOW(
+        vocab_size=vocab_size,
+        embedding_dim=embedding_dim,
+        heads=args.heads,
+        layers=args.layers,
+        ff_dim=args.ff_dim,
+        dropout=args.dropout,
+        pad_id=pad_id,
+        bos_id=bos_id,
+    ).to(device)
+    initialize_card_embeddings(model, pretrained, device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     best_valid = float("inf")
@@ -394,11 +486,12 @@ def train_model(args: argparse.Namespace) -> int:
         model.train()
         train_loss = 0.0
         train_batches = 0
-        for context_counts, target, sample_weight in train_loader:
-            context_counts = context_counts.to(device)
+        for token_ids, padding_mask, target, sample_weight in train_loader:
+            token_ids = token_ids.to(device)
+            padding_mask = padding_mask.to(device)
             target = target.to(device)
             sample_weight = sample_weight.to(device)
-            logits = model(context_counts)
+            logits = model(token_ids, padding_mask)
             loss = weighted_cross_entropy(logits, target, sample_weight)
             optimizer.zero_grad()
             loss.backward()
@@ -430,9 +523,19 @@ def train_model(args: argparse.Namespace) -> int:
             "model_state": model.state_dict(),
             "config": {
                 "vocab_size": vocab_size,
-                "embedding_dim": args.embedding_dim,
+                "pad_id": pad_id,
+                "bos_id": bos_id,
+                "embedding_dim": embedding_dim,
+                "heads": args.heads,
+                "layers": args.layers,
+                "ff_dim": args.ff_dim,
                 "dropout": args.dropout,
+                "max_context": args.max_context,
                 "known_card_ids": known_card_ids,
+                "word2vec_checkpoint": str(args.word2vec_checkpoint),
+                "word2vec_embedding_dim": int(pretrained.size(1)) if pretrained is not None else None,
+                "word2vec_vocab_size": int(word2vec_config.get("vocab_size", 0)),
+                "random_init": bool(args.random_init),
                 "win_rate_weight": args.win_rate_weight,
                 "deck_sampling": args.deck_sampling,
                 "device_option": args.device,
@@ -515,12 +618,11 @@ def fallback_card_id(known_card_ids: list[int], card_meta: dict[int, CardMeta], 
     return 3
 
 
-def context_counts_from_deck(deck: list[int], vocab_size: int, device: torch.device) -> torch.Tensor:
-    context_counts = torch.zeros((1, vocab_size), dtype=torch.float32, device=device)
-    for card_id in deck:
-        if 0 <= card_id < vocab_size:
-            context_counts[0, card_id] += 1.0
-    return context_counts
+def tokens_from_deck(deck: list[int], pad_id: int, bos_id: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    tokens = [bos_id] + [card_id for card_id in deck if 0 <= card_id < pad_id]
+    token_ids = torch.tensor([tokens], dtype=torch.long, device=device)
+    padding_mask = token_ids == pad_id
+    return token_ids, padding_mask
 
 
 def choose_next_card(
@@ -548,11 +650,10 @@ def choose_next_card(
 
 
 def generate_deck(
-    model: DeckCBOW,
+    model: DeckTransformerCBOW,
     observed_cards: list[int],
     known_card_ids: list[int],
     card_meta: dict[int, CardMeta],
-    vocab_size: int,
     device: torch.device,
     temperature: float,
     top_k: int,
@@ -563,8 +664,8 @@ def generate_deck(
     model.eval()
     with torch.no_grad():
         while len(deck) < DECK_SIZE:
-            context_counts = context_counts_from_deck(deck, vocab_size, device)
-            logits = model(context_counts)[0].detach().cpu()
+            token_ids, padding_mask = tokens_from_deck(deck, model.pad_id, model.bos_id, device)
+            logits = model(token_ids, padding_mask)[0].detach().cpu()
             next_card = choose_next_card(logits, known_card_ids, deck, card_meta, temperature, top_k, rng)
             if next_card is None:
                 next_card = fallback_card_id(known_card_ids, card_meta, deck)
@@ -576,11 +677,15 @@ def generate(args: argparse.Namespace) -> int:
     device = resolve_device(args.device)
     checkpoint = torch.load(args.checkpoint, map_location=device)
     config = checkpoint["config"]
-    vocab_size = int(config["vocab_size"])
-    model = DeckCBOW(
-        vocab_size=vocab_size,
+    model = DeckTransformerCBOW(
+        vocab_size=int(config["vocab_size"]),
         embedding_dim=int(config["embedding_dim"]),
+        heads=int(config["heads"]),
+        layers=int(config["layers"]),
+        ff_dim=int(config["ff_dim"]),
         dropout=float(config.get("dropout", 0.0)),
+        pad_id=int(config["pad_id"]),
+        bos_id=int(config["bos_id"]),
     ).to(device)
     model.load_state_dict(checkpoint["model_state"])
 
@@ -592,7 +697,6 @@ def generate(args: argparse.Namespace) -> int:
         observed_cards=observed_cards,
         known_card_ids=known_card_ids,
         card_meta=card_meta,
-        vocab_size=vocab_size,
         device=device,
         temperature=args.temperature,
         top_k=args.top_k,

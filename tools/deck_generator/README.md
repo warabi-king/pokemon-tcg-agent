@@ -240,3 +240,64 @@ checkpoint を指定する場合:
 
 生成時は、同名4枚制限、基本エネルギー例外、ACE SPEC 1枚制限を考慮してカードを追加します。
 `--temperature 0` では greedy に選び、`--temperature` に正の値を指定すると `--top-k` 件から確率的にサンプリングします。
+
+## 8. CBOW Transformer 形式でデッキ生成モデルを学習する
+
+`train_deck_transformer_cbow.py` は、`deck_word2vec.pt` のカード埋め込みを初期値として使い、Transformer で次に入りやすいカードを予測するモデルです。
+デッキは順序なしの集合として扱いたいため、position encoding は使わず、文脈カード集合を `TransformerEncoder` に通して mean pooling します。
+
+学習時の入力と出力は次の形です。
+
+```text
+文脈カード ID 列 -> TransformerEncoder -> mean pooling -> 伏せたカード ID
+```
+
+word2vec 版との違いは、文脈カードの埋め込みを単純平均するだけでなく、Transformer の self-attention でカード同士の関係を見てから次カードを分類する点です。
+デフォルトでは `generated/deck_word2vec.pt` を読み込み、`generated/deck_transformer_cbow.pt` に保存します。
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_transformer_cbow.py train
+```
+
+軽量な動作確認:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_transformer_cbow.py train --epochs 1 --batch-size 16 --layers 1 --heads 4 --ff-dim 128 --samples-per-deck 1 --max-decks 20 --output tools\deck_generator\generated\debug_deck_transformer_cbow.pt
+```
+
+主な学習オプション:
+
+- `--word2vec-checkpoint PATH`: 初期化に使う word2vec checkpoint。デフォルトは `generated/deck_word2vec.pt`。
+- `--random-init`: word2vec checkpoint を使わずランダム初期化する。
+- `--embedding-dim N`: 埋め込み次元数。`0` の場合は word2vec checkpoint の次元数を使う。
+- `--layers N`: TransformerEncoder の層数。
+- `--heads N`: attention head 数。`embedding_dim` を割り切れる必要がある。
+- `--ff-dim N`: TransformerEncoder 内の feed-forward 層サイズ。
+- `--samples-per-deck N`: 1デッキから作る学習サンプル数。
+- `--min-context N`: 文脈として使うカード枚数の最小値。
+- `--max-context N`: 文脈として使うカード枚数の最大値。最大は59。
+- `--max-decks N`: 学習に使うデッキ数の上限。
+- `--deck-sampling cluster-weight|cluster-wins`: 学習デッキのサンプリング重み。
+- `--win-rate-weight N`: 勝率が高いデッキの loss 重みを増やす。
+- `--device gpu`: GPU を使う。
+
+生成:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_transformer_cbow.py generate --observed 741,742,743 --json
+```
+
+checkpoint を指定する場合:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_transformer_cbow.py generate --checkpoint tools\deck_generator\generated\deck_transformer_cbow.pt --observed 741,742,743 --json
+```
+
+`predict` は `generate` の別名として使えます。
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_transformer_cbow.py predict --observed 741,742,743 --json
+```
+
+生成時は、観測済みカードを文脈として使い、1枚ずつカードを追加して60枚にします。
+同名4枚制限、基本エネルギー例外、ACE SPEC 1枚制限を考慮し、`--temperature 0` では greedy、正の値では `--top-k` 件から確率的にサンプリングします。
