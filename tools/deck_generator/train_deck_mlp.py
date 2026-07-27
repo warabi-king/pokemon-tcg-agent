@@ -17,10 +17,19 @@ from torch.utils.data import DataLoader, Dataset
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_INDEX = SCRIPT_DIR / "generated" / "deck_candidates.jsonl"
+DEFAULT_WIN_INDEX = SCRIPT_DIR / "generated" / "deck_candidates_by_wins.jsonl"
 DEFAULT_CARD_DATA = ROOT / "data" / "EN_Card_Data.csv"
 DEFAULT_MODEL = SCRIPT_DIR / "generated" / "deck_mlp.pt"
 DECK_SIZE = 60
 COUNT_SCALE = 4.0
+
+
+@dataclass(frozen=True)
+class DeckRecord:
+    deck: list[int]
+    win_rate: float = 0.5
+    games: int = 1
+    wins: int = 0
 
 
 @dataclass(frozen=True)
@@ -57,16 +66,18 @@ class DeckMLP(torch.nn.Module):
         return self.net(x)
 
 
-class PartialDeckDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
+class PartialDeckDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]):
     def __init__(
         self,
         deck_counts: torch.Tensor,
+        deck_weights: torch.Tensor,
         samples_per_deck: int,
         min_observed: int,
         max_observed: int,
         seed: int,
     ) -> None:
         self.deck_counts = deck_counts
+        self.deck_weights = deck_weights
         self.samples_per_deck = samples_per_deck
         self.min_observed = min_observed
         self.max_observed = max_observed
@@ -75,7 +86,7 @@ class PartialDeckDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
     def __len__(self) -> int:
         return self.deck_counts.size(0) * self.samples_per_deck
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         deck_index = index // self.samples_per_deck
         rng = random.Random(self.seed + index)
         target = self.deck_counts[deck_index]
@@ -95,15 +106,15 @@ class PartialDeckDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
                 torch.tensor([observed_total / DECK_SIZE], dtype=torch.float32),
             ]
         )
-        return observed_feature, target / COUNT_SCALE
+        return observed_feature, target / COUNT_SCALE, self.deck_weights[deck_index]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train or query an MLP deck completion model.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    train = subparsers.add_parser("train", help="Train MLP from deck_candidates.jsonl.")
-    train.add_argument("--index", type=Path, default=DEFAULT_INDEX)
+    train = subparsers.add_parser("train", help="Train MLP from deck candidate JSONL.")
+    train.add_argument("--index", type=Path, default=DEFAULT_WIN_INDEX)
     train.add_argument("--card-data", type=Path, default=DEFAULT_CARD_DATA)
     train.add_argument("--output", type=Path, default=DEFAULT_MODEL)
     train.add_argument("--epochs", type=int, default=20)
@@ -117,8 +128,20 @@ def parse_args() -> argparse.Namespace:
     train.add_argument("--sum-loss-weight", type=float, default=0.05)
     train.add_argument("--samples-per-deck", type=int, default=4)
     train.add_argument("--min-observed", type=int, default=1)
-    train.add_argument("--max-observed", type=int, default=24)
+    train.add_argument("--max-observed", type=int, default=48)
     train.add_argument("--max-decks", type=int, help="Use at most this many decks from the index.")
+    train.add_argument(
+        "--win-rate-weight",
+        type=float,
+        default=0.0,
+        help="Increase loss weight for high win-rate decks. 0 disables weighting.",
+    )
+    train.add_argument(
+        "--deck-sampling",
+        choices=["random", "wins", "win-rate"],
+        default="random",
+        help="How to choose decks when --max-decks is set.",
+    )
     train.add_argument("--valid-ratio", type=float, default=0.1)
     train.add_argument("--seed", type=int, default=0)
     train.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -158,30 +181,46 @@ def load_card_meta(path: Path) -> dict[int, CardMeta]:
     return result
 
 
-def read_deck_candidates(path: Path) -> list[list[int]]:
-    decks: list[list[int]] = []
+def read_deck_candidates(path: Path) -> list[DeckRecord]:
+    records: list[DeckRecord] = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
-            record = json.loads(line)
-            deck = record["deck"]
+            raw = json.loads(line)
+            deck = raw["deck"]
             if len(deck) != DECK_SIZE:
-                raise ValueError(f"deck length must be 60: {record.get('episode_file')}")
-            decks.append([int(card_id) for card_id in deck])
-    if not decks:
+                raise ValueError(f"deck length must be 60: {raw.get('episode_file')}")
+            records.append(
+                DeckRecord(
+                    deck=[int(card_id) for card_id in deck],
+                    win_rate=float(raw.get("win_rate", 0.5)),
+                    games=int(raw.get("games", 1)),
+                    wins=int(raw.get("wins", 0)),
+                )
+            )
+    if not records:
         raise ValueError(f"no decks found in {path}")
-    return decks
+    return records
 
 
-def sample_decks(decks: list[list[int]], max_decks: int | None, seed: int) -> list[list[int]]:
-    if max_decks is None or max_decks >= len(decks):
-        return decks
+def sample_records(
+    records: list[DeckRecord],
+    max_decks: int | None,
+    seed: int,
+    sampling: str,
+) -> list[DeckRecord]:
+    if max_decks is None or max_decks >= len(records):
+        return records
     if max_decks <= 0:
         raise ValueError("--max-decks must be positive")
-    indices = list(range(len(decks)))
+    if sampling == "wins":
+        return sorted(records, key=lambda record: (-record.wins, -record.win_rate, -record.games))[:max_decks]
+    if sampling == "win-rate":
+        return sorted(records, key=lambda record: (-record.win_rate, -record.wins, -record.games))[:max_decks]
+    indices = list(range(len(records)))
     random.Random(seed).shuffle(indices)
-    return [decks[index] for index in indices[:max_decks]]
+    return [records[index] for index in indices[:max_decks]]
 
 
 def build_card_id_set(decks: list[list[int]]) -> list[int]:
@@ -199,7 +238,21 @@ def decks_to_tensor(decks: list[list[int]], vocab_size: int) -> torch.Tensor:
     return rows
 
 
-def split_tensor(data: torch.Tensor, valid_ratio: float, seed: int) -> tuple[torch.Tensor, torch.Tensor]:
+def weights_to_tensor(records: list[DeckRecord], win_rate_weight: float) -> torch.Tensor:
+    weights = torch.ones(len(records), dtype=torch.float32)
+    if win_rate_weight <= 0:
+        return weights
+    for index, record in enumerate(records):
+        weights[index] = 1.0 + win_rate_weight * max(0.0, min(1.0, record.win_rate))
+    return weights
+
+
+def split_tensors(
+    data: torch.Tensor,
+    weights: torch.Tensor,
+    valid_ratio: float,
+    seed: int,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     indices = list(range(data.size(0)))
     random.Random(seed).shuffle(indices)
     valid_size = max(1, int(len(indices) * valid_ratio))
@@ -207,37 +260,47 @@ def split_tensor(data: torch.Tensor, valid_ratio: float, seed: int) -> tuple[tor
     train_indices = indices[valid_size:]
     if not train_indices:
         train_indices, valid_indices = indices, indices
-    return data[train_indices], data[valid_indices]
+    return data[train_indices], weights[train_indices], data[valid_indices], weights[valid_indices]
 
 
 def deck_loss(
     pred: torch.Tensor,
     target: torch.Tensor,
+    sample_weight: torch.Tensor,
     positive_weight: float,
     sum_loss_weight: float,
 ) -> torch.Tensor:
     element_loss = F.smooth_l1_loss(pred, target, reduction="none")
     weights = torch.ones_like(target)
     weights = weights + (target > 0).float() * positive_weight
-    count_loss = (element_loss * weights).mean()
+    count_loss_by_sample = (element_loss * weights).mean(dim=1)
     pred_sum = torch.relu(pred).sum(dim=1)
     target_sum = target.sum(dim=1)
-    sum_loss = F.smooth_l1_loss(pred_sum, target_sum)
-    return count_loss + sum_loss * sum_loss_weight
+    sum_loss_by_sample = F.smooth_l1_loss(pred_sum, target_sum, reduction="none")
+    loss_by_sample = count_loss_by_sample + sum_loss_by_sample * sum_loss_weight
+    return (loss_by_sample * sample_weight).sum() / sample_weight.sum().clamp_min(1e-6)
 
 
 def train_model(args: argparse.Namespace) -> int:
     torch.manual_seed(args.seed)
     card_meta = load_card_meta(args.card_data)
-    all_decks = read_deck_candidates(args.index)
-    decks = sample_decks(all_decks, args.max_decks, args.seed)
+    all_records = read_deck_candidates(args.index)
+    records = sample_records(all_records, args.max_decks, args.seed, args.deck_sampling)
+    decks = [record.deck for record in records]
     known_card_ids = build_card_id_set(decks)
     vocab_size = max(max(known_card_ids), max(card_meta, default=0)) + 1
     deck_counts = decks_to_tensor(decks, vocab_size)
-    train_counts, valid_counts = split_tensor(deck_counts, args.valid_ratio, args.seed)
+    deck_weights = weights_to_tensor(records, args.win_rate_weight)
+    train_counts, train_weights, valid_counts, valid_weights = split_tensors(
+        deck_counts,
+        deck_weights,
+        args.valid_ratio,
+        args.seed,
+    )
 
     train_dataset = PartialDeckDataset(
         train_counts,
+        train_weights,
         samples_per_deck=args.samples_per_deck,
         min_observed=args.min_observed,
         max_observed=args.max_observed,
@@ -245,6 +308,7 @@ def train_model(args: argparse.Namespace) -> int:
     )
     valid_dataset = PartialDeckDataset(
         valid_counts,
+        valid_weights,
         samples_per_deck=max(1, args.samples_per_deck // 2),
         min_observed=args.min_observed,
         max_observed=args.max_observed,
@@ -269,11 +333,12 @@ def train_model(args: argparse.Namespace) -> int:
         model.train()
         train_loss = 0.0
         train_batches = 0
-        for x, y in train_loader:
+        for x, y, sample_weight in train_loader:
             x = x.to(device)
             y = y.to(device)
+            sample_weight = sample_weight.to(device)
             pred = model(x)
-            loss = deck_loss(pred, y, args.positive_weight, args.sum_loss_weight)
+            loss = deck_loss(pred, y, sample_weight, args.positive_weight, args.sum_loss_weight)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -284,11 +349,12 @@ def train_model(args: argparse.Namespace) -> int:
         valid_loss = 0.0
         valid_batches = 0
         with torch.no_grad():
-            for x, y in valid_loader:
+            for x, y, sample_weight in valid_loader:
                 x = x.to(device)
                 y = y.to(device)
+                sample_weight = sample_weight.to(device)
                 pred = model(x)
-                loss = deck_loss(pred, y, args.positive_weight, args.sum_loss_weight)
+                loss = deck_loss(pred, y, sample_weight, args.positive_weight, args.sum_loss_weight)
                 valid_loss += float(loss.item())
                 valid_batches += 1
 
@@ -314,6 +380,8 @@ def train_model(args: argparse.Namespace) -> int:
                 "count_scale": COUNT_SCALE,
                 "positive_weight": args.positive_weight,
                 "sum_loss_weight": args.sum_loss_weight,
+                "win_rate_weight": args.win_rate_weight,
+                "deck_sampling": args.deck_sampling,
                 "known_card_ids": known_card_ids,
                 "card_meta": {
                     str(card_id): {
@@ -326,10 +394,12 @@ def train_model(args: argparse.Namespace) -> int:
             },
             "metrics": {
                 "best_valid_loss": best_valid,
-                "source_decks": len(all_decks),
-                "used_decks": len(decks),
+                "source_decks": len(all_records),
+                "used_decks": len(records),
                 "train_decks": int(train_counts.size(0)),
                 "valid_decks": int(valid_counts.size(0)),
+                "mean_win_rate": sum(record.win_rate for record in records) / len(records),
+                "mean_sample_weight": float(deck_weights.mean().item()),
             },
         },
         args.output,

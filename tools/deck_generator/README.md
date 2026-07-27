@@ -76,7 +76,8 @@ tools/deck_generator/generated/deck_candidates_summary.json
 
 ## 3. MLPデッキ補完モデルを学習する
 
-`deck_candidates.jsonl` を教師データとして、MLPを学習します。
+`deck_candidates_by_wins.jsonl` を教師データとして、MLPを学習します。
+このファイルがない場合は、先に `aggregate-wins` を実行してください。
 
 ```powershell
 .\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp.py train
@@ -107,6 +108,8 @@ tools/deck_generator/generated/deck_mlp.pt
 - `--min-observed N`: 観測済みカード枚数の最小値。
 - `--max-observed N`: 観測済みカード枚数の最大値。
 - `--max-decks N`: `deck_candidates.jsonl` から学習に使うデッキ数の上限。
+- `--deck-sampling random|wins|win-rate`: `--max-decks` 指定時に使うデッキの選び方。
+- `--win-rate-weight N`: 勝率が高いデッキのloss重みを増やす。`0` で無効。
 - `--device cpu`: CPUで実行する。
 
 軽量な動作確認:
@@ -119,6 +122,12 @@ tools/deck_generator/generated/deck_mlp.pt
 
 ```powershell
 .\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp.py train --max-decks 50000
+```
+
+勝率の高いデッキを優先して使い、さらにlossも重くする場合:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp.py train --max-decks 50000 --deck-sampling win-rate --win-rate-weight 2
 ```
 
 ## 4. MLPでデッキを推論する
