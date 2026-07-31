@@ -21,8 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--template",
         type=Path,
-        default=ROOT / "agents" / "rl_mcts_r_robin1" / "src",
-        help="cg・rl_mcts・main.pyの生成元",
+        default=ROOT / "agents" / "rl_mcts" / "src",
+        help="cg・rl_mcts・main.pyの生成元（リポジトリ標準テンプレート）",
     )
     parser.add_argument("--prefix", default="rl_mcts_match_", help="生成agent名のprefix")
     return parser.parse_args()
@@ -30,9 +30,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    sources = sorted(path for path in args.source.iterdir() if path.is_dir())
-    if len(sources) != 8:
-        raise SystemExit(f"match agentは8個必要です: {args.source} ({len(sources)}個)")
+    # 番号名(00,01,...)のディレクトリだけを対象にする（imitation_group* や train は無視）。
+    sources = sorted(
+        path
+        for path in args.source.iterdir()
+        if path.is_dir() and path.name.isdigit()
+    )
+    if not sources:
+        raise SystemExit(f"番号付きmatch agentが見つかりません: {args.source}")
 
     for source in sources:
         deck_path = source / "deck.csv"
