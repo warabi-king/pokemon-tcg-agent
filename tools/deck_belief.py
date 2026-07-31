@@ -79,8 +79,16 @@ def _add_pokemon(
 def public_cards_by_player(
     state: dict[str, Any],
     select: dict[str, Any] | None = None,
-) -> tuple[list[int], list[int]]:
-    """現在、非公開の山札・サイド・手札以外にあるカードをowner別に返す。"""
+    split_tentative: bool = False,
+) -> Any:
+    """現在、非公開の山札・サイド・手札以外にあるカードをowner別に返す。
+
+    split_tentative=True のときは (definite, tentative) を返す。
+    definite は active/bench/discard/stadium/looking など確実に公開されている物理カード、
+    tentative は select.contextCard/effect のように「効果解決中で宙に浮いているが、
+    libcg が deck/hand 等で依然スロットを保持している可能性がある」カード。
+    デフォルト(False)では両者を結合した従来どおりの owner 別リストを返す。
+    """
     serial_cards: tuple[dict[int, int], dict[int, int]] = ({}, {})
     anonymous_cards: tuple[list[int], list[int]] = ([], [])
     known_hidden_serials: tuple[set[int], set[int]] = (set(), set())
@@ -126,24 +134,39 @@ def public_cards_by_player(
             _add_card(card, serial_cards[int(owner)], anonymous_cards[int(owner)])
 
     # 効果解決中のカードは手札等から既に外れているが、まだトラッシュや場へ
-    # 移っていない。select.deckは山札そのものなのでここには含めない。
+    # 移っていない場合がある。ただし libcg が deck/hand 等でそのスロットを
+    # 依然として数えていることもあるため、確定公開(definite)には含めず
+    # 「暫定(tentative)」として分けて扱う。select.deckは山札そのものなので含めない。
+    tentative: tuple[list[int], list[int]] = ([], [])
     for field_name in ("contextCard", "effect"):
         card = (select or {}).get(field_name)
         if not isinstance(card, dict):
             continue
         owner = card.get("playerIndex")
-        if owner in (0, 1):
-            owner = int(owner)
-            serial = _card_serial(card)
-            # 選択中のcontextCardがまだ手札に残っている場合がある。
-            # 同じ物理カードを2つのzoneとして数えない。
-            if serial is not None and serial in known_hidden_serials[owner]:
-                continue
-            _add_card(card, serial_cards[owner], anonymous_cards[owner])
+        if owner not in (0, 1):
+            continue
+        owner = int(owner)
+        card_id = _card_id(card)
+        if card_id is None:
+            continue
+        serial = _card_serial(card)
+        # 手札/サイドに残っている同一物理カードは二重に数えない。
+        if serial is not None and serial in known_hidden_serials[owner]:
+            continue
+        # 既に可視zone(active/bench/discard等)で計上済みの同一物理カード
+        # (例: effect が自分のactive) も二重に数えない。
+        if serial is not None and serial in serial_cards[owner]:
+            continue
+        tentative[owner].append(card_id)
 
-    return tuple(  # type: ignore[return-value]
+    definite = [
         list(serial_cards[index].values()) + anonymous_cards[index]
         for index in range(2)
+    ]
+    if split_tentative:
+        return definite, tentative
+    return tuple(  # type: ignore[return-value]
+        definite[index] + tentative[index] for index in range(2)
     )
 
 
@@ -339,6 +362,28 @@ def _take(pool: list[int], count: int, label: str) -> list[int]:
     return result
 
 
+def _subtract_tentative(
+    remaining: Counter[int], tentative_ids: Iterable[int], required: int
+) -> None:
+    """解決中(tentative)カードは、隠しpoolが必要数(required)を超える分だけ差し引く。
+
+    libcg が deck/hand 等でスロットを既に保持している場合は差し引かず
+    (pool==required のまま)、純粋に場から外れて宙に浮いた分だけを
+    公開札として除外する(pool>required のときだけ減算)。これにより
+    「効果解決中カードの二重計上」による割当不足を防ぐ。
+    """
+    excess = sum(remaining.values()) - required
+    for card_id in tentative_ids:
+        if excess <= 0:
+            break
+        card_id = int(card_id)
+        if remaining.get(card_id, 0) > 0:
+            remaining[card_id] -= 1
+            if remaining[card_id] == 0:
+                del remaining[card_id]
+            excess -= 1
+
+
 def sample_hidden_zones(
     observation: dict[str, Any],
     your_index: int,
@@ -364,26 +409,32 @@ def sample_hidden_zones(
     full_decks_list[opponent_index] = opponent_full
     full_decks = (full_decks_list[0], full_decks_list[1])
 
-    public = public_cards_by_player(state, observation.get("select"))
+    definite, tentative = public_cards_by_player(
+        state, observation.get("select"), split_tentative=True
+    )
 
     # 自分の手札はすべて見えており、BattleのObservationをそのまま使う。
     # ここで生成するのはSearchBegin引数になる山札と裏向きサイドだけ。
     own_player = players[your_index]
     own_prize_slots = own_player.get("prize") or []
     own_known_prize = _known_cards(own_prize_slots)
+    own_deck_count = int(own_player.get("deckCount", 0))
+    own_unknown_prize_count = len(own_prize_slots) - len(own_known_prize)
     own_remaining = Counter(own_full)
-    _subtract_cards(own_remaining, public[your_index], "自分の公開zone")
+    _subtract_cards(own_remaining, definite[your_index], "自分の公開zone")
     _subtract_cards(own_remaining, own_known_prize, "自分の表向きサイド")
     _subtract_cards(
         own_remaining,
         _known_cards(own_player.get("hand")),
         "自分の手札",
     )
+    _subtract_tentative(
+        own_remaining, tentative[your_index],
+        own_deck_count + own_unknown_prize_count,
+    )
     own_pool = list(own_remaining.elements())
     rng.shuffle(own_pool)
-    own_deck_count = int(own_player.get("deckCount", 0))
     your_deck = _take(own_pool, own_deck_count, "自分の山札")
-    own_unknown_prize_count = len(own_prize_slots) - len(own_known_prize)
     your_prize = _fill_card_slots(
         own_prize_slots,
         _take(own_pool, own_unknown_prize_count, "自分のサイド"),
@@ -394,31 +445,32 @@ def sample_hidden_zones(
     opponent_prize_slots = opponent_player.get("prize") or []
     opponent_known_prize = _known_cards(opponent_prize_slots)
     opponent_known_hand = _known_cards(opponent_player.get("hand"))
+    opponent_deck_count = int(opponent_player.get("deckCount", 0))
+    opponent_unknown_prize_count = len(opponent_prize_slots) - len(
+        opponent_known_prize
+    )
+    opponent_unknown_hand_count = max(
+        0,
+        int(opponent_player.get("handCount", 0)) - len(opponent_known_hand),
+    )
     opponent_remaining = Counter(opponent_full)
-    _subtract_cards(opponent_remaining, public[opponent_index], "相手の公開zone")
+    _subtract_cards(opponent_remaining, definite[opponent_index], "相手の公開zone")
     _subtract_cards(
         opponent_remaining,
         opponent_known_prize,
         "相手の表向きサイド",
     )
     _subtract_cards(opponent_remaining, opponent_known_hand, "相手の既知手札")
+    _subtract_tentative(
+        opponent_remaining, tentative[opponent_index],
+        opponent_deck_count + opponent_unknown_prize_count + opponent_unknown_hand_count,
+    )
     opponent_pool = list(opponent_remaining.elements())
     rng.shuffle(opponent_pool)
-    opponent_deck = _take(
-        opponent_pool,
-        int(opponent_player.get("deckCount", 0)),
-        "相手の山札",
-    )
-    opponent_unknown_prize_count = len(opponent_prize_slots) - len(
-        opponent_known_prize
-    )
+    opponent_deck = _take(opponent_pool, opponent_deck_count, "相手の山札")
     opponent_prize = _fill_card_slots(
         opponent_prize_slots,
         _take(opponent_pool, opponent_unknown_prize_count, "相手のサイド"),
-    )
-    opponent_unknown_hand_count = max(
-        0,
-        int(opponent_player.get("handCount", 0)) - len(opponent_known_hand),
     )
     opponent_hand = opponent_known_hand + _take(
         opponent_pool,
