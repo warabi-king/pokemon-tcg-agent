@@ -87,7 +87,13 @@ tools/deck_generator/generated/deck_candidates_by_wins.jsonl
 
 同じようなデッキが多いクラスタほど、各デッキの選択確率は低くなります。
 
-## 5. MLP デッキ補完モデルを学習する
+## 5. デッキを階層クラスタリングする
+
+階層クラスタリング、評価、デンドログラム、クラスタ主要デッキ生成は
+`tools/clustering_deck/` へ分離しました。実行方法と出力仕様は
+[clustering_deckのREADME](../clustering_deck/README.md)を参照してください。
+
+## 6. MLP デッキ補完モデルを学習する
 
 デフォルトでは `generated/deck_candidates_by_wins.jsonl` を使って学習します。
 
@@ -161,7 +167,7 @@ GPU を使う場合:
 .\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp.py train --epochs 1 --batch-size 64 --hidden-size 64 --layers 1 --samples-per-deck 1 --max-decks 100 --output tools\deck_generator\generated\debug_deck_mlp.pt
 ```
 
-## 6. MLP でデッキを推論する
+## 7. MLP でデッキを推論する
 
 学習済みモデルを使い、見えているカードから 60 枚デッキ候補を生成します。
 
@@ -183,7 +189,7 @@ checkpoint を指定する場合:
 
 推論時は、観測済みカード枚数を必ず満たすように、予測されたカード count をもとに 60 枚へ丸めます。カードを追加する順位は `predicted_count / count_scale` の正規化済みスコアで決めるため、基本エネルギーの `count_scale` が大きいだけで過剰に選ばれることを抑えます。その際、同名 4 枚制限、基本エネルギー例外、ACE SPEC 1 枚制限を考慮します。
 
-## 7. word2vec/CBOW 形式でデッキ生成モデルを学習する
+## 8. word2vec/CBOW 形式でデッキ生成モデルを学習する
 
 `train_deck_word2vec.py` は、MLP ではなく word2vec の CBOW に近い形式でデッキ生成を学習します。
 各カード ID を one-hot トークンとして扱い、1つのデッキから一部のカードを文脈として取り出し、その文脈から伏せた1枚のカード ID を分類で予測します。
@@ -241,7 +247,7 @@ checkpoint を指定する場合:
 生成時は、同名4枚制限、基本エネルギー例外、ACE SPEC 1枚制限を考慮してカードを追加します。
 `--temperature 0` では greedy に選び、`--temperature` に正の値を指定すると `--top-k` 件から確率的にサンプリングします。
 
-## 8. CBOW Transformer 形式でデッキ生成モデルを学習する
+## 9. CBOW Transformer 形式でデッキ生成モデルを学習する
 
 `train_deck_transformer_cbow.py` は、`deck_word2vec.pt` のカード埋め込みを初期値として使い、Transformer で次に入りやすいカードを予測するモデルです。
 デッキは順序なしの集合として扱いたいため、position encoding は使わず、文脈カード集合を `TransformerEncoder` に通して mean pooling します。
