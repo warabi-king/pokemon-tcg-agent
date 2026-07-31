@@ -117,11 +117,17 @@ class DeckTransformerDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Ten
         rng = random.Random(self.seed + index)
         deck = self.records[deck_index].deck
 
-        target_pos = rng.randrange(len(deck))
-        target_card = deck[target_pos]
-        context_pool = deck[:target_pos] + deck[target_pos + 1 :]
-        context_size = rng.randint(self.min_context, min(self.max_context, len(context_pool)))
-        context_cards = rng.sample(context_pool, context_size)
+        positions = list(range(len(deck)))
+        context_size = rng.randint(self.min_context, min(self.max_context, len(positions) - 1))
+        context_positions = set(rng.sample(positions, context_size))
+        context_cards: list[int] = []
+        remaining_counts = torch.zeros(self.pad_id, dtype=torch.float32)
+        for position, card_id in enumerate(deck):
+            if position in context_positions:
+                context_cards.append(card_id)
+            elif 0 <= card_id < self.pad_id:
+                remaining_counts[card_id] += 1.0
+        remaining_probs = remaining_counts / remaining_counts.sum().clamp_min(1.0)
 
         tokens = [self.bos_id] + context_cards
         max_tokens = self.max_context + 1
@@ -131,7 +137,7 @@ class DeckTransformerDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Ten
         return (
             token_ids,
             padding_mask,
-            torch.tensor(target_card, dtype=torch.long),
+            remaining_probs,
             self.deck_loss_weights[deck_index],
         )
 
@@ -141,7 +147,7 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Train or query a CBOW Transformer deck generator. "
             "The model uses card embeddings from deck_word2vec.pt, no positional encoding, "
-            "TransformerEncoder pooling, and next-card classification."
+            "TransformerEncoder pooling, and remaining-card distribution prediction."
         )
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -192,6 +198,14 @@ def add_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--observed-file", type=Path, help="File containing one observed card ID per line.")
     parser.add_argument("--temperature", type=float, default=0.0, help="0 uses greedy generation; >0 samples.")
     parser.add_argument("--top-k", type=int, default=20, help="Limit sampling candidates when temperature > 0.")
+    parser.add_argument("--copy-penalty", type=float, default=0.35, help="Subtract this value per existing copy.")
+    parser.add_argument(
+        "--energy-penalty",
+        type=float,
+        default=0.15,
+        help="Subtract this value times current basic-energy count when scoring basic energy.",
+    )
+    parser.add_argument("--max-basic-energy", type=int, default=18, help="-1 disables the basic-energy cap.")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
@@ -351,8 +365,13 @@ def initialize_card_embeddings(
         model.token_embedding.weight[:rows, :cols] = pretrained[:rows, :cols].to(device)
 
 
-def weighted_cross_entropy(logits: torch.Tensor, target: torch.Tensor, sample_weight: torch.Tensor) -> torch.Tensor:
-    loss_by_sample = F.cross_entropy(logits, target, reduction="none")
+def remaining_distribution_loss(
+    logits: torch.Tensor,
+    target_probs: torch.Tensor,
+    sample_weight: torch.Tensor,
+) -> torch.Tensor:
+    log_probs = F.log_softmax(logits, dim=1)
+    loss_by_sample = -(target_probs * log_probs).sum(dim=1)
     return (loss_by_sample * sample_weight).sum() / sample_weight.sum().clamp_min(1e-6)
 
 
@@ -368,19 +387,20 @@ def evaluate_model(
     top5 = 0.0
     total_examples = 0
     with torch.no_grad():
-        for token_ids, padding_mask, target, sample_weight in loader:
+        for token_ids, padding_mask, target_probs, sample_weight in loader:
             token_ids = token_ids.to(device)
             padding_mask = padding_mask.to(device)
-            target = target.to(device)
+            target_probs = target_probs.to(device)
             sample_weight = sample_weight.to(device)
             logits = model(token_ids, padding_mask)
-            loss_by_sample = F.cross_entropy(logits, target, reduction="none")
+            loss_by_sample = -(target_probs * F.log_softmax(logits, dim=1)).sum(dim=1)
             total_loss += float((loss_by_sample * sample_weight).sum().item())
             total_weight += float(sample_weight.sum().item())
             predictions = torch.topk(logits, k=min(5, logits.size(1)), dim=1).indices
-            top1 += float((predictions[:, 0] == target).float().sum().item())
-            top5 += float((predictions == target.unsqueeze(1)).any(dim=1).float().sum().item())
-            total_examples += int(target.numel())
+            target_positive = target_probs > 0
+            top1 += float(target_positive.gather(1, predictions[:, :1]).float().sum().item())
+            top5 += float(target_positive.gather(1, predictions).any(dim=1).float().sum().item())
+            total_examples += int(target_probs.size(0))
     return (
         total_loss / max(total_weight, 1e-6),
         top1 / max(total_examples, 1),
@@ -486,13 +506,13 @@ def train_model(args: argparse.Namespace) -> int:
         model.train()
         train_loss = 0.0
         train_batches = 0
-        for token_ids, padding_mask, target, sample_weight in train_loader:
+        for token_ids, padding_mask, target_probs, sample_weight in train_loader:
             token_ids = token_ids.to(device)
             padding_mask = padding_mask.to(device)
-            target = target.to(device)
+            target_probs = target_probs.to(device)
             sample_weight = sample_weight.to(device)
             logits = model(token_ids, padding_mask)
-            loss = weighted_cross_entropy(logits, target, sample_weight)
+            loss = remaining_distribution_loss(logits, target_probs, sample_weight)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -531,6 +551,7 @@ def train_model(args: argparse.Namespace) -> int:
                 "ff_dim": args.ff_dim,
                 "dropout": args.dropout,
                 "max_context": args.max_context,
+                "target_mode": "remaining-count-distribution",
                 "known_card_ids": known_card_ids,
                 "word2vec_checkpoint": str(args.word2vec_checkpoint),
                 "word2vec_embedding_dim": int(pretrained.size(1)) if pretrained is not None else None,
@@ -618,6 +639,10 @@ def fallback_card_id(known_card_ids: list[int], card_meta: dict[int, CardMeta], 
     return 3
 
 
+def basic_energy_count(deck: list[int], card_meta: dict[int, CardMeta]) -> int:
+    return sum(1 for card_id in deck if card_meta.get(card_id) and card_meta[card_id].is_basic_energy)
+
+
 def tokens_from_deck(deck: list[int], pad_id: int, bos_id: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
     tokens = [bos_id] + [card_id for card_id in deck if 0 <= card_id < pad_id]
     token_ids = torch.tensor([tokens], dtype=torch.long, device=device)
@@ -632,13 +657,44 @@ def choose_next_card(
     card_meta: dict[int, CardMeta],
     temperature: float,
     top_k: int,
+    copy_penalty: float,
+    energy_penalty: float,
+    max_basic_energy: int,
     rng: random.Random,
 ) -> int | None:
-    candidates = [card_id for card_id in known_card_ids if card_id < logits.numel() and allowed_to_add(card_id, deck, card_meta)]
+    current_basic_energy = basic_energy_count(deck, card_meta)
+    candidates = [
+        card_id
+        for card_id in known_card_ids
+        if card_id < logits.numel()
+        and allowed_to_add(card_id, deck, card_meta)
+        and not (
+            max_basic_energy >= 0
+            and card_meta.get(card_id) is not None
+            and card_meta[card_id].is_basic_energy
+            and current_basic_energy >= max_basic_energy
+        )
+    ]
     if not candidates:
         return None
 
-    candidate_logits = torch.tensor([float(logits[card_id].item()) for card_id in candidates], dtype=torch.float32)
+    candidate_logits = torch.tensor(
+        [
+            float(logits[card_id].item())
+            - (
+                0.0
+                if card_meta.get(card_id) is not None and card_meta[card_id].is_basic_energy
+                else copy_penalty * deck.count(card_id)
+            )
+            - (
+                energy_penalty * current_basic_energy
+                if card_meta.get(card_id) is not None and card_meta[card_id].is_basic_energy
+                else 0.0
+            )
+            for card_id in candidates
+        ],
+        dtype=torch.float32,
+    )
     if temperature <= 0:
         return candidates[int(torch.argmax(candidate_logits).item())]
 
@@ -657,6 +713,9 @@ def generate_deck(
     device: torch.device,
     temperature: float,
     top_k: int,
+    copy_penalty: float,
+    energy_penalty: float,
+    max_basic_energy: int,
     seed: int,
 ) -> list[int]:
     rng = random.Random(seed)
@@ -666,7 +725,18 @@ def generate_deck(
         while len(deck) < DECK_SIZE:
             token_ids, padding_mask = tokens_from_deck(deck, model.pad_id, model.bos_id, device)
             logits = model(token_ids, padding_mask)[0].detach().cpu()
-            next_card = choose_next_card(logits, known_card_ids, deck, card_meta, temperature, top_k, rng)
+            next_card = choose_next_card(
+                logits,
+                known_card_ids,
+                deck,
+                card_meta,
+                temperature,
+                top_k,
+                copy_penalty,
+                energy_penalty,
+                max_basic_energy,
+                rng,
+            )
             if next_card is None:
                 next_card = fallback_card_id(known_card_ids, card_meta, deck)
             deck.append(next_card)
@@ -700,12 +770,20 @@ def generate(args: argparse.Namespace) -> int:
         device=device,
         temperature=args.temperature,
         top_k=args.top_k,
+        copy_penalty=max(0.0, args.copy_penalty),
+        energy_penalty=max(0.0, args.energy_penalty),
+        max_basic_energy=args.max_basic_energy,
         seed=args.seed,
     )
     output = {
         "observed": observed_cards,
         "deck": deck,
         "deck_counts": {str(card_id): count for card_id, count in sorted(Counter(deck).items())},
+        "settings": {
+            "copy_penalty": max(0.0, args.copy_penalty),
+            "energy_penalty": max(0.0, args.energy_penalty),
+            "max_basic_energy": args.max_basic_energy,
+        },
     }
     if args.json:
         print(json.dumps(output, ensure_ascii=False, indent=2))
