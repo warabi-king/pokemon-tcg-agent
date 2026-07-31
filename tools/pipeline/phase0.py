@@ -3,10 +3,15 @@
 前処理は preprocess_all で **全エピソードを1回だけ走査**し、全クラスタの own/opp シャードを
 同時生成する（旧版は agent×role ごとに全リプレイを再スキャンしていた）。
 
-方針:
-- self: 近いデッキ（既存 PRETRAINED と類似度 >= SIM_THRESHOLD）があれば、その self モデルを
-        コピーして流用（事前学習の再実行を省略）。無ければ own シャードで新規学習。
-- opp : 常に opp シャードで新規学習（既存 opp モデルは無いため）。
+PRETRAINED（agents/match_agents/imitation_group0-2、shards/ 由来の self+opp 重み）は
+**全クラスタで積極的に再利用**する:
+
+- self: 近いデッキ（既存 PRETRAINED と類似度 >= SIM_THRESHOLD）があれば self モデルを
+        コピーして流用（事前学習の再実行を省略）。
+        しきい値未満でも、own シャードで学習する際は最寄り PRETRAINED の self を
+        warm-start 初期値として使う（ランダム初期化より近い重みから始める）。
+- opp : 常に opp シャードで学習するが、self と同様に最寄り PRETRAINED の opp を
+        warm-start 初期値として使う。
 
 出力: <ROOT>/gen_000/agents/<name>/{self.pth, opp.pth, deck.csv}
 """
@@ -24,13 +29,24 @@ from trainer import train_model
 
 
 def _pretrained_registry() -> list[dict]:
-    """PRETRAINED から {name, deck, self_model} のリストを作る（存在するものだけ）。"""
+    """PRETRAINED から {name, deck, self_model, opp_model} のリストを作る。
+
+    opp_model(opponent_model.pth) が無い場合は None のまま残し、warm-start を
+    self のみに限定する（古い PRETRAINED エントリとの後方互換）。
+    """
     reg: list[dict] = []
     for name, root in config.PRETRAINED.items():
-        deck_csv = Path(root) / "deck.csv"
-        model = Path(root) / "model.pth"
-        if deck_csv.exists() and model.exists():
-            reg.append({"name": name, "deck": read_deck_csv(deck_csv), "self_model": model})
+        root = Path(root)
+        deck_csv = root / "deck.csv"
+        self_model = root / "model.pth"
+        opp_model = root / "opponent_model.pth"
+        if deck_csv.exists() and self_model.exists():
+            reg.append({
+                "name": name,
+                "deck": read_deck_csv(deck_csv),
+                "self_model": self_model,
+                "opp_model": opp_model if opp_model.exists() else None,
+            })
     return reg
 
 
@@ -70,18 +86,37 @@ def run_phase0(root: Path | None = None) -> Path:
         self_pth = out / "self.pth"
         opp_pth = out / "opp.pth"
 
-        # --- self: 近いデッキがあればコピー、無ければ own シャードで学習 ---
+        # 最寄りの PRETRAINED（shards/ 由来の group0-2）を探す。しきい値の判定は
+        # self の完全コピーにのみ使い、warm-start には常に最寄りを使う（積極活用）。
         best, sim = nearest_deck(deck, pretrained) if pretrained else (None, -1.0)
+
+        # --- self: 近いデッキがあれば完全コピー、無ければ own シャード + warm-start 学習 ---
         if best is not None and sim >= config.SIM_THRESHOLD:
             shutil.copy2(best["self_model"], self_pth)
             print(f"[phase0] {name}: self <- コピー {best['name']} (sim={sim:.3f})")
         else:
-            train_model(shards_root / f"{name}_own", self_pth, config.PHASE0_EPOCHS,
+            warm = best["self_model"] if best is not None else None
+            if warm is not None:
+                print(f"[phase0] {name}: self <- warm-start {best['name']} (sim={sim:.3f})")
+            trained = train_model(shards_root / f"{name}_own", self_pth, config.PHASE0_EPOCHS,
+                        initial_model=warm,
                         metrics_file=logs_dir / f"{name}_self.csv")
+            if not trained and warm is not None:
+                # own シャードが空（対象デッキが履歴に無い等）でも、積極活用の方針上
+                # 何も持たないより最寄り PRETRAINED をそのまま採用する。
+                shutil.copy2(warm, self_pth)
+                print(f"[phase0] {name}: self <- シャード無しのためフォールバックコピー {best['name']}")
 
-        # --- opp: 常に opp シャードで学習 ---
-        train_model(shards_root / f"{name}_opp", opp_pth, config.PHASE0_EPOCHS,
+        # --- opp: 常に opp シャード + 最寄り PRETRAINED の opp を warm-start ---
+        warm_opp = best["opp_model"] if best is not None else None
+        if warm_opp is not None:
+            print(f"[phase0] {name}: opp  <- warm-start {best['name']} (sim={sim:.3f})")
+        trained_opp = train_model(shards_root / f"{name}_opp", opp_pth, config.PHASE0_EPOCHS,
+                    initial_model=warm_opp,
                     metrics_file=logs_dir / f"{name}_opp.csv")
+        if not trained_opp and warm_opp is not None:
+            shutil.copy2(warm_opp, opp_pth)
+            print(f"[phase0] {name}: opp  <- シャード無しのためフォールバックコピー {best['name']}")
 
     print(f"[phase0] 完了 -> {agents_dir}")
     return gen0

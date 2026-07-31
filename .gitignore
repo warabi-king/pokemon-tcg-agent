@@ -13,3 +13,5 @@ agents/*/train/logs/
 agents/match_agents/*/src/
 episodes/
 shards/
+
+pipeline/gen_*/
