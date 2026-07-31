@@ -41,6 +41,17 @@ def read_metrics(metrics_path: Path) -> list[dict[str, float]]:
     return rows
 
 
+def read_dual_metrics(log_dir: Path) -> dict[str, list[dict[str, float]]]:
+    """log_dir/a/train_metrics.csv と log_dir/b/train_metrics.csv を読み込む。"""
+    metrics = {}
+    for side in ("a", "b"):
+        path = log_dir / side / "train_metrics.csv"
+        if not path.exists():
+            raise FileNotFoundError(f"Dual metrics file not found: {path}")
+        metrics[side] = read_metrics(path)
+    return metrics
+
+
 def save_line_plot(
     output_path: Path,
     title: str,
@@ -65,6 +76,78 @@ def save_line_plot(
 
 def plot_metrics(metrics_path: Path = DEFAULT_METRICS, output_dir: Path = DEFAULT_LOG_DIR) -> None:
     """train_metrics.csvから標準グラフを生成する。"""
+    if metrics_path.is_dir():
+        metrics_map = read_dual_metrics(metrics_path)
+        iterations_a = [row["iteration"] for row in metrics_map["a"]]
+        iterations_b = [row["iteration"] for row in metrics_map["b"]]
+
+        save_line_plot(
+            output_dir / "loss_a_b.png",
+            "Training Loss (A/B)",
+            sorted(set(iterations_a + iterations_b)),
+            {
+                "A total": [row["loss"] for row in metrics_map["a"]],
+                "A value": [row["loss_value"] for row in metrics_map["a"]],
+                "A policy": [row["loss_policy"] for row in metrics_map["a"]],
+                "B total": [row["loss"] for row in metrics_map["b"]],
+                "B value": [row["loss_value"] for row in metrics_map["b"]],
+                "B policy": [row["loss_policy"] for row in metrics_map["b"]],
+            },
+            "loss",
+        )
+        save_line_plot(
+            output_dir / "eval_win_rate_a_b.png",
+            "Evaluation Win Rate (A/B)",
+            sorted(set(iterations_a + iterations_b)),
+            {
+                "A win_rate": [row["eval_win_rate"] for row in metrics_map["a"]],
+                "B win_rate": [row["eval_win_rate"] for row in metrics_map["b"]],
+            },
+            "win rate (%)",
+        )
+        save_line_plot(
+            output_dir / "samples_batches_a_b.png",
+            "Samples and Batches (A/B)",
+            sorted(set(iterations_a + iterations_b)),
+            {
+                "A samples": [row["samples"] for row in metrics_map["a"]],
+                "A batches": [row["batches"] for row in metrics_map["a"]],
+                "B samples": [row["samples"] for row in metrics_map["b"]],
+                "B batches": [row["batches"] for row in metrics_map["b"]],
+            },
+            "count",
+        )
+        save_line_plot(
+            output_dir / "elapsed_seconds_a_b.png",
+            "Elapsed Seconds (A/B)",
+            sorted(set(iterations_a + iterations_b)),
+            {
+                "A elapsed_seconds": [row["elapsed_seconds"] for row in metrics_map["a"]],
+                "B elapsed_seconds": [row["elapsed_seconds"] for row in metrics_map["b"]],
+            },
+            "seconds",
+        )
+        print(f"Graphs saved: {output_dir}")
+        print("\nDual model loss summary:")
+        print("iteration,A_loss,B_loss,A_value,B_value,A_policy,B_policy")
+        for i in range(max(len(metrics_map["a"]), len(metrics_map["b"]))):
+            row_a = metrics_map["a"][i] if i < len(metrics_map["a"]) else None
+            row_b = metrics_map["b"][i] if i < len(metrics_map["b"]) else None
+            print(
+                ",".join(
+                    [
+                        str(i),
+                        str(row_a["loss"]) if row_a else "",
+                        str(row_b["loss"]) if row_b else "",
+                        str(row_a["loss_value"]) if row_a else "",
+                        str(row_b["loss_value"]) if row_b else "",
+                        str(row_a["loss_policy"]) if row_a else "",
+                        str(row_b["loss_policy"]) if row_b else "",
+                    ]
+                )
+            )
+        return
+
     rows = read_metrics(metrics_path)
     iterations = [row["iteration"] for row in rows]
 

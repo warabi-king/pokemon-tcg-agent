@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from live_loss_recorder import LiveLossRecorder
-from run_train_round_robin_batched import loss_plateau_status
+from run_train_round_robin import loss_plateau_status
 
 
 class LiveLossRecorderTest(unittest.TestCase):

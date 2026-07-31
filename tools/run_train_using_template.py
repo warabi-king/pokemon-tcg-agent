@@ -7,10 +7,10 @@ common training script to a particular agent implementation directory.
 
 Example:
   # run training with template inside agents/rl_mcts_r_robin and write model to agents/rl_mcts_sample/src/model.pth
-  python tools/run_train_using_template.py \
-    --agent-dir agents/rl_mcts_r_robin \
-    --output-model agents/rl_mcts_sample/src/model.pth \
-    --train-args "--iterations 1 --self-play-games 100"
+    python tools/run_train_using_template.py \
+        --agent-dir agents/rl_mcts_r_robin \
+        --output-model agents/rl_mcts_sample/src/model.pth \
+        --train-args "--iterations 1 --games 100 --dual"
 """
 
 from __future__ import annotations
