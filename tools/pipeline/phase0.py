@@ -18,7 +18,9 @@ PRETRAINED（agents/match_agents/imitation_group0-2、shards/ 由来の self+opp
 
 from __future__ import annotations
 
+import json
 import shutil
+import time
 from pathlib import Path
 
 import config
@@ -62,19 +64,37 @@ def run_phase0(root: Path | None = None) -> Path:
 
     pretrained = _pretrained_registry()
     sources = episode_sources(config.OFFICIAL_EPISODES)
+    # 前処理の完了マーカー。存在すれば前処理をスキップして学習から再開できる
+    # （やり直したい場合はこのファイルか shards ディレクトリごと削除する）。
+    preprocess_done = shards_root / ".preprocess_done.json"
     if not sources:
         print(
             f"[phase0] 警告: 公式リプレイが {config.OFFICIAL_EPISODES} に見つかりません。"
             " self のコピーは行いますが、履歴からの新規学習（opp / 近いデッキ無しの self）は"
             " スキップされます。PIPE_OFFICIAL_EPISODES を設定してください。"
         )
+    elif preprocess_done.exists():
+        print(f"[phase0] 前処理スキップ（完了マーカーあり: {preprocess_done}）")
     else:
+        # 前回クラッシュ時の中途半端なシャードが混ざらないよう、作り直す。
+        for d in list(shards_root.iterdir()):
+            if d.is_dir():
+                shutil.rmtree(d)
         # 全クラスタの own/opp シャードを 1 パスで同時生成（並列: PIPE_WORKERS）。
         print(f"[phase0] 前処理（単一パス）: clusters={len(agents)} workers={config.WORKERS}")
         preprocess_all(
             sources, shards_root, reps=agents,
             threshold=config.SIM_THRESHOLD, shard_size=config.SHARD_SIZE,
             workers=config.WORKERS,
+        )
+        preprocess_done.write_text(
+            json.dumps({
+                "episodes": str(config.OFFICIAL_EPISODES),
+                "sources": len(sources),
+                "clusters": len(agents),
+                "finished_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
 
     for a in agents:
@@ -86,14 +106,21 @@ def run_phase0(root: Path | None = None) -> Path:
         self_pth = out / "self.pth"
         opp_pth = out / "opp.pth"
 
+        # 完了マーカー（クラッシュ後の再実行時、完了済みの side をスキップして再開する）。
+        self_done = out / ".self_done"
+        opp_done = out / ".opp_done"
+
         # 最寄りの PRETRAINED（shards/ 由来の group0-2）を探す。しきい値の判定は
         # self の完全コピーにのみ使い、warm-start には常に最寄りを使う（積極活用）。
         best, sim = nearest_deck(deck, pretrained) if pretrained else (None, -1.0)
 
         # --- self: 近いデッキがあれば完全コピー、無ければ own シャード + warm-start 学習 ---
-        if best is not None and sim >= config.SIM_THRESHOLD:
+        if self_done.exists() and self_pth.exists():
+            print(f"[phase0] {name}: self スキップ（完了済み）")
+        elif best is not None and sim >= config.SIM_THRESHOLD:
             shutil.copy2(best["self_model"], self_pth)
             print(f"[phase0] {name}: self <- コピー {best['name']} (sim={sim:.3f})")
+            self_done.touch()
         else:
             warm = best["self_model"] if best is not None else None
             if warm is not None:
@@ -106,17 +133,22 @@ def run_phase0(root: Path | None = None) -> Path:
                 # 何も持たないより最寄り PRETRAINED をそのまま採用する。
                 shutil.copy2(warm, self_pth)
                 print(f"[phase0] {name}: self <- シャード無しのためフォールバックコピー {best['name']}")
+            self_done.touch()
 
         # --- opp: 常に opp シャード + 最寄り PRETRAINED の opp を warm-start ---
-        warm_opp = best["opp_model"] if best is not None else None
-        if warm_opp is not None:
-            print(f"[phase0] {name}: opp  <- warm-start {best['name']} (sim={sim:.3f})")
-        trained_opp = train_model(shards_root / f"{name}_opp", opp_pth, config.PHASE0_EPOCHS,
-                    initial_model=warm_opp,
-                    metrics_file=logs_dir / f"{name}_opp.csv")
-        if not trained_opp and warm_opp is not None:
-            shutil.copy2(warm_opp, opp_pth)
-            print(f"[phase0] {name}: opp  <- シャード無しのためフォールバックコピー {best['name']}")
+        if opp_done.exists() and opp_pth.exists():
+            print(f"[phase0] {name}: opp  スキップ（完了済み）")
+        else:
+            warm_opp = best["opp_model"] if best is not None else None
+            if warm_opp is not None:
+                print(f"[phase0] {name}: opp  <- warm-start {best['name']} (sim={sim:.3f})")
+            trained_opp = train_model(shards_root / f"{name}_opp", opp_pth, config.PHASE0_EPOCHS,
+                        initial_model=warm_opp,
+                        metrics_file=logs_dir / f"{name}_opp.csv")
+            if not trained_opp and warm_opp is not None:
+                shutil.copy2(warm_opp, opp_pth)
+                print(f"[phase0] {name}: opp  <- シャード無しのためフォールバックコピー {best['name']}")
+            opp_done.touch()
 
     print(f"[phase0] 完了 -> {agents_dir}")
     return gen0
