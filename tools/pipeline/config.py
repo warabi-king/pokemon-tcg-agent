@@ -53,6 +53,7 @@ SEARCH_COUNT = _int("PIPE_SEARCH_COUNT", 50)       # 梱包エージェントの
 SIM_THRESHOLD = _float("PIPE_SIM_THRESHOLD", 0.75) # 近いデッキ判定 & Phase0 クラスタ割当のしきい値
 WARM_START = _int("PIPE_WARM_START", 1)            # 1: 世代間で前世代重みから継続学習
 SHARD_SIZE = _int("PIPE_SHARD_SIZE", 20000)        # 前処理シャードあたりサンプル数
+WORKERS = _int("PIPE_WORKERS", 8)                  # 前処理(preprocess_all)の並列プロセス数
 
 # ---- パス ----
 ROOT = _path("PIPE_ROOT", REPO_ROOT / "pipeline")                                  # 全成果物の根
@@ -85,7 +86,7 @@ def summary() -> str:
         "=== pipeline config ===\n"
         f"  GENERATIONS={GENERATIONS} EPOCHS_PER_GEN={EPOCHS_PER_GEN} PHASE0_EPOCHS={PHASE0_EPOCHS}\n"
         f"  LR={LR} BATCH_SIZE={BATCH_SIZE} SEARCH_COUNT={SEARCH_COUNT}\n"
-        f"  SIM_THRESHOLD={SIM_THRESHOLD} WARM_START={WARM_START} SHARD_SIZE={SHARD_SIZE}\n"
+        f"  SIM_THRESHOLD={SIM_THRESHOLD} WARM_START={WARM_START} SHARD_SIZE={SHARD_SIZE} WORKERS={WORKERS}\n"
         f"  ROOT={ROOT}\n"
         f"  OFFICIAL_EPISODES={OFFICIAL_EPISODES}\n"
         f"  DECKGEN_JSONL={DECKGEN_JSONL}\n"

@@ -32,6 +32,7 @@ python tools/pipeline/orchestrate.py
 | `PIPE_SIM_THRESHOLD` | 0.75 | 近いデッキ判定/クラスタ割当しきい値 |
 | `PIPE_LR` / `PIPE_BATCH_SIZE` | 3e-4 / 128 | 学習率 / バッチ |
 | `PIPE_WARM_START` | 1 | 世代間で前世代重みから継続学習 |
+| `PIPE_WORKERS` | 8 | Phase0 前処理（preprocess_all）の並列プロセス数 |
 | `PIPE_ROOT` | `pipeline/` | 成果物の根 |
 | `PIPE_OFFICIAL_EPISODES` | `episodes/official/` | Phase0 用リプレイ（.zip or JSON ディレクトリ） |
 | `PIPE_DECKGEN_JSONL` | `deck_generator/generated/deck_candidates_by_wins.jsonl` | 参加デッキ元 |
@@ -43,11 +44,12 @@ python tools/pipeline/orchestrate.py
 |---|---|
 | `config.py` | 環境変数・パス・sys.path 設定 |
 | `deck_utils.py` | デッキ入出力・ヒストグラム交差類似度・deck_filter |
-| `preprocess.py` | 履歴→シャード（自前フィルタ対応、既存ライブラリ再利用） |
+| `preprocess.py` | 履歴→シャード（自前フィルタ対応、既存ライブラリ再利用）。世代ループの exact-deck 前処理と `episode_sources` を提供 |
+| `preprocess_multi.py` | **単一パス多クラスタ前処理**。全エピソードを1回走査し全クラスタの own/opp シャードを同時生成（Phase0 が使用） |
 | `trainer.py` | `train_imitation.py` サブプロセス実行ラッパ |
 | `gen_agents.py` | クラスタ→約63エージェント（clusters.json + decks） |
 | `package_agent.py` | self+opp+deck を実行可能 src/ に梱包 |
-| `phase0.py` | 初期 self/opp をブートストラップ（近いデッキはコピー、opp は新規学習） |
+| `phase0.py` | 初期 self/opp をブートストラップ（前処理は preprocess_all で1パス、近いデッキはコピー、opp は新規学習） |
 | `generation.py` | 世代1回（梱包→リーグ→継続学習） |
 | `orchestrate.py` | 入口（生成→Phase0→世代ループ） |
 | `league_stub.py` | ①の動作確認用スタブ（本番は `PIPE_LEAGUE_CMD`） |
