@@ -5,6 +5,11 @@ This script builds agents/match_agents/{name}/src from:
 - executable code copied from agents/rl_mcts/src
 - deck.csv and model.pth copied from agents/match_agents/{name}
 
+If agents/match_agents/{name}/opponent_model.pth exists, it is also bundled and
+main.py is generated so the agent uses model.pth for its own turns and
+opponent_model.pth for the opponent nodes during MCTS search (self+opp pair).
+Without it, the plain self-only template main.py is copied as before.
+
 It then calls tools/build_submission.py to create the tar.gz archive.
 """
 
@@ -24,6 +29,33 @@ DIST_ROOT = ROOT / "dist"
 CODE_FILES = ("main.py",)
 CODE_DIRS = ("cg", "rl_mcts")
 PARAM_FILES = ("deck.csv", "model.pth")
+OPP_PARAM_FILE = "opponent_model.pth"  # 任意: あれば探索時の相手モデルとして同梱・配線する
+
+# opponent_model.pth がある場合に生成する main.py（self+opp を配線）。
+_OPP_MAIN_TEMPLATE = '''from __future__ import annotations
+
+from pathlib import Path
+
+from cg.api import Observation, to_observation_class
+from rl_mcts.agent import RlMctsAgent
+from rl_mcts.deck import read_deck_csv
+
+# 自分の手番は model.pth、MCTS探索木の相手手番は opponent_model.pth で評価する。
+_SRC = Path(__file__).resolve().parent
+_AGENT = RlMctsAgent(
+    model_path=_SRC / "model.pth",
+    opponent_model_path=_SRC / "opponent_model.pth",
+    search_count={search_count},
+)
+
+
+def agent(obs_dict: dict) -> list[int]:
+    """Kaggle/cabtから呼び出されるエージェント本体。"""
+    obs: Observation = to_observation_class(obs_dict)
+    if obs.select is None:
+        return read_deck_csv()
+    return _AGENT.select_action(obs_dict)
+'''
 
 
 def ignore_generated(_directory: str, names: list[str]) -> set[str]:
@@ -67,14 +99,15 @@ def validate_source(template_src: Path, match_agent_dir: Path) -> None:
     read_deck(match_agent_dir / "deck.csv")
 
 
-def prepare_src(template_src: Path, match_agent_dir: Path) -> Path:
+def has_opponent_model(match_agent_dir: Path) -> bool:
+    return (match_agent_dir / OPP_PARAM_FILE).is_file()
+
+
+def prepare_src(template_src: Path, match_agent_dir: Path, search_count: int = 50) -> Path:
     validate_source(template_src, match_agent_dir)
 
     target_src = match_agent_dir / "src"
     target_src.mkdir(parents=True, exist_ok=True)
-
-    for name in CODE_FILES:
-        shutil.copy2(template_src / name, target_src / name)
 
     for name in CODE_DIRS:
         shutil.copytree(
@@ -86,6 +119,17 @@ def prepare_src(template_src: Path, match_agent_dir: Path) -> Path:
 
     for name in PARAM_FILES:
         shutil.copy2(match_agent_dir / name, target_src / name)
+
+    if has_opponent_model(match_agent_dir):
+        # 探索時の相手モデルを同梱し、self+opp を配線した main.py を生成する。
+        shutil.copy2(match_agent_dir / OPP_PARAM_FILE, target_src / OPP_PARAM_FILE)
+        (target_src / "main.py").write_text(
+            _OPP_MAIN_TEMPLATE.format(search_count=search_count), encoding="utf-8"
+        )
+    else:
+        # opp が無ければ従来どおりテンプレートの self-only main.py をコピー。
+        for name in CODE_FILES:
+            shutil.copy2(template_src / name, target_src / name)
 
     return target_src
 
@@ -124,6 +168,12 @@ def parse_args() -> argparse.Namespace:
         default=DIST_ROOT,
         help="directory for submission_match_agent_{name}.tar.gz files.",
     )
+    parser.add_argument(
+        "--search-count",
+        type=int,
+        default=50,
+        help="MCTS search count wired into the generated main.py when opponent_model.pth is bundled.",
+    )
     parser.add_argument("--no-build", action="store_true", help="only prepare src/, do not create tar.gz.")
     parser.add_argument("--dry-run", action="store_true", help="print planned actions without copying or building.")
     return parser.parse_args()
@@ -141,6 +191,8 @@ def main() -> None:
         print(f"  template: {template_src}")
         print(f"  source:   {match_agent_dir}")
         print(f"  target:   {match_agent_dir / 'src'}")
+        opp = has_opponent_model(match_agent_dir)
+        print(f"  opponent: {'bundled (self+opp, search_count=%d)' % args.search_count if opp else 'none (self-only)'}")
         if not args.no_build:
             print(f"  archive:  {output}")
 
@@ -148,7 +200,7 @@ def main() -> None:
             validate_source(template_src, match_agent_dir)
             continue
 
-        prepare_src(template_src, match_agent_dir)
+        prepare_src(template_src, match_agent_dir, search_count=args.search_count)
         if not args.no_build:
             build_submission(name, output)
 
