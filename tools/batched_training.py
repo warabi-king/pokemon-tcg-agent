@@ -26,6 +26,7 @@ from batched_tournament import (
     _run_search_wave,
     _start_session,
     _to_result,
+    update_seen_opponent_cards,
 )
 
 
@@ -228,6 +229,10 @@ def collect_batched_training_samples(
                     session.observation, session.select_player = _battle_observation(
                         runtime,
                         session.battle_ptr,
+                    )
+                    update_seen_opponent_cards(
+                        session.observation,
+                        session.seen_opponent_cards,
                     )
                     profile.battle_step_seconds += time.perf_counter() - started
                     profile.battle_steps += 1
