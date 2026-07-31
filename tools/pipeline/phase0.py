@@ -1,9 +1,12 @@
 """Phase0: 公式リプレイ履歴からの模倣学習で各エージェントの初期 {self, opp} を作る。
 
+前処理は preprocess_all で **全エピソードを1回だけ走査**し、全クラスタの own/opp シャードを
+同時生成する（旧版は agent×role ごとに全リプレイを再スキャンしていた）。
+
 方針:
 - self: 近いデッキ（既存 PRETRAINED と類似度 >= SIM_THRESHOLD）があれば、その self モデルを
-        コピーして流用（事前学習の再実行を省略）。無ければ role=own で新規学習。
-- opp : 常に role=opponent で新規学習（既存 opp モデルは無いため）。
+        コピーして流用（事前学習の再実行を省略）。無ければ own シャードで新規学習。
+- opp : 常に opp シャードで新規学習（既存 opp モデルは無いため）。
 
 出力: <ROOT>/gen_000/agents/<name>/{self.pth, opp.pth, deck.csv}
 """
@@ -14,8 +17,9 @@ import shutil
 from pathlib import Path
 
 import config
-from deck_utils import load_agents, nearest_deck, read_deck_csv, write_deck_csv, cluster_filter
-from preprocess import episode_sources, preprocess
+from deck_utils import load_agents, nearest_deck, read_deck_csv, write_deck_csv
+from preprocess import episode_sources
+from preprocess_multi import preprocess_all
 from trainer import train_model
 
 
@@ -48,8 +52,14 @@ def run_phase0(root: Path | None = None) -> Path:
             " self のコピーは行いますが、履歴からの新規学習（opp / 近いデッキ無しの self）は"
             " スキップされます。PIPE_OFFICIAL_EPISODES を設定してください。"
         )
-
-    reps = agents  # クラスタ最近傍割当の候補（全代表）
+    else:
+        # 全クラスタの own/opp シャードを 1 パスで同時生成（並列: PIPE_WORKERS）。
+        print(f"[phase0] 前処理（単一パス）: clusters={len(agents)} workers={config.WORKERS}")
+        preprocess_all(
+            sources, shards_root, reps=agents,
+            threshold=config.SIM_THRESHOLD, shard_size=config.SHARD_SIZE,
+            workers=config.WORKERS,
+        )
 
     for a in agents:
         name = a["name"]
@@ -60,29 +70,18 @@ def run_phase0(root: Path | None = None) -> Path:
         self_pth = out / "self.pth"
         opp_pth = out / "opp.pth"
 
-        # --- self: 近いデッキがあればコピー ---
+        # --- self: 近いデッキがあればコピー、無ければ own シャードで学習 ---
         best, sim = nearest_deck(deck, pretrained) if pretrained else (None, -1.0)
         if best is not None and sim >= config.SIM_THRESHOLD:
             shutil.copy2(best["self_model"], self_pth)
             print(f"[phase0] {name}: self <- コピー {best['name']} (sim={sim:.3f})")
-        elif sources:
-            sh = shards_root / f"{name}_own"
-            preprocess(sources, sh, cluster_filter(deck, reps, config.SIM_THRESHOLD, "own"),
-                       config.SHARD_SIZE, role="own", label=f"{name}/own")
-            train_model(sh, self_pth, config.PHASE0_EPOCHS,
+        else:
+            train_model(shards_root / f"{name}_own", self_pth, config.PHASE0_EPOCHS,
                         metrics_file=logs_dir / f"{name}_self.csv")
-        else:
-            print(f"[phase0] {name}: self 学習をスキップ（近いデッキ無し & 履歴無し）")
 
-        # --- opp: 常に role=opponent で新規学習 ---
-        if sources:
-            sh = shards_root / f"{name}_opp"
-            preprocess(sources, sh, cluster_filter(deck, reps, config.SIM_THRESHOLD, "opponent"),
-                       config.SHARD_SIZE, role="opponent", label=f"{name}/opp")
-            train_model(sh, opp_pth, config.PHASE0_EPOCHS,
-                        metrics_file=logs_dir / f"{name}_opp.csv")
-        else:
-            print(f"[phase0] {name}: opp 学習をスキップ（履歴無し）")
+        # --- opp: 常に opp シャードで学習 ---
+        train_model(shards_root / f"{name}_opp", opp_pth, config.PHASE0_EPOCHS,
+                    metrics_file=logs_dir / f"{name}_opp.csv")
 
     print(f"[phase0] 完了 -> {agents_dir}")
     return gen0
