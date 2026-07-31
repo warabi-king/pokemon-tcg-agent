@@ -15,10 +15,12 @@ Battle/Searchのルール処理自体はCPU版libcgで行う。GPUが保持す�
 
 from __future__ import annotations
 
+import ast
 from collections import defaultdict, deque
 import copy
 import ctypes
 from dataclasses import dataclass, field
+from functools import lru_cache
 import json
 import math
 import multiprocessing
@@ -29,13 +31,114 @@ import random
 import sys
 import time
 import traceback
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any, Iterable
 
-import torch
+import numpy as np
+
+try:
+    import msgspec
+except ImportError:
+    msgspec = None
+
+
+if msgspec is not None:
+    class _FastCard(msgspec.Struct):
+        id: int
+
+
+    class _FastPokemon(msgspec.Struct):
+        id: int
+        hp: int
+        energyCards: list[_FastCard]
+        tools: list[_FastCard]
+
+
+    class _FastPlayerState(msgspec.Struct):
+        active: list[_FastPokemon | None]
+        bench: list[_FastPokemon]
+        deckCount: int
+        discard: list[_FastCard]
+        prize: list[_FastCard | None]
+        handCount: int
+        hand: list[_FastCard] | None
+        poisoned: bool
+        burned: bool
+        asleep: bool
+        paralyzed: bool
+        confused: bool
+
+
+    class _FastState(msgspec.Struct):
+        turn: int
+        yourIndex: int
+        firstPlayer: int
+        result: int
+        stadium: list[_FastCard]
+        looking: list[_FastCard | None] | None
+        players: list[_FastPlayerState]
+
+
+    class _FastOption(msgspec.Struct):
+        type: int
+        number: int | None = None
+        area: int | None = None
+        index: int | None = None
+        playerIndex: int | None = None
+        toolIndex: int | None = None
+        energyIndex: int | None = None
+        inPlayArea: int | None = None
+        inPlayIndex: int | None = None
+        attackId: int | None = None
+        cardId: int | None = None
+        specialConditionType: int | None = None
+
+
+    class _FastSelectData(msgspec.Struct):
+        context: int
+        maxCount: int
+        option: list[_FastOption]
+        deck: list[_FastCard] | None
+
+
+    class _FastObservation(msgspec.Struct):
+        select: _FastSelectData | None
+        current: _FastState | None
+        search_begin_input: str | None = None
+
+
+    class _FastSearchState(msgspec.Struct):
+        observation: _FastObservation
+        searchId: int
+
+
+    class _FastApiResult(msgspec.Struct):
+        state: _FastSearchState | None
+        error: int
+
+
+_LIGHTWEIGHT_WORKER_ENV = "PTCG_BATCHED_LIGHTWEIGHT_WORKER"
+if os.environ.get(_LIGHTWEIGHT_WORKER_ENV) == "1":
+    # Windows multiprocessing uses spawn.  CPU libcg workers do not execute a
+    # neural network, so importing the multi-gigabyte CUDA runtime in every
+    # worker only wastes commit memory and can make workers fail at startup.
+    torch = None
+else:
+    import torch
+
+
+_TorchModuleBase = torch.nn.Module if torch is not None else object
 
 
 MAX_ACTIONS = 64
+
+
+@dataclass(frozen=True)
+class _CpuDevice:
+    type: str = "cpu"
+
+    def __str__(self) -> str:
+        return self.type
 
 
 @dataclass(frozen=True)
@@ -63,8 +166,20 @@ class BatchedProfile:
     battle_step_seconds: float = 0.0
     search_begin_seconds: float = 0.0
     search_step_seconds: float = 0.0
+    search_step_c_api_seconds: float = 0.0
+    search_step_json_seconds: float = 0.0
+    search_step_dataclass_seconds: float = 0.0
     feature_seconds: float = 0.0
     nn_seconds: float = 0.0
+    nn_merge_seconds: float = 0.0
+    nn_input_seconds: float = 0.0
+    nn_forward_submit_seconds: float = 0.0
+    nn_output_wait_seconds: float = 0.0
+    nn_tolist_seconds: float = 0.0
+    nn_response_pack_seconds: float = 0.0
+    nn_decoder_source_tokens: int = 0
+    nn_decoder_padded_tokens: int = 0
+    response_put_seconds: float = 0.0
     search_finalize_seconds: float = 0.0
     nn_evaluations: int = 0
     nn_batches: int = 0
@@ -75,6 +190,7 @@ class BatchedProfile:
     cuda_per_model_waves: int = 0
     cpu_workers: int = 1
     remote_wait_seconds: float = 0.0
+    remote_numpy_pack_seconds: float = 0.0
     batch_collect_seconds: float = 0.0
     ipc_messages: int = 0
 
@@ -87,6 +203,12 @@ class BatchedProfile:
     @property
     def max_batch_size(self) -> int:
         return max(self.batch_sizes, default=0)
+
+    @property
+    def decoder_token_efficiency(self) -> float:
+        if self.nn_decoder_padded_tokens <= 0:
+            return 0.0
+        return self.nn_decoder_source_tokens / self.nn_decoder_padded_tokens
 
 
 @dataclass
@@ -125,12 +247,48 @@ class _Runtime:
     get_encoder_input: Any
     get_decoder_input: Any
     create_model: Any
+    search_step_timing: Any
+
+
+@dataclass
+class _SearchStepTiming:
+    """cg.api.search_step内で行われるJSON変換の累積時間。"""
+
+    active: int = 0
+    json_seconds: float = 0.0
+    dataclass_seconds: float = 0.0
+    fast_decode_fallbacks: int = 0
+
+    def snapshot(self) -> tuple[float, float]:
+        return self.json_seconds, self.dataclass_seconds
+
+
+def _create_fast_api_decoder() -> Any | None:
+    """SearchBegin/SearchStepのJSONをreflectionなしで軽量Structへdecodeする。"""
+    if msgspec is None:
+        return None
+    return msgspec.json.Decoder(_FastApiResult)
+
+
+_FAST_UNTYPED_JSON_DECODER = msgspec.json.Decoder() if msgspec is not None else None
+
+
+def _decode_json_dict(data: bytes) -> dict[str, Any]:
+    if _FAST_UNTYPED_JSON_DECODER is not None:
+        return _FAST_UNTYPED_JSON_DECODER.decode(data)
+    return json.loads(data.decode())
+
+
+def _to_search_observation(observation: dict[str, Any], fallback: Any) -> Any:
+    if msgspec is not None:
+        return msgspec.convert(observation, type=_FastObservation)
+    return fallback(observation)
 
 
 @dataclass
 class _Participant:
     name: str
-    deck: list[int]
+    deck: tuple[int, ...]
     model: torch.nn.Module | None
     model_key: str | None
     random_policy: bool
@@ -147,6 +305,8 @@ class _MatchSession:
 
 
 class _Child:
+    __slots__ = ("node", "select", "probability", "in_flight")
+
     def __init__(self, select: list[int], probability: float) -> None:
         self.node: _Node | None = None
         self.select = select
@@ -156,13 +316,34 @@ class _Child:
 
 
 class _Node:
-    def __init__(self, parent: _Node | None, state: Any) -> None:
+    __slots__ = (
+        "value",
+        "total",
+        "visit",
+        "parent",
+        "children",
+        "search_id",
+        "player_index",
+        "result",
+    )
+
+    def __init__(
+        self,
+        parent: _Node | None,
+        search_id: int,
+        player_index: int,
+        result: int,
+    ) -> None:
         self.value = -2.0
         self.total = 0.0
         self.visit = 0
         self.parent = parent
         self.children: list[_Child] = []
-        self.state = state
+        # 特徴量生成後のObservation全体は保持しない。木探索で必要なのは
+        # libcg Search ID、手番、終局結果の3値だけ。
+        self.search_id = search_id
+        self.player_index = player_index
+        self.result = result
 
     def backprop(self, value: float) -> None:
         self.total += value
@@ -197,8 +378,8 @@ class _RemoteEvalJob:
     model_key: str
     batch_count: int
     decoder_words: int
-    encoder: tuple[list[int], list[float], list[int]]
-    decoder: tuple[list[int], list[float], list[int]]
+    encoder: tuple[np.ndarray, np.ndarray, np.ndarray]
+    decoder: tuple[np.ndarray, np.ndarray, np.ndarray]
 
 
 @dataclass
@@ -216,7 +397,7 @@ class _CudaEvalJob:
     policy_rows: torch.Tensor
 
 
-class _CudaEnsembleTail(torch.nn.Module):
+class _CudaEnsembleTail(_TorchModuleBase):
     """EmbeddingBagより後ろのdense/attention部分。"""
 
     def __init__(self, model: torch.nn.Module) -> None:
@@ -342,34 +523,29 @@ class _CudaEnsembleEvaluator:
     ) -> torch.Tensor:
         """model次元を保ったままweighted EmbeddingBag(sum)を計算する。"""
         model_count, value_count = indices.shape
-        embedding_size = weights.shape[-1]
-        gathered = torch.gather(
-            weights,
-            1,
-            indices.unsqueeze(-1).expand(model_count, value_count, embedding_size),
-        )
-        gathered = gathered * per_sample_weights.unsqueeze(-1)
-
-        positions = torch.arange(
-            value_count,
+        vocabulary_size = weights.shape[1]
+        model_indices = torch.arange(
+            model_count,
+            dtype=indices.dtype,
+            device=indices.device,
+        ).unsqueeze(1)
+        flat_indices = (indices + model_indices * vocabulary_size).reshape(-1)
+        model_value_offsets = torch.arange(
+            model_count,
             dtype=offsets.dtype,
             device=offsets.device,
-        ).expand(model_count, -1).contiguous()
-        bag_indices = torch.searchsorted(offsets, positions, right=True) - 1
-        bag_indices.clamp_min_(0)
-        bags = torch.zeros(
-            model_count,
-            offsets.shape[1],
-            embedding_size,
-            dtype=weights.dtype,
-            device=weights.device,
+        ).unsqueeze(1)
+        flat_offsets = (
+            offsets + model_value_offsets * value_count
+        ).reshape(-1)
+        bags = torch.nn.functional.embedding_bag(
+            flat_indices,
+            weights.reshape(-1, weights.shape[-1]),
+            flat_offsets,
+            mode="sum",
+            per_sample_weights=per_sample_weights.reshape(-1),
         )
-        bags.scatter_add_(
-            1,
-            bag_indices.unsqueeze(-1).expand_as(gathered),
-            gathered,
-        )
-        return bags
+        return bags.reshape(model_count, offsets.shape[1], weights.shape[-1])
 
     def evaluate(
         self,
@@ -400,12 +576,20 @@ class _CudaEnsembleEvaluator:
         )
 
 
-# T4実測ではmodel当たり4件前後まではmodel-axis ensembleが速く、10件前後では
-# per-model batchの方が速い。waveごとに余裕を持って切り替える。
-_CUDA_ENSEMBLE_BATCH_CROSSOVER = 8.0
+# RTX 3050実測では標準EmbeddingBagで5モデルを統合するとmodel当たり32件まで
+# model-axisがper-modelより1.6倍以上速く、64件で同等になる。不均等batchの
+# padding余裕を残し、平均32件未満だけmodel-axisへ切り替える。
+_CUDA_ENSEMBLE_BATCH_CROSSOVER = 32.0
 
 
 def select_device(requested: str) -> torch.device:
+    if torch is None:
+        if requested not in ("auto", "cpu"):
+            raise RuntimeError(
+                "軽量libcg workerはCPU deviceだけを利用できます。"
+            )
+        return _CpuDevice()
+
     if requested != "auto":
         device = torch.device(requested)
     elif torch.cuda.is_available():
@@ -422,6 +606,56 @@ def select_device(requested: str) -> torch.device:
     return device
 
 
+def _read_model_feature_constants(agent_src: Path) -> dict[str, int]:
+    """model.pyを実行せず、特徴量生成に必要な整数定数だけを読む。"""
+    required = {"DECODER_ATTACK_OFFSET", "DECODER_MAIN_FEATURE"}
+    constants: dict[str, int] = {}
+    tree = ast.parse(
+        (agent_src / "rl_mcts" / "model.py").read_text(encoding="utf-8")
+    )
+    for statement in tree.body:
+        if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+            continue
+        target = statement.targets[0]
+        if not isinstance(target, ast.Name) or target.id not in required:
+            continue
+        value = ast.literal_eval(statement.value)
+        if not isinstance(value, int):
+            raise TypeError(f"{target.id}は整数である必要があります。")
+        constants[target.id] = value
+    missing = required - constants.keys()
+    if missing:
+        raise RuntimeError(f"model.pyに特徴量定数がありません: {sorted(missing)}")
+    return constants
+
+
+def _install_lightweight_model_shim(agent_src: Path) -> None:
+    """特徴量生成に必要なmodel定数だけをTorchなしで提供する。"""
+    if "rl_mcts.model" in sys.modules:
+        return
+
+    from cg.api import all_attack, all_card_data
+
+    constants = _read_model_feature_constants(agent_src)
+    model_module = ModuleType("rl_mcts.model")
+    model_module.DECODER_ATTACK_OFFSET = constants["DECODER_ATTACK_OFFSET"]
+    model_module.DECODER_MAIN_FEATURE = constants["DECODER_MAIN_FEATURE"]
+
+    @lru_cache(maxsize=1)
+    def card_count() -> int:
+        all_cards = all_card_data()
+        return max(all_cards, key=lambda card: card.cardId).cardId + 1
+
+    @lru_cache(maxsize=1)
+    def attack_count() -> int:
+        all_attacks = all_attack()
+        return max(all_attacks, key=lambda attack: attack.attackId).attackId + 1
+
+    model_module.card_count = card_count
+    model_module.attack_count = attack_count
+    sys.modules["rl_mcts.model"] = model_module
+
+
 def _load_runtime(agent_src: Path) -> _Runtime:
     """1つのagent実装を型・特徴量・libcgの共通実装として読み込む。"""
     resolved = agent_src.resolve()
@@ -432,25 +666,80 @@ def _load_runtime(agent_src: Path) -> _Runtime:
     # legacy backendのagentローダーとは同じプロセスで併用しない。
     sys.path.insert(0, str(resolved))
     try:
-        from cg.api import search_begin, search_end, search_step, to_observation_class
+        import cg.api as cg_api
+        from cg.api import search_begin, search_end, to_observation_class
         from cg.sim import lib
+        if torch is None:
+            _install_lightweight_model_shim(resolved)
         from rl_mcts.features import get_decoder_input, get_encoder_input
-        from rl_mcts.model import create_model
+        if torch is None:
+            create_model = None
+        else:
+            from rl_mcts.model import create_model
     finally:
         try:
             sys.path.remove(str(resolved))
         except ValueError:
             pass
 
+    # SearchStepは1回ごとにC++の返値をJSONへ変換し、さらに多数のdataclassを
+    # 構築する。SDKを変更せずに内訳を測るため、cg.api内の同じ変換処理を
+    # 計時版へ一度だけ差し替える。CPU workerは単一threadなのでactiveで対象を
+    # SearchStep呼び出し中だけに限定できる。
+    timing = getattr(cg_api, "_batched_search_step_timing", None)
+    if timing is None:
+        timing = _SearchStepTiming()
+        original_json_to_dataclass = cg_api.json_to_dataclass
+        fast_api_decoder = _create_fast_api_decoder()
+
+        def profiled_json_to_dataclass(bs: bytes, cls: type) -> Any:
+            if fast_api_decoder is not None and cls is cg_api.ApiResult:
+                started = time.perf_counter()
+                try:
+                    result = fast_api_decoder.decode(bs)
+                except msgspec.DecodeError:
+                    timing.fast_decode_fallbacks += 1
+                else:
+                    if timing.active > 0:
+                        timing.json_seconds += time.perf_counter() - started
+                    return result
+
+            if timing.active <= 0:
+                return original_json_to_dataclass(bs, cls)
+
+            started = time.perf_counter()
+            decoded = json.loads(bs.decode())
+            timing.json_seconds += time.perf_counter() - started
+
+            started = time.perf_counter()
+            result = cg_api.to_dataclass(decoded, cls)
+            timing.dataclass_seconds += time.perf_counter() - started
+            return result
+
+        def profiled_search_step(search_id: int, select: list[int]) -> Any:
+            timing.active += 1
+            try:
+                return cg_api.search_step(search_id, select)
+            finally:
+                timing.active -= 1
+
+        cg_api.json_to_dataclass = profiled_json_to_dataclass
+        cg_api._batched_search_step_timing = timing
+        cg_api._batched_profiled_search_step = profiled_search_step
+
     return _Runtime(
         lib=lib,
-        to_observation_class=to_observation_class,
+        to_observation_class=lambda observation: _to_search_observation(
+            observation,
+            to_observation_class,
+        ),
         search_begin=search_begin,
-        search_step=search_step,
+        search_step=cg_api._batched_profiled_search_step,
         search_end=search_end,
         get_encoder_input=get_encoder_input,
         get_decoder_input=get_decoder_input,
         create_model=create_model,
+        search_step_timing=timing,
     )
 
 
@@ -478,7 +767,8 @@ def _load_participants(
     for spec in specs:
         agent_path = Path(spec.agent_path).resolve()
         deck_path = Path(spec.deck_path).resolve()
-        deck = _read_deck(deck_path)
+        # tuple化しておくと特徴量側のdeck cache keyを評価ごとに再構築しない。
+        deck = tuple(_read_deck(deck_path))
         model_path = agent_path.parent / "model.pth"
 
         if model_path.exists():
@@ -516,7 +806,7 @@ def _load_participants(
 
 def _battle_observation(runtime: _Runtime, battle_ptr: int) -> tuple[dict[str, Any], int]:
     serial = runtime.lib.GetBattleData(battle_ptr)
-    observation = json.loads(serial.json.decode())
+    observation = _decode_json_dict(serial.json)
     observation["search_begin_input"] = ctypes.string_at(serial.data, serial.count).decode(
         "ascii"
     )
@@ -554,11 +844,13 @@ def _start_session(
     )
 
 
+@lru_cache(maxsize=512)
 def _enumerate_actions(
     option_count: int,
     select_count: int,
     limit: int = MAX_ACTIONS,
 ) -> list[list[int]]:
+    """列挙結果を共有するため、返値とその内側のlistは変更してはいけない。"""
     if select_count <= 0:
         return [[]]
     if option_count <= 0 or select_count > option_count:
@@ -594,9 +886,14 @@ def _prepare_node(
     search_state: Any,
     profile: BatchedProfile,
 ) -> tuple[_Node, _EvalRequest | None]:
-    node = _Node(parent, search_state)
     observation = search_state.observation
     state = observation.current
+    node = _Node(
+        parent,
+        int(search_state.searchId),
+        int(state.yourIndex),
+        int(state.result),
+    )
 
     if state.result >= 0:
         if state.result == 2:
@@ -636,6 +933,18 @@ def _combine_sparse(vectors: list[Any]) -> tuple[list[int], list[float], list[in
     return indices, values, offsets
 
 
+def _combine_sparse_numpy(
+    vectors: list[Any],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """SparseVector群をQueue転送向けの連続typed bufferへまとめる。"""
+    indices, values, offsets = _combine_sparse(vectors)
+    return (
+        np.asarray(indices, dtype=np.int32),
+        np.asarray(values, dtype=np.float32),
+        np.asarray(offsets, dtype=np.int32),
+    )
+
+
 def _snapshot_sparse(sparse: Any, offset_count: int | None = None) -> _SparseVectorSnapshot:
     offsets = sparse.offset if offset_count is None else sparse.offset[:offset_count]
     return _SparseVectorSnapshot(
@@ -647,37 +956,49 @@ def _snapshot_sparse(sparse: Any, offset_count: int | None = None) -> _SparseVec
 
 def _prepare_evaluation_chunk(
     chunk: list[_EvalRequest],
-) -> tuple[tuple[list[int], list[float], list[int]], tuple[list[int], list[float], list[int]]]:
+    *,
+    numpy_output: bool = False,
+) -> tuple[Any, Any]:
     """同一モデルの要求を1回のforward入力へまとめる。"""
     required_decoder_words = max(len(request.decoder.offset) for request in chunk)
     # MPS/CUDAでshapeの種類を抑えるため1,2,4,...,64のbucketへ丸める。
     decoder_words = 1 << (required_decoder_words - 1).bit_length()
     for request in chunk:
         _pad_sparse_offsets(request.decoder, decoder_words)
-    encoder = _combine_sparse([request.encoder for request in chunk])
-    decoder = _combine_sparse([request.decoder for request in chunk])
+    combine = _combine_sparse_numpy if numpy_output else _combine_sparse
+    encoder = combine([request.encoder for request in chunk])
+    decoder = combine([request.decoder for request in chunk])
     return encoder, decoder
 
 
 def _merge_combined_sparse(
-    vectors: list[tuple[list[int], list[float], list[int]]],
-) -> tuple[list[int], list[float], list[int]]:
+    vectors: list[tuple[np.ndarray, np.ndarray, np.ndarray]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """複数workerが既に結合したSparseVectorを中央batchへ再結合する。"""
-    indices: list[int] = []
-    values: list[float] = []
-    offsets: list[int] = []
+    index_count = sum(len(vector[0]) for vector in vectors)
+    offset_count = sum(len(vector[2]) for vector in vectors)
+    indices = np.empty(index_count, dtype=np.int32)
+    values = np.empty(index_count, dtype=np.float32)
+    offsets = np.empty(offset_count, dtype=np.int32)
+    index_position = 0
+    offset_position = 0
     for vector_indices, vector_values, vector_offsets in vectors:
-        base = len(indices)
-        indices.extend(vector_indices)
-        values.extend(vector_values)
-        offsets.extend(offset + base for offset in vector_offsets)
+        next_index_position = index_position + len(vector_indices)
+        next_offset_position = offset_position + len(vector_offsets)
+        indices[index_position:next_index_position] = vector_indices
+        values[index_position:next_index_position] = vector_values
+        offsets[offset_position:next_offset_position] = (
+            vector_offsets + index_position
+        )
+        index_position = next_index_position
+        offset_position = next_offset_position
     return indices, values, offsets
 
 
 def _pad_remote_decoder(
     job: _RemoteEvalJob,
     target_words: int,
-) -> tuple[list[int], list[float], list[int]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """worker内で結合済みdecoderの各局面末尾へ空bagを追加する。"""
     if job.decoder_words > target_words:
         raise ValueError("target_wordsがworker decoder幅より小さいです。")
@@ -685,13 +1006,15 @@ def _pad_remote_decoder(
         return job.decoder
 
     indices, values, offsets = job.decoder
-    padded_offsets: list[int] = []
+    padded_offsets = np.empty(job.batch_count * target_words, dtype=np.int32)
     for row in range(job.batch_count):
         start = row * job.decoder_words
         end = start + job.decoder_words
-        padded_offsets.extend(offsets[start:end])
+        output_start = row * target_words
+        output_end = output_start + job.decoder_words
+        padded_offsets[output_start:output_end] = offsets[start:end]
         row_value_end = offsets[end] if end < len(offsets) else len(indices)
-        padded_offsets.extend([row_value_end] * (target_words - job.decoder_words))
+        padded_offsets[output_end : output_start + target_words] = row_value_end
     return indices, values, padded_offsets
 
 
@@ -726,10 +1049,14 @@ class _RemoteEvaluationClient:
 
         jobs: list[_RemoteEvalJob] = []
         chunks: list[list[_EvalRequest]] = []
+        numpy_pack_started = time.perf_counter()
         for model_key, model_requests in grouped.items():
             for offset in range(0, len(model_requests), batch_size):
                 chunk = model_requests[offset : offset + batch_size]
-                encoder, decoder = _prepare_evaluation_chunk(chunk)
+                encoder, decoder = _prepare_evaluation_chunk(
+                    chunk,
+                    numpy_output=True,
+                )
                 decoder_words = len(decoder[2]) // len(chunk)
                 jobs.append(
                     _RemoteEvalJob(
@@ -741,6 +1068,9 @@ class _RemoteEvaluationClient:
                     )
                 )
                 chunks.append(chunk)
+        profile.remote_numpy_pack_seconds += (
+            time.perf_counter() - numpy_pack_started
+        )
 
         request_id = self.request_id
         self.request_id += 1
@@ -786,9 +1116,8 @@ def _commit_evaluation_rows(
                     offset_count=len(request.actions),
                 ),
             )
-        state = request.node.state.observation.current
         propagated = value
-        if state.yourIndex != request.context.your_index:
+        if request.node.player_index != request.context.your_index:
             propagated = -propagated
         request.node.value = propagated
         request.node.backprop(propagated)
@@ -900,15 +1229,21 @@ def _apply_evaluations_cuda_streams(
 
 
 def _pad_combined_sparse(
-    combined: tuple[list[int], list[float], list[int]],
+    combined: tuple[Any, Any, Any],
     target_values: int,
-) -> tuple[list[int], list[float], list[int]]:
+) -> tuple[Any, Any, Any]:
     """vmapでmodelごとのflatten長を揃えるためzero-weight要素を足す。"""
     missing = target_values - len(combined[0])
     if missing < 0:
         raise ValueError("target_valuesが現在のsparse長より小さいです。")
     if missing == 0:
         return combined
+    if isinstance(combined[0], np.ndarray):
+        return (
+            np.pad(combined[0], (0, missing), constant_values=0),
+            np.pad(combined[1], (0, missing), constant_values=0.0),
+            combined[2],
+        )
     return (
         combined[0] + [0] * missing,
         combined[1] + [0.0] * missing,
@@ -1150,7 +1485,7 @@ def _select_leaf(
             else:
                 value = child.node.total / max(child.node.visit, 1)
                 visit = child.node.visit
-            if current.state.observation.current.yourIndex != context.your_index:
+            if current.player_index != context.your_index:
                 value = -value
             value += exploration * child.probability / (1 + visit)
             if best_value < value:
@@ -1166,9 +1501,20 @@ def _select_leaf(
             reserved_root_child = best_child
 
         if best_child.node is None:
+            json_before, dataclass_before = runtime.search_step_timing.snapshot()
             started = time.perf_counter()
-            next_state = runtime.search_step(current.state.searchId, best_child.select)
-            profile.search_step_seconds += time.perf_counter() - started
+            next_state = runtime.search_step(current.search_id, best_child.select)
+            elapsed = time.perf_counter() - started
+            json_after, dataclass_after = runtime.search_step_timing.snapshot()
+            json_elapsed = json_after - json_before
+            dataclass_elapsed = dataclass_after - dataclass_before
+            profile.search_step_seconds += elapsed
+            profile.search_step_json_seconds += json_elapsed
+            profile.search_step_dataclass_seconds += dataclass_elapsed
+            profile.search_step_c_api_seconds += max(
+                0.0,
+                elapsed - json_elapsed - dataclass_elapsed,
+            )
             profile.search_steps += 1
             child_node, request = _prepare_node(
                 runtime, context, current, next_state, profile
@@ -1180,7 +1526,7 @@ def _select_leaf(
             return request, True
 
         current = best_child.node
-        if current.state.observation.current.result >= 0:
+        if current.result >= 0:
             current.backprop(current.value)
             return None, True
 
@@ -1357,7 +1703,8 @@ def run_batched_tournament(
         raise ValueError("search_countは0以上で指定してください。")
 
     random.seed(seed)
-    torch.manual_seed(seed)
+    if torch is not None:
+        torch.manual_seed(seed)
     device = select_device(device_name)
     if parallel_cuda_models and device.type != "cuda":
         raise ValueError("parallel_cuda_modelsにはCUDA deviceが必要です。")
@@ -1547,11 +1894,12 @@ def _parallel_worker_main(
     """libcgと特徴量生成を担当するspawn workerのentry point。"""
     for variable in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         os.environ[variable] = "1"
-    try:
-        torch.set_num_threads(1)
-        torch.set_num_interop_threads(1)
-    except RuntimeError:
-        pass
+    if torch is not None:
+        try:
+            torch.set_num_threads(1)
+            torch.set_num_interop_threads(1)
+        except RuntimeError:
+            pass
 
     specs = [
         SimpleNamespace(
@@ -1624,10 +1972,12 @@ def _evaluate_remote_messages(
             profile,
         )
         profile.ipc_messages += len(messages)
+        response_put_started = time.perf_counter()
         for worker_id, request_id, _jobs in messages:
             response_queues[worker_id].put(
                 (request_id, responses[(worker_id, request_id)])
             )
+        profile.response_put_seconds += time.perf_counter() - response_put_started
         return
     if cuda_ensemble is not None:
         profile.cuda_per_model_waves += 1
@@ -1637,6 +1987,9 @@ def _evaluate_remote_messages(
         if model is None:
             raise RuntimeError(f"中央NN batcherにモデルがありません: {model_key}")
 
+        # 同じbatchへ幅64と幅1を混ぜると全rowが64へpaddingされる。job数や
+        # batch上限を変えず、近いdecoder幅が同じchunkへ入る順序にする。
+        entries.sort(key=lambda entry: entry[3].decoder_words)
         central_chunks: list[list[tuple[int, int, int, _RemoteEvalJob]]] = []
         current: list[tuple[int, int, int, _RemoteEvalJob]] = []
         current_size = 0
@@ -1652,6 +2005,7 @@ def _evaluate_remote_messages(
             central_chunks.append(current)
 
         for central_chunk in central_chunks:
+            merge_started = time.perf_counter()
             jobs = [entry[3] for entry in central_chunk]
             decoder_words = max(job.decoder_words for job in jobs)
             encoder = _merge_combined_sparse([job.encoder for job in jobs])
@@ -1659,24 +2013,48 @@ def _evaluate_remote_messages(
                 [_pad_remote_decoder(job, decoder_words) for job in jobs]
             )
             evaluation_count = sum(job.batch_count for job in jobs)
+            profile.nn_decoder_source_tokens += sum(
+                job.batch_count * job.decoder_words for job in jobs
+            )
+            profile.nn_decoder_padded_tokens += evaluation_count * decoder_words
+            profile.nn_merge_seconds += time.perf_counter() - merge_started
 
             started = time.perf_counter()
             with torch.inference_mode():
-                values, policies = model(
-                    torch.tensor(encoder[0], dtype=torch.int32, device=device),
-                    torch.tensor(encoder[1], dtype=torch.float32, device=device),
-                    torch.tensor(encoder[2], dtype=torch.int32, device=device),
-                    torch.tensor(decoder[0], dtype=torch.int32, device=device),
-                    torch.tensor(decoder[1], dtype=torch.float32, device=device),
-                    torch.tensor(decoder[2], dtype=torch.int32, device=device),
+                input_started = time.perf_counter()
+                inputs = (
+                    torch.from_numpy(encoder[0]).to(device),
+                    torch.from_numpy(encoder[1]).to(device),
+                    torch.from_numpy(encoder[2]).to(device),
+                    torch.from_numpy(decoder[0]).to(device),
+                    torch.from_numpy(decoder[1]).to(device),
+                    torch.from_numpy(decoder[2]).to(device),
                 )
-                value_rows = values.detach().cpu().tolist()
-                policy_rows = policies.detach().cpu().tolist()
+                profile.nn_input_seconds += time.perf_counter() - input_started
+
+                forward_started = time.perf_counter()
+                values, policies = model(*inputs)
+                profile.nn_forward_submit_seconds += (
+                    time.perf_counter() - forward_started
+                )
+
+                output_started = time.perf_counter()
+                value_rows_tensor = values.detach().cpu()
+                policy_rows_tensor = policies.detach().cpu()
+                profile.nn_output_wait_seconds += (
+                    time.perf_counter() - output_started
+                )
+
+                tolist_started = time.perf_counter()
+                value_rows = value_rows_tensor.tolist()
+                policy_rows = policy_rows_tensor.tolist()
+                profile.nn_tolist_seconds += time.perf_counter() - tolist_started
             profile.nn_seconds += time.perf_counter() - started
             profile.nn_evaluations += evaluation_count
             profile.nn_batches += 1
             profile.batch_sizes.append(evaluation_count)
 
+            response_pack_started = time.perf_counter()
             row_offset = 0
             for worker_id, request_id, job_index, job in central_chunk:
                 row_end = row_offset + job.batch_count
@@ -1685,20 +2063,25 @@ def _evaluate_remote_messages(
                     policy_rows[row_offset:row_end],
                 )
                 row_offset = row_end
+            profile.nn_response_pack_seconds += (
+                time.perf_counter() - response_pack_started
+            )
 
     profile.ipc_messages += len(messages)
+    response_put_started = time.perf_counter()
     for worker_id, request_id, _jobs in messages:
         response_queues[worker_id].put(
             (request_id, responses[(worker_id, request_id)])
         )
+    profile.response_put_seconds += time.perf_counter() - response_put_started
 
 
 def _pad_empty_sparse_rows(
-    vector: tuple[list[int], list[float], list[int]],
+    vector: tuple[np.ndarray, np.ndarray, np.ndarray],
     current_rows: int,
     target_rows: int,
     words_per_row: int,
-) -> tuple[list[int], list[float], list[int]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """model-axis batchの不足行をzero EmbeddingBagとして追加する。"""
     if current_rows > target_rows:
         raise ValueError("current_rowsがtarget_rowsを超えています。")
@@ -1711,7 +2094,15 @@ def _pad_empty_sparse_rows(
     missing_offsets = (target_rows - current_rows) * words_per_row
     if missing_offsets == 0:
         return vector
-    return indices, values, offsets + [len(indices)] * missing_offsets
+    return (
+        indices,
+        values,
+        np.pad(
+            offsets,
+            (0, missing_offsets),
+            constant_values=len(indices),
+        ),
+    )
 
 
 def _evaluate_remote_messages_cuda_ensemble(
@@ -1728,6 +2119,7 @@ def _evaluate_remote_messages_cuda_ensemble(
         list[list[tuple[int, int, int, _RemoteEvalJob]]],
     ] = {}
     for model_key, entries in grouped.items():
+        entries.sort(key=lambda entry: entry[3].decoder_words)
         chunks: list[list[tuple[int, int, int, _RemoteEvalJob]]] = []
         current: list[tuple[int, int, int, _RemoteEvalJob]] = []
         current_size = 0
@@ -1745,6 +2137,7 @@ def _evaluate_remote_messages_cuda_ensemble(
 
     wave_count = max(len(chunks) for chunks in chunked.values())
     for wave_index in range(wave_count):
+        merge_started = time.perf_counter()
         active_chunks = {
             model_key: chunks[wave_index]
             for model_key, chunks in chunked.items()
@@ -1761,11 +2154,19 @@ def _evaluate_remote_messages_cuda_ensemble(
             for entry in entries
         )
         decoder_words = 1 << (required_decoder_words - 1).bit_length()
+        profile.nn_decoder_source_tokens += sum(
+            entry[3].batch_count * entry[3].decoder_words
+            for entries in active_chunks.values()
+            for entry in entries
+        )
+        profile.nn_decoder_padded_tokens += (
+            len(evaluator.model_keys) * model_batch * decoder_words
+        )
 
         combined_rows: list[
             tuple[
-                tuple[list[int], list[float], list[int]],
-                tuple[list[int], list[float], list[int]],
+                tuple[np.ndarray, np.ndarray, np.ndarray],
+                tuple[np.ndarray, np.ndarray, np.ndarray],
             ]
         ] = []
         for model_key in evaluator.model_keys:
@@ -1800,46 +2201,48 @@ def _evaluate_remote_messages_cuda_ensemble(
             )
             for encoder, decoder in combined_rows
         ]
+        profile.nn_merge_seconds += time.perf_counter() - merge_started
 
         started = time.perf_counter()
+        input_started = time.perf_counter()
         inputs = (
-            torch.tensor(
-                [row[0][0] for row in combined_rows],
-                dtype=torch.int32,
-                device=device,
-            ),
-            torch.tensor(
-                [row[0][1] for row in combined_rows],
-                dtype=torch.float32,
-                device=device,
-            ),
-            torch.tensor(
-                [row[0][2] for row in combined_rows],
-                dtype=torch.int32,
-                device=device,
-            ),
-            torch.tensor(
-                [row[1][0] for row in combined_rows],
-                dtype=torch.int32,
-                device=device,
-            ),
-            torch.tensor(
-                [row[1][1] for row in combined_rows],
-                dtype=torch.float32,
-                device=device,
-            ),
-            torch.tensor(
-                [row[1][2] for row in combined_rows],
-                dtype=torch.int32,
-                device=device,
-            ),
+            torch.from_numpy(
+                np.stack([row[0][0] for row in combined_rows])
+            ).to(device),
+            torch.from_numpy(
+                np.stack([row[0][1] for row in combined_rows])
+            ).to(device),
+            torch.from_numpy(
+                np.stack([row[0][2] for row in combined_rows])
+            ).to(device),
+            torch.from_numpy(
+                np.stack([row[1][0] for row in combined_rows])
+            ).to(device),
+            torch.from_numpy(
+                np.stack([row[1][1] for row in combined_rows])
+            ).to(device),
+            torch.from_numpy(
+                np.stack([row[1][2] for row in combined_rows])
+            ).to(device),
         )
+        profile.nn_input_seconds += time.perf_counter() - input_started
         with torch.inference_mode():
+            forward_started = time.perf_counter()
             values, policies = evaluator.evaluate(*inputs)
-            value_rows = values.detach().cpu().tolist()
-            policy_rows = policies.detach().cpu().tolist()
+            profile.nn_forward_submit_seconds += time.perf_counter() - forward_started
+
+            output_started = time.perf_counter()
+            value_rows_tensor = values.detach().cpu()
+            policy_rows_tensor = policies.detach().cpu()
+            profile.nn_output_wait_seconds += time.perf_counter() - output_started
+
+            tolist_started = time.perf_counter()
+            value_rows = value_rows_tensor.tolist()
+            policy_rows = policy_rows_tensor.tolist()
+            profile.nn_tolist_seconds += time.perf_counter() - tolist_started
         profile.nn_seconds += time.perf_counter() - started
 
+        response_pack_started = time.perf_counter()
         for model_key, entries in active_chunks.items():
             model_index = evaluator.model_indices[model_key]
             row_offset = 0
@@ -1853,6 +2256,24 @@ def _evaluate_remote_messages_cuda_ensemble(
             profile.nn_evaluations += row_offset
             profile.nn_batches += 1
             profile.batch_sizes.append(row_offset)
+        profile.nn_response_pack_seconds += (
+            time.perf_counter() - response_pack_started
+        )
+
+
+def _collect_ready_messages(
+    request_queue: Any,
+    first_message: Any,
+) -> list[Any]:
+    """IPC queueへ到着済みの要求だけを待たずに回収する。"""
+    messages = [first_message]
+    while True:
+        try:
+            message = request_queue.get_nowait()
+        except queue.Empty:
+            break
+        messages.append(message)
+    return messages
 
 
 def run_worker_batched_tournament(
@@ -1862,19 +2283,16 @@ def run_worker_batched_tournament(
     *,
     alternate_sides: bool = True,
     device_name: str = "auto",
-    batch_size: int = 128,
+    batch_size: int = 256,
     lanes: int = 128,
     search_count: int = 10,
     max_selections: int = 2000,
     seed: int = 0,
     cpu_workers: int = 2,
-    batch_wait_ms: float = 2.0,
 ) -> BatchedTournamentOutput:
     """CPU libcg worker群と中央NN batcherで総当たりを実行する。"""
     if cpu_workers < 1:
         raise ValueError("cpu_workersは1以上で指定してください。")
-    if batch_wait_ms < 0:
-        raise ValueError("batch_wait_msは0以上で指定してください。")
 
     device = select_device(device_name)
     game_requests = [
@@ -1893,7 +2311,8 @@ def run_worker_batched_tournament(
     worker_count = min(cpu_workers, len(game_requests))
     request_chunks = [game_requests[index::worker_count] for index in range(worker_count)]
     worker_lanes = max(1, math.ceil(lanes / worker_count))
-    # 各workerが同時に最大remote_batch_sizeを送っても中央上限を超えない。
+    # worker jobを中央batchへ隙間なく詰められるよう、worker数で均等分割する。
+    # 大きなjobは途中分割できず、実測で平均batchとgames/sを悪化させた。
     remote_batch_size = max(1, batch_size // worker_count)
     spec_records = [
         (
@@ -1908,13 +2327,22 @@ def run_worker_batched_tournament(
     request_queue = context.Queue(maxsize=worker_count * 2)
     result_queue = context.Queue()
     response_queues = [context.Queue(maxsize=2) for _ in range(worker_count)]
+    from batched_worker_bootstrap import worker_main
+
+    request_records = [
+        [
+            (request.name0, request.name1, request.game_index, request.swap)
+            for request in chunk
+        ]
+        for chunk in request_chunks
+    ]
     processes = [
         context.Process(
-            target=_parallel_worker_main,
+            target=worker_main,
             args=(
                 worker_id,
                 spec_records,
-                request_chunks[worker_id],
+                request_records[worker_id],
                 worker_lanes,
                 search_count,
                 max_selections,
@@ -1990,17 +2418,11 @@ def run_worker_batched_tournament(
                     )
                 continue
 
-            messages = [first_message]
             collect_started = time.perf_counter()
-            deadline = collect_started + batch_wait_ms / 1000.0
-            while len(messages) < worker_count:
-                remaining = deadline - time.perf_counter()
-                if remaining <= 0:
-                    break
-                try:
-                    messages.append(request_queue.get(timeout=remaining))
-                except queue.Empty:
-                    break
+            messages = _collect_ready_messages(
+                request_queue,
+                first_message,
+            )
             profile.batch_collect_seconds += time.perf_counter() - collect_started
             _evaluate_remote_messages(
                 messages,
@@ -2041,11 +2463,15 @@ def run_worker_batched_tournament(
             "battle_step_seconds",
             "search_begin_seconds",
             "search_step_seconds",
+            "search_step_c_api_seconds",
+            "search_step_json_seconds",
+            "search_step_dataclass_seconds",
             "feature_seconds",
             "search_finalize_seconds",
             "battle_steps",
             "search_steps",
             "remote_wait_seconds",
+            "remote_numpy_pack_seconds",
         ):
             setattr(
                 profile,

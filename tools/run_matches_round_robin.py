@@ -753,8 +753,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=128,
-        help="batched backendのモデル別NN最大batch size（デフォルト: 128）",
+        default=None,
+        help=(
+            "モデル別NN最大batch size。省略時はworker-batched=256、"
+            "その他のbackend=128"
+        ),
     )
     parser.add_argument(
         "--lanes",
@@ -776,12 +779,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="batched backendの乱数seed（デフォルト: 0）",
-    )
-    parser.add_argument(
-        "--batch-wait-ms",
-        type=float,
-        default=2.0,
-        help="worker-batchedで他workerのNN要求を待つ最大時間ms（デフォルト: 2.0）",
     )
     parser.add_argument(
         "--no-self",
@@ -806,6 +803,10 @@ def main() -> None:
 
     if args.games < 1:
         raise SystemExit("--games は1以上で指定してください。")
+    if args.batch_size is None:
+        args.batch_size = 256 if args.backend == "worker-batched" else 128
+    if args.batch_size < 1:
+        raise SystemExit("--batch-size は1以上で指定してください。")
 
     specs: list[AgentSpec] = []
     if args.config:
@@ -871,7 +872,7 @@ def main() -> None:
         if args.backend == "legacy"
         else (
             f"worker-batched, CPUワーカー={workers}, device={args.device}, "
-            f"lanes={lanes}, batch-size={args.batch_size}, wait={args.batch_wait_ms:g}ms"
+            f"lanes={lanes}, batch-size={args.batch_size}"
             if args.backend == "worker-batched"
             else (
                 f"{args.backend}, device={args.device}, lanes={lanes}, "
@@ -908,7 +909,6 @@ def main() -> None:
             search_count=args.search_count,
             seed=args.seed,
             cpu_workers=workers,
-            batch_wait_ms=args.batch_wait_ms,
         )
         h2h_map, all_game_logs = aggregate_tournament_results(
             pairings,
@@ -1063,6 +1063,12 @@ def main() -> None:
             f"cleanup={profile.search_finalize_seconds:.3f}秒"
         )
         print(
+            "Search.step内訳: "
+            f"C API+ctypes={profile.search_step_c_api_seconds:.3f}秒, "
+            f"JSON decode+object={profile.search_step_json_seconds:.3f}秒, "
+            f"dataclass={profile.search_step_dataclass_seconds:.3f}秒"
+        )
+        print(
             f"libcg Battle: start={profile.battle_start_seconds:.3f}秒, "
             f"step={profile.battle_step_seconds:.3f}秒/{profile.battle_steps}回, "
             f"特徴量生成={profile.feature_seconds:.3f}秒"
@@ -1075,9 +1081,26 @@ def main() -> None:
             )
         if args.backend == "worker-batched":
             print(
+                "中央NN内訳: "
+                f"merge/pad={profile.nn_merge_seconds:.3f}秒, "
+                f"from_numpy/H2D={profile.nn_input_seconds:.3f}秒, "
+                f"forward投入={profile.nn_forward_submit_seconds:.3f}秒, "
+                f"forward待ち+D2H={profile.nn_output_wait_seconds:.3f}秒, "
+                f"tolist={profile.nn_tolist_seconds:.3f}秒, "
+                f"応答分割={profile.nn_response_pack_seconds:.3f}秒, "
+                f"response put={profile.response_put_seconds:.3f}秒"
+            )
+            print(
+                "Decoder padding: "
+                f"source={profile.nn_decoder_source_tokens} token, "
+                f"padded={profile.nn_decoder_padded_tokens} token, "
+                f"有効率={profile.decoder_token_efficiency:.1%}"
+            )
+            print(
                 f"CPU workers: {profile.cpu_workers}, "
                 f"worker NN待ち合計={profile.remote_wait_seconds:.3f}秒, "
-                f"中央batch待機={profile.batch_collect_seconds:.3f}秒, "
+                f"worker NumPy梱包={profile.remote_numpy_pack_seconds:.3f}秒, "
+                f"中央batch収集={profile.batch_collect_seconds:.3f}秒, "
                 f"IPC request={profile.ipc_messages}回"
             )
             print(
@@ -1118,8 +1141,22 @@ def main() -> None:
                             "nn_batches": batched_output.profile.nn_batches,
                             "mean_batch_size": batched_output.profile.mean_batch_size,
                             "max_batch_size": batched_output.profile.max_batch_size,
+                            "nn_merge_seconds": batched_output.profile.nn_merge_seconds,
+                            "nn_input_seconds": batched_output.profile.nn_input_seconds,
+                            "nn_forward_submit_seconds": batched_output.profile.nn_forward_submit_seconds,
+                            "nn_output_wait_seconds": batched_output.profile.nn_output_wait_seconds,
+                            "nn_tolist_seconds": batched_output.profile.nn_tolist_seconds,
+                            "nn_response_pack_seconds": batched_output.profile.nn_response_pack_seconds,
+                            "nn_decoder_source_tokens": batched_output.profile.nn_decoder_source_tokens,
+                            "nn_decoder_padded_tokens": batched_output.profile.nn_decoder_padded_tokens,
+                            "decoder_token_efficiency": batched_output.profile.decoder_token_efficiency,
+                            "response_put_seconds": batched_output.profile.response_put_seconds,
+                            "remote_numpy_pack_seconds": batched_output.profile.remote_numpy_pack_seconds,
                             "search_begin_seconds": batched_output.profile.search_begin_seconds,
                             "search_step_seconds": batched_output.profile.search_step_seconds,
+                            "search_step_c_api_seconds": batched_output.profile.search_step_c_api_seconds,
+                            "search_step_json_seconds": batched_output.profile.search_step_json_seconds,
+                            "search_step_dataclass_seconds": batched_output.profile.search_step_dataclass_seconds,
                             "search_steps": batched_output.profile.search_steps,
                             "battle_step_seconds": batched_output.profile.battle_step_seconds,
                             "battle_steps": batched_output.profile.battle_steps,
