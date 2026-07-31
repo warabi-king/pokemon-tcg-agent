@@ -1,0 +1,2435 @@
+{
+  "method": {
+    "cluster_field": "hierarchical_cluster_id",
+    "cluster_count": 16,
+    "distance_metric": "1-histogram-intersection",
+    "linkage": "average",
+    "boundary_similarity": 0.75
+  },
+  "dataset": {
+    "unique_decks": 633,
+    "total_games": 226708
+  },
+  "cluster_sizes": {
+    "minimum": 1,
+    "median": 31.0,
+    "maximum": 200,
+    "singletons": 1
+  },
+  "deck_similarity": {
+    "within_cluster": {
+      "count": 31489,
+      "mean": 0.7522325256438757,
+      "minimum": 0.2333333333333334,
+      "p10": 0.4,
+      "p25": 0.7166666666666667,
+      "median": 0.8333333333333334,
+      "p75": 0.8833333333333333,
+      "p90": 0.9166666666666666,
+      "maximum": 0.9833333333333333
+    },
+    "between_clusters": {
+      "count": 168539,
+      "mean": 0.20783013624937452,
+      "minimum": 0.0,
+      "p10": 0.09999999999999998,
+      "p25": 0.15000000000000002,
+      "median": 0.19999999999999996,
+      "p75": 0.2666666666666666,
+      "p90": 0.31666666666666665,
+      "maximum": 0.5333333333333333
+    },
+    "within_pairs_below_boundary": 8548,
+    "between_pairs_at_or_above_boundary": 0,
+    "maximum_between_pair": {
+      "similarity": 0.5333333333333333,
+      "left_record_index": 568,
+      "right_record_index": 621,
+      "left_cluster_id": 7,
+      "right_cluster_id": 2
+    }
+  },
+  "silhouette": {
+    "mean": 0.6060741546316722,
+    "median": 0.6829599456890699,
+    "negative_count": 8,
+    "negative_rate": 0.01263823064770932
+  },
+  "nearest_neighbor": {
+    "non_singleton_decks": 632,
+    "strict_same_cluster_count": 632,
+    "strict_same_cluster_rate": 1.0
+  },
+  "pokemon_composition": {
+    "within_cluster_jaccard": {
+      "count": 31489,
+      "mean": 0.6129711538217382,
+      "minimum": 0.0,
+      "p10": 0.0,
+      "p25": 0.5,
+      "median": 0.6956521739130435,
+      "p75": 0.8571428571428571,
+      "p90": 0.9473684210526315,
+      "maximum": 1.0
+    },
+    "between_clusters_jaccard": {
+      "count": 168539,
+      "mean": 0.014041821677513047,
+      "minimum": 0.0,
+      "p10": 0.0,
+      "p25": 0.0,
+      "median": 0.0,
+      "p75": 0.0,
+      "p90": 0.05,
+      "maximum": 0.32142857142857145
+    },
+    "dominant_type_purity": 0.9494470774091627,
+    "game_weighted_dominant_type_purity": 0.9758191153377913
+  },
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "members": 200,
+      "games": 76893,
+      "wins": 36912,
+      "losses": 39894,
+      "draws": 87,
+      "win_rate": 0.48004369708556044,
+      "dominant_pokemon_type": "超",
+      "type_purity": 0.98,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 3760,
+          "ratio": 0.31333333333333335
+        },
+        {
+          "category": "グッズ",
+          "copies": 3606,
+          "ratio": 0.3005
+        },
+        {
+          "category": "サポート",
+          "copies": 2616,
+          "ratio": 0.218
+        },
+        {
+          "category": "エネルギー",
+          "copies": 1530,
+          "ratio": 0.1275
+        },
+        {
+          "category": "スタジアム",
+          "copies": 376,
+          "ratio": 0.03133333333333333
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 112,
+          "ratio": 0.009333333333333334
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "超",
+          "copies": 2320,
+          "ratio": 0.6170212765957447
+        },
+        {
+          "type": "無",
+          "copies": 1176,
+          "ratio": 0.3127659574468085
+        },
+        {
+          "type": "悪",
+          "copies": 118,
+          "ratio": 0.03138297872340425
+        },
+        {
+          "type": "草",
+          "copies": 93,
+          "ratio": 0.02473404255319149
+        },
+        {
+          "type": "炎",
+          "copies": 31,
+          "ratio": 0.00824468085106383
+        },
+        {
+          "type": "水",
+          "copies": 14,
+          "ratio": 0.003723404255319149
+        },
+        {
+          "type": "鋼",
+          "copies": 7,
+          "ratio": 0.0018617021276595746
+        },
+        {
+          "type": "闘",
+          "copies": 1,
+          "ratio": 0.00026595744680851064
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "超",
+          "copies": 1375,
+          "ratio": 0.8986928104575164
+        },
+        {
+          "type": "無",
+          "copies": 143,
+          "ratio": 0.0934640522875817
+        },
+        {
+          "type": "虹",
+          "copies": 8,
+          "ratio": 0.00522875816993464
+        },
+        {
+          "type": "水",
+          "copies": 4,
+          "ratio": 0.00261437908496732
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 742,
+          "name": "ユンゲラー",
+          "type": "超",
+          "adoption_rate": 0.905,
+          "average_copies": 3.615
+        },
+        {
+          "card_id": 743,
+          "name": "フーディン",
+          "type": "超",
+          "adoption_rate": 0.905,
+          "average_copies": 3.425
+        },
+        {
+          "card_id": 66,
+          "name": "ノココッチ",
+          "type": "無",
+          "adoption_rate": 0.905,
+          "average_copies": 2.715
+        },
+        {
+          "card_id": 741,
+          "name": "ケーシィ",
+          "type": "超",
+          "adoption_rate": 0.895,
+          "average_copies": 3.58
+        },
+        {
+          "card_id": 305,
+          "name": "ノコッチ",
+          "type": "無",
+          "adoption_rate": 0.725,
+          "average_copies": 2.405
+        },
+        {
+          "card_id": 140,
+          "name": "キチキギスex",
+          "type": "悪",
+          "adoption_rate": 0.545,
+          "average_copies": 0.57
+        },
+        {
+          "card_id": 343,
+          "name": "シェイミ",
+          "type": "草",
+          "adoption_rate": 0.42,
+          "average_copies": 0.44
+        },
+        {
+          "card_id": 65,
+          "name": "ノコッチ",
+          "type": "無",
+          "adoption_rate": 0.235,
+          "average_copies": 0.725
+        }
+      ]
+    },
+    {
+      "cluster_id": 1,
+      "members": 69,
+      "games": 50819,
+      "wins": 26136,
+      "losses": 24637,
+      "draws": 46,
+      "win_rate": 0.514295834235227,
+      "dominant_pokemon_type": "悪",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 1247,
+          "ratio": 0.30120772946859903
+        },
+        {
+          "category": "グッズ",
+          "copies": 1063,
+          "ratio": 0.2567632850241546
+        },
+        {
+          "category": "サポート",
+          "copies": 801,
+          "ratio": 0.1934782608695652
+        },
+        {
+          "category": "エネルギー",
+          "copies": 703,
+          "ratio": 0.16980676328502414
+        },
+        {
+          "category": "スタジアム",
+          "copies": 259,
+          "ratio": 0.06256038647342996
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 67,
+          "ratio": 0.01618357487922705
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "悪",
+          "copies": 715,
+          "ratio": 0.5733761026463512
+        },
+        {
+          "type": "超",
+          "copies": 230,
+          "ratio": 0.18444266238973536
+        },
+        {
+          "type": "無",
+          "copies": 121,
+          "ratio": 0.09703287890938252
+        },
+        {
+          "type": "水",
+          "copies": 117,
+          "ratio": 0.09382518043303929
+        },
+        {
+          "type": "竜",
+          "copies": 32,
+          "ratio": 0.02566158781074579
+        },
+        {
+          "type": "草",
+          "copies": 14,
+          "ratio": 0.011226944667201283
+        },
+        {
+          "type": "炎",
+          "copies": 10,
+          "ratio": 0.00801924619085806
+        },
+        {
+          "type": "闘",
+          "copies": 8,
+          "ratio": 0.006415396952686447
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "悪",
+          "copies": 702,
+          "ratio": 0.9985775248933144
+        },
+        {
+          "type": "虹",
+          "copies": 1,
+          "ratio": 0.001422475106685633
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 112,
+          "name": "マシマシラ",
+          "type": "超",
+          "adoption_rate": 0.9130434782608695,
+          "average_copies": 3.3333333333333335
+        },
+        {
+          "card_id": 646,
+          "name": "マリィのベロバー",
+          "type": "悪",
+          "adoption_rate": 0.8405797101449275,
+          "average_copies": 3.36231884057971
+        },
+        {
+          "card_id": 648,
+          "name": "マリィのオーロンゲex",
+          "type": "悪",
+          "adoption_rate": 0.8405797101449275,
+          "average_copies": 2.7971014492753623
+        },
+        {
+          "card_id": 647,
+          "name": "マリィのギモー",
+          "type": "悪",
+          "adoption_rate": 0.8405797101449275,
+          "average_copies": 2.260869565217391
+        },
+        {
+          "card_id": 104,
+          "name": "ユキメノコ",
+          "type": "水",
+          "adoption_rate": 0.43478260869565216,
+          "average_copies": 0.8260869565217391
+        },
+        {
+          "card_id": 860,
+          "name": "ユキワラシ",
+          "type": "水",
+          "adoption_rate": 0.4057971014492754,
+          "average_copies": 0.7971014492753623
+        },
+        {
+          "card_id": 305,
+          "name": "ノコッチ",
+          "type": "無",
+          "adoption_rate": 0.30434782608695654,
+          "average_copies": 0.8840579710144928
+        },
+        {
+          "card_id": 66,
+          "name": "ノココッチ",
+          "type": "無",
+          "adoption_rate": 0.30434782608695654,
+          "average_copies": 0.6956521739130435
+        }
+      ]
+    },
+    {
+      "cluster_id": 2,
+      "members": 55,
+      "games": 28610,
+      "wins": 14191,
+      "losses": 14401,
+      "draws": 18,
+      "win_rate": 0.4960153792380287,
+      "dominant_pokemon_type": "草",
+      "type_purity": 0.9636363636363636,
+      "card_category_distribution": [
+        {
+          "category": "サポート",
+          "copies": 851,
+          "ratio": 0.2578787878787879
+        },
+        {
+          "category": "グッズ",
+          "copies": 843,
+          "ratio": 0.25545454545454543
+        },
+        {
+          "category": "エネルギー",
+          "copies": 778,
+          "ratio": 0.23575757575757575
+        },
+        {
+          "category": "ポケモン",
+          "copies": 680,
+          "ratio": 0.20606060606060606
+        },
+        {
+          "category": "スタジアム",
+          "copies": 94,
+          "ratio": 0.028484848484848484
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 54,
+          "ratio": 0.016363636363636365
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "草",
+          "copies": 419,
+          "ratio": 0.6161764705882353
+        },
+        {
+          "type": "無",
+          "copies": 114,
+          "ratio": 0.1676470588235294
+        },
+        {
+          "type": "闘",
+          "copies": 58,
+          "ratio": 0.08529411764705883
+        },
+        {
+          "type": "炎",
+          "copies": 40,
+          "ratio": 0.058823529411764705
+        },
+        {
+          "type": "水",
+          "copies": 25,
+          "ratio": 0.03676470588235294
+        },
+        {
+          "type": "超",
+          "copies": 24,
+          "ratio": 0.03529411764705882
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "無",
+          "copies": 320,
+          "ratio": 0.41131105398457585
+        },
+        {
+          "type": "草",
+          "copies": 304,
+          "ratio": 0.390745501285347
+        },
+        {
+          "type": "闘",
+          "copies": 74,
+          "ratio": 0.09511568123393316
+        },
+        {
+          "type": "水",
+          "copies": 25,
+          "ratio": 0.032133676092544985
+        },
+        {
+          "type": "虹",
+          "copies": 21,
+          "ratio": 0.02699228791773779
+        },
+        {
+          "type": "悪",
+          "copies": 14,
+          "ratio": 0.017994858611825194
+        },
+        {
+          "type": "炎",
+          "copies": 12,
+          "ratio": 0.015424164524421594
+        },
+        {
+          "type": "【ロケット団】【ロケット団】",
+          "copies": 4,
+          "ratio": 0.005141388174807198
+        },
+        {
+          "type": "超",
+          "copies": 4,
+          "ratio": 0.005141388174807198
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 344,
+          "name": "イシズマイ",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 3.7454545454545456
+        },
+        {
+          "card_id": 345,
+          "name": "イワパレス",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 3.618181818181818
+        },
+        {
+          "card_id": 756,
+          "name": "メガガルーラex",
+          "type": "無",
+          "adoption_rate": 0.5818181818181818,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 117,
+          "name": "オーガポン いしずえのめんex",
+          "type": "闘",
+          "adoption_rate": 0.36363636363636365,
+          "average_copies": 0.45454545454545453
+        },
+        {
+          "card_id": 414,
+          "name": "ロケット団のフリーザー",
+          "type": "水",
+          "adoption_rate": 0.23636363636363636,
+          "average_copies": 0.43636363636363634
+        },
+        {
+          "card_id": 343,
+          "name": "シェイミ",
+          "type": "草",
+          "adoption_rate": 0.16363636363636364,
+          "average_copies": 0.16363636363636364
+        },
+        {
+          "card_id": 58,
+          "name": "イダイナキバ",
+          "type": "闘",
+          "adoption_rate": 0.12727272727272726,
+          "average_copies": 0.509090909090909
+        },
+        {
+          "card_id": 112,
+          "name": "マシマシラ",
+          "type": "超",
+          "adoption_rate": 0.09090909090909091,
+          "average_copies": 0.36363636363636365
+        }
+      ]
+    },
+    {
+      "cluster_id": 3,
+      "members": 64,
+      "games": 15646,
+      "wins": 7886,
+      "losses": 7723,
+      "draws": 37,
+      "win_rate": 0.5040265882653714,
+      "dominant_pokemon_type": "水",
+      "type_purity": 0.765625,
+      "card_category_distribution": [
+        {
+          "category": "グッズ",
+          "copies": 1191,
+          "ratio": 0.31015625
+        },
+        {
+          "category": "サポート",
+          "copies": 929,
+          "ratio": 0.24192708333333332
+        },
+        {
+          "category": "ポケモン",
+          "copies": 765,
+          "ratio": 0.19921875
+        },
+        {
+          "category": "エネルギー",
+          "copies": 711,
+          "ratio": 0.18515625
+        },
+        {
+          "category": "スタジアム",
+          "copies": 164,
+          "ratio": 0.042708333333333334
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 80,
+          "ratio": 0.020833333333333332
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "水",
+          "copies": 484,
+          "ratio": 0.6326797385620915
+        },
+        {
+          "type": "無",
+          "copies": 108,
+          "ratio": 0.1411764705882353
+        },
+        {
+          "type": "炎",
+          "copies": 75,
+          "ratio": 0.09803921568627451
+        },
+        {
+          "type": "超",
+          "copies": 45,
+          "ratio": 0.058823529411764705
+        },
+        {
+          "type": "草",
+          "copies": 39,
+          "ratio": 0.050980392156862744
+        },
+        {
+          "type": "闘",
+          "copies": 13,
+          "ratio": 0.01699346405228758
+        },
+        {
+          "type": "雷",
+          "copies": 1,
+          "ratio": 0.00130718954248366
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "水",
+          "copies": 582,
+          "ratio": 0.8185654008438819
+        },
+        {
+          "type": "無無無",
+          "copies": 81,
+          "ratio": 0.11392405063291139
+        },
+        {
+          "type": "無",
+          "copies": 24,
+          "ratio": 0.03375527426160337
+        },
+        {
+          "type": "悪",
+          "copies": 8,
+          "ratio": 0.011251758087201125
+        },
+        {
+          "type": "闘",
+          "copies": 7,
+          "ratio": 0.009845288326300985
+        },
+        {
+          "type": "炎",
+          "copies": 3,
+          "ratio": 0.004219409282700422
+        },
+        {
+          "type": "虹",
+          "copies": 3,
+          "ratio": 0.004219409282700422
+        },
+        {
+          "type": "雷",
+          "copies": 3,
+          "ratio": 0.004219409282700422
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 1030,
+          "name": "ヒトデマン",
+          "type": "水",
+          "adoption_rate": 0.546875,
+          "average_copies": 1.8125
+        },
+        {
+          "card_id": 1031,
+          "name": "メガスターミーex",
+          "type": "水",
+          "adoption_rate": 0.546875,
+          "average_copies": 1.71875
+        },
+        {
+          "card_id": 506,
+          "name": "クマシュン",
+          "type": "水",
+          "adoption_rate": 0.390625,
+          "average_copies": 1.5625
+        },
+        {
+          "card_id": 666,
+          "name": "エースバーン",
+          "type": "炎",
+          "adoption_rate": 0.359375,
+          "average_copies": 1.140625
+        },
+        {
+          "card_id": 860,
+          "name": "ユキワラシ",
+          "type": "水",
+          "adoption_rate": 0.25,
+          "average_copies": 0.796875
+        },
+        {
+          "card_id": 861,
+          "name": "メガユキメノコex",
+          "type": "水",
+          "adoption_rate": 0.25,
+          "average_copies": 0.71875
+        },
+        {
+          "card_id": 66,
+          "name": "ノココッチ",
+          "type": "無",
+          "adoption_rate": 0.21875,
+          "average_copies": 0.546875
+        },
+        {
+          "card_id": 305,
+          "name": "ノコッチ",
+          "type": "無",
+          "adoption_rate": 0.171875,
+          "average_copies": 0.5
+        }
+      ]
+    },
+    {
+      "cluster_id": 4,
+      "members": 24,
+      "games": 12786,
+      "wins": 6768,
+      "losses": 6014,
+      "draws": 4,
+      "win_rate": 0.5293289535429376,
+      "dominant_pokemon_type": "闘",
+      "type_purity": 0.9583333333333334,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 469,
+          "ratio": 0.32569444444444445
+        },
+        {
+          "category": "グッズ",
+          "copies": 375,
+          "ratio": 0.2604166666666667
+        },
+        {
+          "category": "サポート",
+          "copies": 268,
+          "ratio": 0.18611111111111112
+        },
+        {
+          "category": "エネルギー",
+          "copies": 215,
+          "ratio": 0.14930555555555555
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 84,
+          "ratio": 0.058333333333333334
+        },
+        {
+          "category": "スタジアム",
+          "copies": 29,
+          "ratio": 0.02013888888888889
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "闘",
+          "copies": 264,
+          "ratio": 0.5628997867803838
+        },
+        {
+          "type": "草",
+          "copies": 184,
+          "ratio": 0.39232409381663114
+        },
+        {
+          "type": "悪",
+          "copies": 21,
+          "ratio": 0.04477611940298507
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "闘",
+          "copies": 211,
+          "ratio": 0.9813953488372092
+        },
+        {
+          "type": "草",
+          "copies": 3,
+          "ratio": 0.013953488372093023
+        },
+        {
+          "type": "虹虹",
+          "copies": 1,
+          "ratio": 0.004651162790697674
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 379,
+          "name": "シロナのフカマル",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 380,
+          "name": "シロナのガバイト",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 341,
+          "name": "シロナのロゼリア",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 3.9166666666666665
+        },
+        {
+          "card_id": 342,
+          "name": "シロナのロズレイド",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 3.4166666666666665
+        },
+        {
+          "card_id": 381,
+          "name": "シロナのガブリアスex",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 387,
+          "name": "シロナのミカルゲ",
+          "type": "悪",
+          "adoption_rate": 0.5833333333333334,
+          "average_copies": 0.875
+        },
+        {
+          "card_id": 343,
+          "name": "シェイミ",
+          "type": "草",
+          "adoption_rate": 0.16666666666666666,
+          "average_copies": 0.16666666666666666
+        },
+        {
+          "card_id": 344,
+          "name": "イシズマイ",
+          "type": "草",
+          "adoption_rate": 0.041666666666666664,
+          "average_copies": 0.08333333333333333
+        }
+      ]
+    },
+    {
+      "cluster_id": 5,
+      "members": 31,
+      "games": 12296,
+      "wins": 6654,
+      "losses": 5633,
+      "draws": 9,
+      "win_rate": 0.5411515940143136,
+      "dominant_pokemon_type": "草",
+      "type_purity": 0.8387096774193549,
+      "card_category_distribution": [
+        {
+          "category": "サポート",
+          "copies": 489,
+          "ratio": 0.2629032258064516
+        },
+        {
+          "category": "ポケモン",
+          "copies": 448,
+          "ratio": 0.24086021505376345
+        },
+        {
+          "category": "グッズ",
+          "copies": 416,
+          "ratio": 0.22365591397849463
+        },
+        {
+          "category": "エネルギー",
+          "copies": 363,
+          "ratio": 0.19516129032258064
+        },
+        {
+          "category": "スタジアム",
+          "copies": 91,
+          "ratio": 0.0489247311827957
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 53,
+          "ratio": 0.02849462365591398
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "草",
+          "copies": 213,
+          "ratio": 0.47544642857142855
+        },
+        {
+          "type": "超",
+          "copies": 112,
+          "ratio": 0.25
+        },
+        {
+          "type": "水",
+          "copies": 57,
+          "ratio": 0.12723214285714285
+        },
+        {
+          "type": "悪",
+          "copies": 45,
+          "ratio": 0.10044642857142858
+        },
+        {
+          "type": "無",
+          "copies": 21,
+          "ratio": 0.046875
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "草",
+          "copies": 207,
+          "ratio": 0.5702479338842975
+        },
+        {
+          "type": "【ロケット団】【ロケット団】",
+          "copies": 124,
+          "ratio": 0.3415977961432507
+        },
+        {
+          "type": "無無無",
+          "copies": 20,
+          "ratio": 0.05509641873278237
+        },
+        {
+          "type": "超",
+          "copies": 11,
+          "ratio": 0.030303030303030304
+        },
+        {
+          "type": "水",
+          "copies": 1,
+          "ratio": 0.0027548209366391185
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 414,
+          "name": "ロケット団のフリーザー",
+          "type": "水",
+          "adoption_rate": 1.0,
+          "average_copies": 1.8387096774193548
+        },
+        {
+          "card_id": 400,
+          "name": "ロケット団のタマンチュラ",
+          "type": "草",
+          "adoption_rate": 0.8387096774193549,
+          "average_copies": 3.3548387096774195
+        },
+        {
+          "card_id": 401,
+          "name": "ロケット団のワナイダー",
+          "type": "草",
+          "adoption_rate": 0.8387096774193549,
+          "average_copies": 3.3548387096774195
+        },
+        {
+          "card_id": 431,
+          "name": "ロケット団のミュウツーex",
+          "type": "超",
+          "adoption_rate": 0.8387096774193549,
+          "average_copies": 1.6774193548387097
+        },
+        {
+          "card_id": 434,
+          "name": "ロケット団のミミッキュ",
+          "type": "超",
+          "adoption_rate": 0.7419354838709677,
+          "average_copies": 1.8064516129032258
+        },
+        {
+          "card_id": 463,
+          "name": "ロケット団のヤミカラス",
+          "type": "悪",
+          "adoption_rate": 0.25806451612903225,
+          "average_copies": 0.8387096774193549
+        },
+        {
+          "card_id": 891,
+          "name": "ロケット団のドンカラス",
+          "type": "悪",
+          "adoption_rate": 0.16129032258064516,
+          "average_copies": 0.5806451612903226
+        },
+        {
+          "card_id": 473,
+          "name": "ロケット団のポリゴン",
+          "type": "無",
+          "adoption_rate": 0.16129032258064516,
+          "average_copies": 0.3225806451612903
+        }
+      ]
+    },
+    {
+      "cluster_id": 6,
+      "members": 37,
+      "games": 8491,
+      "wins": 4095,
+      "losses": 4352,
+      "draws": 44,
+      "win_rate": 0.482275350370981,
+      "dominant_pokemon_type": "闘",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "グッズ",
+          "copies": 614,
+          "ratio": 0.2765765765765766
+        },
+        {
+          "category": "ポケモン",
+          "copies": 577,
+          "ratio": 0.2599099099099099
+        },
+        {
+          "category": "エネルギー",
+          "copies": 505,
+          "ratio": 0.22747747747747749
+        },
+        {
+          "category": "サポート",
+          "copies": 425,
+          "ratio": 0.19144144144144143
+        },
+        {
+          "category": "スタジアム",
+          "copies": 52,
+          "ratio": 0.023423423423423424
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 47,
+          "ratio": 0.02117117117117117
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "闘",
+          "copies": 561,
+          "ratio": 0.9722703639514731
+        },
+        {
+          "type": "無",
+          "copies": 11,
+          "ratio": 0.019064124783362217
+        },
+        {
+          "type": "超",
+          "copies": 5,
+          "ratio": 0.008665511265164644
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "闘",
+          "copies": 468,
+          "ratio": 0.9267326732673268
+        },
+        {
+          "type": "虹",
+          "copies": 34,
+          "ratio": 0.06732673267326733
+        },
+        {
+          "type": "悪",
+          "copies": 3,
+          "ratio": 0.005940594059405941
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 676,
+          "name": "ソルロック",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 3.027027027027027
+        },
+        {
+          "card_id": 675,
+          "name": "ルナトーン",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 2.054054054054054
+        },
+        {
+          "card_id": 678,
+          "name": "メガルカリオex",
+          "type": "闘",
+          "adoption_rate": 0.8108108108108109,
+          "average_copies": 3.081081081081081
+        },
+        {
+          "card_id": 677,
+          "name": "リオル",
+          "type": "闘",
+          "adoption_rate": 0.7567567567567568,
+          "average_copies": 2.945945945945946
+        },
+        {
+          "card_id": 673,
+          "name": "マクノシタ",
+          "type": "闘",
+          "adoption_rate": 0.5675675675675675,
+          "average_copies": 1.027027027027027
+        },
+        {
+          "card_id": 674,
+          "name": "ハリテヤマ",
+          "type": "闘",
+          "adoption_rate": 0.5675675675675675,
+          "average_copies": 1.027027027027027
+        },
+        {
+          "card_id": 117,
+          "name": "オーガポン いしずえのめんex",
+          "type": "闘",
+          "adoption_rate": 0.32432432432432434,
+          "average_copies": 0.32432432432432434
+        },
+        {
+          "card_id": 116,
+          "name": "イイネイヌ",
+          "type": "闘",
+          "adoption_rate": 0.1891891891891892,
+          "average_copies": 0.5945945945945946
+        }
+      ]
+    },
+    {
+      "cluster_id": 7,
+      "members": 40,
+      "games": 6841,
+      "wins": 3508,
+      "losses": 3323,
+      "draws": 10,
+      "win_rate": 0.5127905277006286,
+      "dominant_pokemon_type": "竜",
+      "type_purity": 0.95,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 729,
+          "ratio": 0.30375
+        },
+        {
+          "category": "グッズ",
+          "copies": 709,
+          "ratio": 0.29541666666666666
+        },
+        {
+          "category": "サポート",
+          "copies": 483,
+          "ratio": 0.20125
+        },
+        {
+          "category": "エネルギー",
+          "copies": 388,
+          "ratio": 0.16166666666666665
+        },
+        {
+          "category": "スタジアム",
+          "copies": 77,
+          "ratio": 0.03208333333333333
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 14,
+          "ratio": 0.005833333333333334
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "竜",
+          "copies": 423,
+          "ratio": 0.5802469135802469
+        },
+        {
+          "type": "超",
+          "copies": 94,
+          "ratio": 0.1289437585733882
+        },
+        {
+          "type": "無",
+          "copies": 93,
+          "ratio": 0.12757201646090535
+        },
+        {
+          "type": "草",
+          "copies": 64,
+          "ratio": 0.0877914951989026
+        },
+        {
+          "type": "悪",
+          "copies": 38,
+          "ratio": 0.05212620027434842
+        },
+        {
+          "type": "炎",
+          "copies": 14,
+          "ratio": 0.019204389574759947
+        },
+        {
+          "type": "水",
+          "copies": 3,
+          "ratio": 0.00411522633744856
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "超",
+          "copies": 176,
+          "ratio": 0.4536082474226804
+        },
+        {
+          "type": "炎",
+          "copies": 157,
+          "ratio": 0.40463917525773196
+        },
+        {
+          "type": "悪",
+          "copies": 49,
+          "ratio": 0.12628865979381443
+        },
+        {
+          "type": "無",
+          "copies": 6,
+          "ratio": 0.015463917525773196
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 119,
+          "name": "ドラメシヤ",
+          "type": "竜",
+          "adoption_rate": 0.95,
+          "average_copies": 3.8
+        },
+        {
+          "card_id": 120,
+          "name": "ドロンチ",
+          "type": "竜",
+          "adoption_rate": 0.95,
+          "average_copies": 3.8
+        },
+        {
+          "card_id": 121,
+          "name": "ドラパルトex",
+          "type": "竜",
+          "adoption_rate": 0.95,
+          "average_copies": 2.975
+        },
+        {
+          "card_id": 235,
+          "name": "スボミー",
+          "type": "草",
+          "adoption_rate": 0.95,
+          "average_copies": 1.6
+        },
+        {
+          "card_id": 140,
+          "name": "キチキギスex",
+          "type": "悪",
+          "adoption_rate": 0.925,
+          "average_copies": 0.95
+        },
+        {
+          "card_id": 1071,
+          "name": "ニャースex",
+          "type": "無",
+          "adoption_rate": 0.8,
+          "average_copies": 0.9
+        },
+        {
+          "card_id": 112,
+          "name": "マシマシラ",
+          "type": "超",
+          "adoption_rate": 0.65,
+          "average_copies": 1.175
+        },
+        {
+          "card_id": 184,
+          "name": "ラティアスex",
+          "type": "超",
+          "adoption_rate": 0.425,
+          "average_copies": 0.425
+        }
+      ]
+    },
+    {
+      "cluster_id": 8,
+      "members": 84,
+      "games": 6635,
+      "wins": 2989,
+      "losses": 3637,
+      "draws": 9,
+      "win_rate": 0.4504898266767144,
+      "dominant_pokemon_type": "鋼",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "グッズ",
+          "copies": 1496,
+          "ratio": 0.2968253968253968
+        },
+        {
+          "category": "ポケモン",
+          "copies": 1078,
+          "ratio": 0.21388888888888888
+        },
+        {
+          "category": "サポート",
+          "copies": 1056,
+          "ratio": 0.20952380952380953
+        },
+        {
+          "category": "エネルギー",
+          "copies": 1038,
+          "ratio": 0.20595238095238094
+        },
+        {
+          "category": "スタジアム",
+          "copies": 286,
+          "ratio": 0.056746031746031746
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 86,
+          "ratio": 0.017063492063492062
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "鋼",
+          "copies": 678,
+          "ratio": 0.6289424860853432
+        },
+        {
+          "type": "炎",
+          "copies": 283,
+          "ratio": 0.2625231910946197
+        },
+        {
+          "type": "闘",
+          "copies": 94,
+          "ratio": 0.08719851576994433
+        },
+        {
+          "type": "水",
+          "copies": 15,
+          "ratio": 0.013914656771799629
+        },
+        {
+          "type": "無",
+          "copies": 8,
+          "ratio": 0.0074211502782931356
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "鋼",
+          "copies": 1038,
+          "ratio": 1.0
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 169,
+          "name": "ジュラルドン",
+          "type": "鋼",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 190,
+          "name": "ブリジュラスex",
+          "type": "鋼",
+          "adoption_rate": 1.0,
+          "average_copies": 3.9761904761904763
+        },
+        {
+          "card_id": 666,
+          "name": "エースバーン",
+          "type": "炎",
+          "adoption_rate": 0.8571428571428571,
+          "average_copies": 3.369047619047619
+        },
+        {
+          "card_id": 57,
+          "name": "ジーランス",
+          "type": "闘",
+          "adoption_rate": 0.8452380952380952,
+          "average_copies": 1.0833333333333333
+        },
+        {
+          "card_id": 414,
+          "name": "ロケット団のフリーザー",
+          "type": "水",
+          "adoption_rate": 0.16666666666666666,
+          "average_copies": 0.17857142857142858
+        },
+        {
+          "card_id": 1071,
+          "name": "ニャースex",
+          "type": "無",
+          "adoption_rate": 0.047619047619047616,
+          "average_copies": 0.09523809523809523
+        },
+        {
+          "card_id": 840,
+          "name": "ブリジュラス",
+          "type": "鋼",
+          "adoption_rate": 0.047619047619047616,
+          "average_copies": 0.05952380952380952
+        },
+        {
+          "card_id": 170,
+          "name": "ブリジュラス",
+          "type": "鋼",
+          "adoption_rate": 0.023809523809523808,
+          "average_copies": 0.023809523809523808
+        }
+      ]
+    },
+    {
+      "cluster_id": 9,
+      "members": 5,
+      "games": 4336,
+      "wins": 2349,
+      "losses": 1986,
+      "draws": 1,
+      "win_rate": 0.5417435424354243,
+      "dominant_pokemon_type": "無",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 100,
+          "ratio": 0.3333333333333333
+        },
+        {
+          "category": "エネルギー",
+          "copies": 65,
+          "ratio": 0.21666666666666667
+        },
+        {
+          "category": "グッズ",
+          "copies": 62,
+          "ratio": 0.20666666666666667
+        },
+        {
+          "category": "サポート",
+          "copies": 47,
+          "ratio": 0.15666666666666668
+        },
+        {
+          "category": "スタジアム",
+          "copies": 20,
+          "ratio": 0.06666666666666667
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 6,
+          "ratio": 0.02
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "無",
+          "copies": 38,
+          "ratio": 0.38
+        },
+        {
+          "type": "超",
+          "copies": 28,
+          "ratio": 0.28
+        },
+        {
+          "type": "悪",
+          "copies": 9,
+          "ratio": 0.09
+        },
+        {
+          "type": "水",
+          "copies": 8,
+          "ratio": 0.08
+        },
+        {
+          "type": "草",
+          "copies": 6,
+          "ratio": 0.06
+        },
+        {
+          "type": "闘",
+          "copies": 5,
+          "ratio": 0.05
+        },
+        {
+          "type": "竜",
+          "copies": 4,
+          "ratio": 0.04
+        },
+        {
+          "type": "炎",
+          "copies": 1,
+          "ratio": 0.01
+        },
+        {
+          "type": "雷",
+          "copies": 1,
+          "ratio": 0.01
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "草",
+          "copies": 18,
+          "ratio": 0.27692307692307694
+        },
+        {
+          "type": "超",
+          "copies": 18,
+          "ratio": 0.27692307692307694
+        },
+        {
+          "type": "闘",
+          "copies": 11,
+          "ratio": 0.16923076923076924
+        },
+        {
+          "type": "水",
+          "copies": 9,
+          "ratio": 0.13846153846153847
+        },
+        {
+          "type": "雷",
+          "copies": 8,
+          "ratio": 0.12307692307692308
+        },
+        {
+          "type": "炎",
+          "copies": 1,
+          "ratio": 0.015384615384615385
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 756,
+          "name": "メガガルーラex",
+          "type": "無",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 1071,
+          "name": "ニャースex",
+          "type": "無",
+          "adoption_rate": 1.0,
+          "average_copies": 3.6
+        },
+        {
+          "card_id": 272,
+          "name": "リーリエのピッピex",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 184,
+          "name": "ラティアスex",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 2.6
+        },
+        {
+          "card_id": 140,
+          "name": "キチキギスex",
+          "type": "悪",
+          "adoption_rate": 1.0,
+          "average_copies": 1.8
+        },
+        {
+          "card_id": 108,
+          "name": "オーガポン いどのめんex",
+          "type": "水",
+          "adoption_rate": 1.0,
+          "average_copies": 1.6
+        },
+        {
+          "card_id": 117,
+          "name": "オーガポン いしずえのめんex",
+          "type": "闘",
+          "adoption_rate": 0.6,
+          "average_copies": 0.6
+        },
+        {
+          "card_id": 96,
+          "name": "オーガポン みどりのめんex",
+          "type": "草",
+          "adoption_rate": 0.4,
+          "average_copies": 1.2
+        }
+      ]
+    },
+    {
+      "cluster_id": 10,
+      "members": 9,
+      "games": 2107,
+      "wins": 1155,
+      "losses": 951,
+      "draws": 1,
+      "win_rate": 0.5481727574750831,
+      "dominant_pokemon_type": "草",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 181,
+          "ratio": 0.3351851851851852
+        },
+        {
+          "category": "グッズ",
+          "copies": 144,
+          "ratio": 0.26666666666666666
+        },
+        {
+          "category": "サポート",
+          "copies": 92,
+          "ratio": 0.17037037037037037
+        },
+        {
+          "category": "エネルギー",
+          "copies": 61,
+          "ratio": 0.11296296296296296
+        },
+        {
+          "category": "スタジアム",
+          "copies": 36,
+          "ratio": 0.06666666666666667
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 26,
+          "ratio": 0.04814814814814815
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "草",
+          "copies": 160,
+          "ratio": 0.8839779005524862
+        },
+        {
+          "type": "竜",
+          "copies": 9,
+          "ratio": 0.049723756906077346
+        },
+        {
+          "type": "水",
+          "copies": 7,
+          "ratio": 0.03867403314917127
+        },
+        {
+          "type": "超",
+          "copies": 4,
+          "ratio": 0.022099447513812154
+        },
+        {
+          "type": "鋼",
+          "copies": 1,
+          "ratio": 0.0055248618784530384
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "草",
+          "copies": 60,
+          "ratio": 0.9836065573770492
+        },
+        {
+          "type": "虹",
+          "copies": 1,
+          "ratio": 0.01639344262295082
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 89,
+          "name": "サルノリ",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 90,
+          "name": "バチンキー",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 93,
+          "name": "カミッチュ",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 92,
+          "name": "カジッチュ",
+          "type": "草",
+          "adoption_rate": 0.7777777777777778,
+          "average_copies": 2.2222222222222223
+        },
+        {
+          "card_id": 42,
+          "name": "カジッチュ",
+          "type": "竜",
+          "adoption_rate": 0.5555555555555556,
+          "average_copies": 1.0
+        },
+        {
+          "card_id": 655,
+          "name": "セレビィ",
+          "type": "草",
+          "adoption_rate": 0.4444444444444444,
+          "average_copies": 1.7777777777777777
+        },
+        {
+          "card_id": 73,
+          "name": "シガロコ",
+          "type": "草",
+          "adoption_rate": 0.3333333333333333,
+          "average_copies": 0.3333333333333333
+        },
+        {
+          "card_id": 74,
+          "name": "ベラカス",
+          "type": "草",
+          "adoption_rate": 0.3333333333333333,
+          "average_copies": 0.3333333333333333
+        }
+      ]
+    },
+    {
+      "cluster_id": 11,
+      "members": 6,
+      "games": 765,
+      "wins": 384,
+      "losses": 380,
+      "draws": 1,
+      "win_rate": 0.5019607843137255,
+      "dominant_pokemon_type": "無",
+      "type_purity": 0.5,
+      "card_category_distribution": [
+        {
+          "category": "グッズ",
+          "copies": 104,
+          "ratio": 0.28888888888888886
+        },
+        {
+          "category": "ポケモン",
+          "copies": 89,
+          "ratio": 0.24722222222222223
+        },
+        {
+          "category": "サポート",
+          "copies": 68,
+          "ratio": 0.18888888888888888
+        },
+        {
+          "category": "エネルギー",
+          "copies": 51,
+          "ratio": 0.14166666666666666
+        },
+        {
+          "category": "スタジアム",
+          "copies": 24,
+          "ratio": 0.06666666666666667
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 24,
+          "ratio": 0.06666666666666667
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "超",
+          "copies": 45,
+          "ratio": 0.5056179775280899
+        },
+        {
+          "type": "無",
+          "copies": 44,
+          "ratio": 0.4943820224719101
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "無",
+          "copies": 24,
+          "ratio": 0.47058823529411764
+        },
+        {
+          "type": "超",
+          "copies": 24,
+          "ratio": 0.47058823529411764
+        },
+        {
+          "type": "虹",
+          "copies": 3,
+          "ratio": 0.058823529411764705
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 878,
+          "name": "ホップのボクレー",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 879,
+          "name": "ホップのオーロット",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 3.3333333333333335
+        },
+        {
+          "card_id": 304,
+          "name": "ホップのカビゴン",
+          "type": "無",
+          "adoption_rate": 1.0,
+          "average_copies": 2.1666666666666665
+        },
+        {
+          "card_id": 66,
+          "name": "ノココッチ",
+          "type": "無",
+          "adoption_rate": 0.6666666666666666,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 65,
+          "name": "ノコッチ",
+          "type": "無",
+          "adoption_rate": 0.3333333333333333,
+          "average_copies": 1.3333333333333333
+        },
+        {
+          "card_id": 305,
+          "name": "ノコッチ",
+          "type": "無",
+          "adoption_rate": 0.3333333333333333,
+          "average_copies": 1.0
+        },
+        {
+          "card_id": 311,
+          "name": "ホップのウッウ",
+          "type": "無",
+          "adoption_rate": 0.3333333333333333,
+          "average_copies": 0.8333333333333334
+        },
+        {
+          "card_id": 272,
+          "name": "リーリエのピッピex",
+          "type": "超",
+          "adoption_rate": 0.16666666666666666,
+          "average_copies": 0.16666666666666666
+        }
+      ]
+    },
+    {
+      "cluster_id": 12,
+      "members": 2,
+      "games": 313,
+      "wins": 206,
+      "losses": 98,
+      "draws": 9,
+      "win_rate": 0.65814696485623,
+      "dominant_pokemon_type": "超",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 45,
+          "ratio": 0.375
+        },
+        {
+          "category": "グッズ",
+          "copies": 30,
+          "ratio": 0.25
+        },
+        {
+          "category": "エネルギー",
+          "copies": 20,
+          "ratio": 0.16666666666666666
+        },
+        {
+          "category": "サポート",
+          "copies": 16,
+          "ratio": 0.13333333333333333
+        },
+        {
+          "category": "スタジアム",
+          "copies": 8,
+          "ratio": 0.06666666666666667
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 1,
+          "ratio": 0.008333333333333333
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "超",
+          "copies": 21,
+          "ratio": 0.4666666666666667
+        },
+        {
+          "type": "無",
+          "copies": 9,
+          "ratio": 0.2
+        },
+        {
+          "type": "闘",
+          "copies": 7,
+          "ratio": 0.15555555555555556
+        },
+        {
+          "type": "竜",
+          "copies": 5,
+          "ratio": 0.1111111111111111
+        },
+        {
+          "type": "悪",
+          "copies": 2,
+          "ratio": 0.044444444444444446
+        },
+        {
+          "type": "雷",
+          "copies": 1,
+          "ratio": 0.022222222222222223
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "超",
+          "copies": 15,
+          "ratio": 0.75
+        },
+        {
+          "type": "無",
+          "copies": 5,
+          "ratio": 0.25
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 162,
+          "name": "ヤドン",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 163,
+          "name": "ヤドキング",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 3.5
+        },
+        {
+          "card_id": 144,
+          "name": "キュレム",
+          "type": "竜",
+          "adoption_rate": 1.0,
+          "average_copies": 2.5
+        },
+        {
+          "card_id": 184,
+          "name": "ラティアスex",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 224,
+          "name": "コノヨザル",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 756,
+          "name": "メガガルーラex",
+          "type": "無",
+          "adoption_rate": 1.0,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 115,
+          "name": "ローブシン",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 1.5
+        },
+        {
+          "card_id": 140,
+          "name": "キチキギスex",
+          "type": "悪",
+          "adoption_rate": 1.0,
+          "average_copies": 1.0
+        }
+      ]
+    },
+    {
+      "cluster_id": 13,
+      "members": 4,
+      "games": 125,
+      "wins": 54,
+      "losses": 71,
+      "draws": 0,
+      "win_rate": 0.432,
+      "dominant_pokemon_type": "超",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 90,
+          "ratio": 0.375
+        },
+        {
+          "category": "エネルギー",
+          "copies": 56,
+          "ratio": 0.23333333333333334
+        },
+        {
+          "category": "サポート",
+          "copies": 55,
+          "ratio": 0.22916666666666666
+        },
+        {
+          "category": "グッズ",
+          "copies": 29,
+          "ratio": 0.12083333333333333
+        },
+        {
+          "category": "スタジアム",
+          "copies": 10,
+          "ratio": 0.041666666666666664
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "超",
+          "copies": 64,
+          "ratio": 0.7111111111111111
+        },
+        {
+          "type": "無",
+          "copies": 8,
+          "ratio": 0.08888888888888889
+        },
+        {
+          "type": "闘",
+          "copies": 8,
+          "ratio": 0.08888888888888889
+        },
+        {
+          "type": "水",
+          "copies": 6,
+          "ratio": 0.06666666666666667
+        },
+        {
+          "type": "草",
+          "copies": 4,
+          "ratio": 0.044444444444444446
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "超",
+          "copies": 44,
+          "ratio": 0.7857142857142857
+        },
+        {
+          "type": "虹",
+          "copies": 12,
+          "ratio": 0.21428571428571427
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 745,
+          "name": "ラルトス",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 746,
+          "name": "キルリア",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 747,
+          "name": "メガサーナイトex",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 112,
+          "name": "マシマシラ",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 117,
+          "name": "オーガポン いしずえのめんex",
+          "type": "闘",
+          "adoption_rate": 1.0,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 414,
+          "name": "ロケット団のフリーザー",
+          "type": "水",
+          "adoption_rate": 1.0,
+          "average_copies": 1.5
+        },
+        {
+          "card_id": 183,
+          "name": "ムチュール",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 1.0
+        },
+        {
+          "card_id": 184,
+          "name": "ラティアスex",
+          "type": "超",
+          "adoption_rate": 1.0,
+          "average_copies": 1.0
+        }
+      ]
+    },
+    {
+      "cluster_id": 14,
+      "members": 1,
+      "games": 32,
+      "wins": 10,
+      "losses": 22,
+      "draws": 0,
+      "win_rate": 0.3125,
+      "dominant_pokemon_type": "雷",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "エネルギー",
+          "copies": 22,
+          "ratio": 0.36666666666666664
+        },
+        {
+          "category": "ポケモン",
+          "copies": 15,
+          "ratio": 0.25
+        },
+        {
+          "category": "グッズ",
+          "copies": 12,
+          "ratio": 0.2
+        },
+        {
+          "category": "サポート",
+          "copies": 8,
+          "ratio": 0.13333333333333333
+        },
+        {
+          "category": "スタジアム",
+          "copies": 3,
+          "ratio": 0.05
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "雷",
+          "copies": 15,
+          "ratio": 1.0
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "雷",
+          "copies": 22,
+          "ratio": 1.0
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 265,
+          "name": "ナンジャモのビリリダマ",
+          "type": "雷",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 268,
+          "name": "ナンジャモのズピカ",
+          "type": "雷",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 269,
+          "name": "ナンジャモのハラバリーex",
+          "type": "雷",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 270,
+          "name": "ナンジャモのカイデン",
+          "type": "雷",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        },
+        {
+          "card_id": 271,
+          "name": "ナンジャモのタイカイデン",
+          "type": "雷",
+          "adoption_rate": 1.0,
+          "average_copies": 3.0
+        }
+      ]
+    },
+    {
+      "cluster_id": 15,
+      "members": 2,
+      "games": 13,
+      "wins": 5,
+      "losses": 8,
+      "draws": 0,
+      "win_rate": 0.38461538461538464,
+      "dominant_pokemon_type": "草",
+      "type_purity": 1.0,
+      "card_category_distribution": [
+        {
+          "category": "ポケモン",
+          "copies": 37,
+          "ratio": 0.30833333333333335
+        },
+        {
+          "category": "グッズ",
+          "copies": 28,
+          "ratio": 0.23333333333333334
+        },
+        {
+          "category": "エネルギー",
+          "copies": 26,
+          "ratio": 0.21666666666666667
+        },
+        {
+          "category": "サポート",
+          "copies": 20,
+          "ratio": 0.16666666666666666
+        },
+        {
+          "category": "スタジアム",
+          "copies": 8,
+          "ratio": 0.06666666666666667
+        },
+        {
+          "category": "ポケモンのどうぐ",
+          "copies": 1,
+          "ratio": 0.008333333333333333
+        }
+      ],
+      "pokemon_type_distribution": [
+        {
+          "type": "草",
+          "copies": 34,
+          "ratio": 0.918918918918919
+        },
+        {
+          "type": "無",
+          "copies": 2,
+          "ratio": 0.05405405405405406
+        },
+        {
+          "type": "悪",
+          "copies": 1,
+          "ratio": 0.02702702702702703
+        }
+      ],
+      "energy_type_distribution": [
+        {
+          "type": "草",
+          "copies": 26,
+          "ratio": 1.0
+        }
+      ],
+      "top_pokemon": [
+        {
+          "card_id": 96,
+          "name": "オーガポン みどりのめんex",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 4.0
+        },
+        {
+          "card_id": 920,
+          "name": "カプ・ブルル",
+          "type": "草",
+          "adoption_rate": 1.0,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 650,
+          "name": "フシギダネ",
+          "type": "草",
+          "adoption_rate": 0.5,
+          "average_copies": 2.0
+        },
+        {
+          "card_id": 651,
+          "name": "フシギソウ",
+          "type": "草",
+          "adoption_rate": 0.5,
+          "average_copies": 1.5
+        },
+        {
+          "card_id": 652,
+          "name": "メガフシギバナex",
+          "type": "草",
+          "adoption_rate": 0.5,
+          "average_copies": 1.5
+        },
+        {
+          "card_id": 92,
+          "name": "カジッチュ",
+          "type": "草",
+          "adoption_rate": 0.5,
+          "average_copies": 1.0
+        },
+        {
+          "card_id": 93,
+          "name": "カミッチュ",
+          "type": "草",
+          "adoption_rate": 0.5,
+          "average_copies": 1.0
+        },
+        {
+          "card_id": 150,
+          "name": "カミツオロチex",
+          "type": "草",
+          "adoption_rate": 0.5,
+          "average_copies": 1.0
+        }
+      ]
+    }
+  ]
+}

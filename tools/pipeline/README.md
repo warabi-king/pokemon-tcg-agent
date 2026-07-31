@@ -7,14 +7,21 @@
 Phase0(履歴模倣) ─▶ for g in 0..G-1: [ ①リーグ(履歴生成) ─▶ ②履歴で self/opp を継続学習 ]
 ```
 
-- 参加エージェント = `deck_generator/generated/deck_candidates_by_wins.jsonl` の 63 クラスタ代表（`cl00`〜）。
+- 参加エージェント = `tools/deck_generator/generated/deck_candidates_by_wins.jsonl` の
+  **16 主要クラスタ代表**（`cl00`〜`cl15`）。クラスタリング・代表デッキ選出は
+  [`tools/clustering_deck/`](../clustering_deck/README.md)（平均連結法による階層クラスタリング）が担当し、
+  `hierarchical_cluster_representative=true` のレコードを `gen_agents.py` が拾う。
 - ①リーグは黒箱（`PIPE_LEAGUE_CMD`）。仕様は [`docs/league_interface.md`](../../docs/league_interface.md)。
 - 途中評価なし・成果物は世代ごとに保持。
+- Phase0 は `agents/match_agents/imitation_group0-2`（`shards/` 由来の self+opp 重み）を
+  **全16クラスタで積極的に再利用**する: 完全一致デッキ（`cl00/01/02`）は self を直接コピー、
+  それ以外は最寄りの group を warm-start 初期値として own/opp シャードで学習し、
+  シャードが空の場合も最寄り重みへフォールバックコピーする（詳細は `phase0.py` 参照）。
 
 ## 実行
 
 ```bash
-# エージェント生成のみ確認（clusters.json と約63デッキ）
+# エージェント生成のみ確認（clusters.json と16デッキ）
 python tools/pipeline/orchestrate.py --dry-run
 
 # 全体（Phase0 → 世代ループ）。要: 公式リプレイ or リーグ
@@ -35,7 +42,7 @@ python tools/pipeline/orchestrate.py
 | `PIPE_WORKERS` | 8 | Phase0 前処理（preprocess_all）の並列プロセス数 |
 | `PIPE_ROOT` | `pipeline/` | 成果物の根 |
 | `PIPE_OFFICIAL_EPISODES` | `episodes/official/` | Phase0 用リプレイ（.zip or JSON ディレクトリ） |
-| `PIPE_DECKGEN_JSONL` | `deck_generator/generated/deck_candidates_by_wins.jsonl` | 参加デッキ元 |
+| `PIPE_DECKGEN_JSONL` | `tools/deck_generator/generated/deck_candidates_by_wins.jsonl` | 参加デッキ元（`hierarchical_cluster_*` 付与済み） |
 | `PIPE_LEAGUE_CMD` | (空=スタブ) | ①リーグ実行コマンド（`{manifest}` `{out}` を置換） |
 
 ## モジュール
@@ -47,9 +54,9 @@ python tools/pipeline/orchestrate.py
 | `preprocess.py` | 履歴→シャード（自前フィルタ対応、既存ライブラリ再利用）。世代ループの exact-deck 前処理と `episode_sources` を提供 |
 | `preprocess_multi.py` | **単一パス多クラスタ前処理**。全エピソードを1回走査し全クラスタの own/opp シャードを同時生成（Phase0 が使用） |
 | `trainer.py` | `train_imitation.py` サブプロセス実行ラッパ |
-| `gen_agents.py` | クラスタ→約63エージェント（clusters.json + decks） |
+| `gen_agents.py` | 階層クラスタ代表(16)→エージェント（clusters.json + decks） |
 | `package_agent.py` | self+opp+deck を実行可能 src/ に梱包 |
-| `phase0.py` | 初期 self/opp をブートストラップ（前処理は preprocess_all で1パス、近いデッキはコピー、opp は新規学習） |
+| `phase0.py` | 初期 self/opp をブートストラップ（前処理は preprocess_all で1パス。完全一致デッキは self コピー、それ以外も含め全クラスタで最寄り PRETRAINED を warm-start、シャード空はフォールバックコピー） |
 | `generation.py` | 世代1回（梱包→リーグ→継続学習） |
 | `orchestrate.py` | 入口（生成→Phase0→世代ループ） |
 | `league_stub.py` | ①の動作確認用スタブ（本番は `PIPE_LEAGUE_CMD`） |

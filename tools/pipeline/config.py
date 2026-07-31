@@ -60,7 +60,9 @@ ROOT = _path("PIPE_ROOT", REPO_ROOT / "pipeline")                               
 OFFICIAL_EPISODES = _path("PIPE_OFFICIAL_EPISODES", REPO_ROOT / "episodes" / "official")  # Phase0 用リプレイ
 DECKGEN_JSONL = _path(
     "PIPE_DECKGEN_JSONL",
-    REPO_ROOT / "deck_generator" / "generated" / "deck_candidates_by_wins.jsonl",
+    # tools/clustering_deck/run_hierarchical_analysis.py が hierarchical_cluster_*
+    # フィールド（既定16クラスタ、代表デッキ選出込み）を付与済みのJSONL。
+    REPO_ROOT / "tools" / "deck_generator" / "generated" / "deck_candidates_by_wins.jsonl",
 )
 TEMPLATE_SRC = _path("PIPE_TEMPLATE_SRC", _RL_SRC)   # 梱包時にコピーする実行コードのテンプレート
 

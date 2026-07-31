@@ -1,7 +1,12 @@
-"""deck_generator の候補デッキDBから、参加エージェント（約63体）を生成する。
+"""tools/deck_generator の候補デッキDBから、参加エージェント（16体）を生成する。
 
-deck_candidates_by_wins.jsonl の各クラスタ(cluster_id)について、勝利数が最大の
-デッキを代表として1体ずつエージェント化する。
+deck_candidates_by_wins.jsonl は tools/clustering_deck/run_hierarchical_analysis.py
+（平均連結法による階層クラスタリング、既定16クラスタ）によって
+hierarchical_cluster_id / hierarchical_cluster_representative 等のフィールドが
+付与済みであることを前提とする。各 hierarchical_cluster_id について
+hierarchical_cluster_representative=true のレコード（対戦数加重の中心性が最大付近で
+最も使用実績のある実在デッキ、詳細は tools/clustering_deck/README.md）を代表として
+1体ずつエージェント化する。
 
 出力:
   <ROOT>/clusters.json          … agents: [{name, cluster_id, deck, games, wins, win_rate}]
@@ -20,17 +25,28 @@ from deck_utils import write_deck_csv
 
 def build_agents(jsonl_path: Path) -> list[dict]:
     records = [json.loads(line) for line in Path(jsonl_path).read_text(encoding="utf-8").splitlines() if line.strip()]
-    # クラスタごとに wins 最大のレコードを代表に選ぶ（ファイル順に依存しないよう明示的に選択）
-    best_by_cluster: dict[int, dict] = {}
+
+    representatives: dict[int, dict] = {}
     for r in records:
-        cid = r["cluster_id"]
-        cur = best_by_cluster.get(cid)
-        if cur is None or r.get("wins", 0) > cur.get("wins", 0):
-            best_by_cluster[cid] = r
+        if not r.get("hierarchical_cluster_representative"):
+            continue
+        cid = r["hierarchical_cluster_id"]
+        if cid in representatives:
+            raise ValueError(
+                f"hierarchical_cluster_id={cid} の代表デッキが複数あります。"
+                " tools/clustering_deck/run_hierarchical_analysis.py の出力を確認してください。"
+            )
+        representatives[cid] = r
+
+    if not representatives:
+        raise ValueError(
+            f"{jsonl_path} に hierarchical_cluster_representative=true のレコードがありません。"
+            " 先に tools/clustering_deck/run_hierarchical_analysis.py を実行してください。"
+        )
 
     agents: list[dict] = []
-    for cid in sorted(best_by_cluster):
-        r = best_by_cluster[cid]
+    for cid in sorted(representatives):
+        r = representatives[cid]
         deck = list(r["deck"])
         if len(deck) != 60:
             raise ValueError(f"cluster {cid} の代表デッキが60枚ではありません: {len(deck)}枚")
@@ -39,9 +55,10 @@ def build_agents(jsonl_path: Path) -> list[dict]:
                 "name": f"cl{cid:02d}",
                 "cluster_id": cid,
                 "deck": deck,
-                "games": r.get("games", 0),
-                "wins": r.get("wins", 0),
-                "win_rate": r.get("win_rate", 0.0),
+                "games": r.get("hierarchical_cluster_games", r.get("games", 0)),
+                "wins": r.get("hierarchical_cluster_wins", r.get("wins", 0)),
+                "win_rate": r.get("hierarchical_cluster_win_rate", r.get("win_rate", 0.0)),
+                "is_major_cluster": bool(r.get("hierarchical_is_major_cluster", False)),
             }
         )
     return agents

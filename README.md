@@ -276,26 +276,34 @@ tools/live_loss_recorder.py              学習中のバッチlossを逐次CSV/J
 ## 自己対戦パイプライン（設計メモ）
 
 各エージェントを「自分の手番モデル(self)」＋「探索時の相手モデル(opp)」の**1対1ペア**で持ち、
-世代ごとに更新する自己対戦学習パイプライン。実装は `tools/pipeline/`（予定）。
+世代ごとに更新する自己対戦学習パイプライン。実装は `tools/pipeline/`。
 
-- **参加エージェント**: `deck_generator/generated/deck_candidates_by_wins.jsonl` の
-  **63クラスタ**（`deck_completion.py cluster-weights` が付与）から、各クラスタの
-  by_wins 先頭（最多勝ちデッキ）を代表として約63体を生成。名前は `cl00`〜`cl62`。
-  既存の `imitation_group0/1/2` は残置し、別名で作成する。
-  近いデッキ（類似度≥しきい値）は事前学習をコピー: `cl00←group0` / `cl01←group1` / `cl03←group2`。
+- **参加エージェント**: `tools/deck_generator/generated/deck_candidates_by_wins.jsonl` の
+  **16主要クラスタ代表**（`cl00`〜`cl15`）。クラスタリング自体は
+  `tools/clustering_deck/`（平均連結法による階層クラスタリング、詳細は
+  [`tools/clustering_deck/README.md`](tools/clustering_deck/README.md)）が担当し、
+  `hierarchical_cluster_representative=true` のレコードを `gen_agents.py` が拾う。
+  既存の `imitation_group0/1/2`（`shards/` 由来の self+opp 重み）は残置し、
+  **全16クラスタの Phase0 で積極的に再利用**する:
+  完全一致デッキ（`cl00←group0` / `cl01←group1` / `cl02←group2`）は self を直接コピー、
+  それ以外の13クラスタも含め、最寄りの group の self/opp を warm-start 初期値として
+  own/opp シャードで学習する（シャードが空の場合は最寄り重みへフォールバックコピー）。
 - **全体の流れ**: 履歴による模倣学習(Phase0) →
   世代ループ ×G回 [ ①リーグ戦（並列版・黒箱、`episode JSON` を出力） →
   ②履歴を `role=own` / `role=opponent` で前処理 → self/opp を継続学習(warm-start) ]。
   ループ中の評価・採否ゲートは無し。
-- **データの作り分け**: self = 自分のデッキで打った手 / opp = 自分と対戦した相手が打った手
-  (`preprocess_episodes.py --role opponent`)。value は実際の勝敗。
+- **データの作り分け**: self = 自分のデッキで打った手 / opp = 自分と対戦した相手が打った手。
+  前処理は `preprocess_multi.py` が全エピソードを1回走査し、全クラスタの own/opp
+  シャードを同時生成する。value は実際の勝敗。
 - **①リーグ**は「agents マニフェストを渡すと `episode JSON` を出す」黒箱として扱う（並列化は別担当）。
   既存の `preprocess_episodes.py` が読める kaggle episode 形式を前提。
 - **設定は環境変数**でプログラム冒頭に定義（既定値）:
   `PIPE_GENERATIONS=5`, `PIPE_EPOCHS_PER_GEN=3`, `PIPE_PHASE0_EPOCHS=5`,
-  `PIPE_SEARCH_COUNT=50`, `PIPE_SIM_THRESHOLD=0.75`, `PIPE_LR=3e-4`, `PIPE_BATCH_SIZE=128` など。
+  `PIPE_SEARCH_COUNT=50`, `PIPE_SIM_THRESHOLD=0.75`, `PIPE_LR=3e-4`, `PIPE_BATCH_SIZE=128`,
+  `PIPE_WORKERS=8` など。
 - **成果物は世代ごとに保持**（掃除しない）。
 
-新規作成する主な部品: クラスタ→エージェント生成、self+opp を配線する梱包器
-（`prepare_match_agent_submission.py` 拡張）、Phase0 ブートストラップ、世代ループ、
-オーケストレータ（環境変数駆動）。
+主な部品: クラスタ→エージェント生成（`gen_agents.py`）、単一パス前処理
+（`preprocess_multi.py`）、self+opp を配線する梱包器（`package_agent.py`、
+`prepare_match_agent_submission.py`）、Phase0 ブートストラップ（`phase0.py`）、
+世代ループ（`generation.py`）、オーケストレータ（`orchestrate.py`、環境変数駆動）。
