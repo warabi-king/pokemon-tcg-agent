@@ -15,11 +15,14 @@ json.loads ＋特徴抽出し直していた。しかし各プレイヤー p の
 
 from __future__ import annotations
 
+import gc
 import json
 import pickle
 import time
 from multiprocessing import Pool
 from pathlib import Path
+
+import numpy as np
 
 import config  # noqa: F401  (sys.path 設定の副作用)
 from deck_utils import nearest_deck
@@ -83,10 +86,17 @@ def extract_player_blocks(data: bytes) -> list[PlayerBlock]:
                 continue
             sv_enc = get_encoder_input(obs, your_deck)
             sv_dec = get_decoder_input(obs, actions)
+            # Python list のままだと int 1個あたり数十バイト消費するため、
+            # numpy int32/float32 へ圧縮してから返す（IPC・メインのバッファ・
+            # シャードファイルすべてが小さくなり、学習側の読み込みも速くなる）。
             samples.append(
                 (
-                    sv_enc.index, sv_enc.value, sv_enc.offset,
-                    sv_dec.index, sv_dec.value, sv_dec.offset,
+                    np.asarray(sv_enc.index, dtype=np.int32),
+                    np.asarray(sv_enc.value, dtype=np.float32),
+                    np.asarray(sv_enc.offset, dtype=np.int32),
+                    np.asarray(sv_dec.index, dtype=np.int32),
+                    np.asarray(sv_dec.value, dtype=np.float32),
+                    np.asarray(sv_dec.offset, dtype=np.int32),
                     chosen_index, value,
                 )
             )
@@ -196,21 +206,70 @@ def preprocess_all(
         data for _source, name, data in iter_multi_source(episodes) if name != "manifest.csv"
     )
 
+    def _rss_mb() -> str:
+        """メイン＋ワーカー全プロセスの合計RSSを返す（真のメモリ使用量を可視化）。"""
+        try:
+            import psutil
+            p = psutil.Process()
+            rss = p.memory_info().rss
+            for child in p.children(recursive=True):
+                try:
+                    rss += child.memory_info().rss
+                except Exception:
+                    pass
+            return f" rss_total={rss / (1024 * 1024):.0f}MB"
+        except Exception:
+            return ""
+
+    min_avail_mb = config.MIN_AVAIL_MB
+
+    def _memory_guard() -> None:
+        """空きメモリが閾値を割ったら全バッファを即フラッシュしてOOMを回避する。"""
+        try:
+            import psutil
+            avail_mb = psutil.virtual_memory().available / (1024 * 1024)
+        except Exception:
+            return
+        if avail_mb < min_avail_mb:
+            for w in writers.values():
+                w.flush()
+            gc.collect()
+            print(f"  [preprocess_all] 空きメモリ{avail_mb:.0f}MB < {min_avail_mb}MB: "
+                  f"全バッファをフラッシュしました", flush=True)
+
     if workers and workers > 1:
-        with Pool(workers) as pool:
+        # fork 前に親プロセス側で語彙サイズ等の lru_cache を温めておく。
+        # こうすると全ワーカーが populated なキャッシュを Copy-on-Write で共有し、
+        # ワーカー起動/世代交代のたびに all_card_data()（数百MBの一時確保）が
+        # 同時多発してOOMを誘発するのを防げる。
+        try:
+            from rl_mcts.model import attack_count, card_count
+            card_count()
+            attack_count()
+        except Exception:
+            pass
+        # 既存オブジェクトを恒久世代へ移し、GC由来のCoWページ汚染を抑える。
+        gc.freeze()
+        # maxtasksperchild でワーカーを定期的に再起動し、長時間実行時の
+        # プロセス単位メモリ増加（CoWドリフト等）を上限内に抑える。
+        with Pool(workers, maxtasksperchild=2000) as pool:
             for blocks in pool.imap_unordered(_worker, stream, chunksize=8):
                 route(blocks)
                 episode_count += 1
-                if verbose and episode_count % 2000 == 0:
-                    print(f"  [preprocess_all] episodes={episode_count} "
-                          f"elapsed={time.time()-t0:.1f}s workers={workers}", flush=True)
+                if episode_count % 2000 == 0:
+                    _memory_guard()
+                    if verbose:
+                        print(f"  [preprocess_all] episodes={episode_count} "
+                              f"elapsed={time.time()-t0:.1f}s workers={workers}{_rss_mb()}", flush=True)
     else:
         for data in stream:
             route(extract_player_blocks(data))
             episode_count += 1
-            if verbose and episode_count % 2000 == 0:
-                print(f"  [preprocess_all] episodes={episode_count} "
-                      f"elapsed={time.time()-t0:.1f}s", flush=True)
+            if episode_count % 2000 == 0:
+                _memory_guard()
+                if verbose:
+                    print(f"  [preprocess_all] episodes={episode_count} "
+                          f"elapsed={time.time()-t0:.1f}s{_rss_mb()}", flush=True)
 
     result: dict[str, dict[str, int]] = {}
     for (name, role), w in writers.items():

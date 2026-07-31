@@ -54,6 +54,7 @@ SIM_THRESHOLD = _float("PIPE_SIM_THRESHOLD", 0.75) # 近いデッキ判定 & Pha
 WARM_START = _int("PIPE_WARM_START", 1)            # 1: 世代間で前世代重みから継続学習
 SHARD_SIZE = _int("PIPE_SHARD_SIZE", 20000)        # 前処理シャードあたりサンプル数
 WORKERS = _int("PIPE_WORKERS", 8)                  # 前処理(preprocess_all)の並列プロセス数
+MIN_AVAIL_MB = _int("PIPE_MIN_AVAIL_MB", 1200)     # 前処理中、空きメモリがこれを割ったら全バッファをフラッシュ
 
 # ---- パス ----
 ROOT = _path("PIPE_ROOT", REPO_ROOT / "pipeline")                                  # 全成果物の根

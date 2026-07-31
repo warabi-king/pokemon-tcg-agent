@@ -40,6 +40,7 @@ python tools/pipeline/orchestrate.py
 | `PIPE_LR` / `PIPE_BATCH_SIZE` | 3e-4 / 128 | 学習率 / バッチ |
 | `PIPE_WARM_START` | 1 | 世代間で前世代重みから継続学習 |
 | `PIPE_WORKERS` | 8 | Phase0 前処理（preprocess_all）の並列プロセス数 |
+| `PIPE_MIN_AVAIL_MB` | 1200 | 前処理中に空きメモリがこの値を割ったら全バッファをフラッシュ（OOM防止） |
 | `PIPE_ROOT` | `pipeline/` | 成果物の根 |
 | `PIPE_OFFICIAL_EPISODES` | `episodes/official/` | Phase0 用リプレイ（.zip or JSON ディレクトリ） |
 | `PIPE_DECKGEN_JSONL` | `tools/deck_generator/generated/deck_candidates_by_wins.jsonl` | 参加デッキ元（`hierarchical_cluster_*` 付与済み） |

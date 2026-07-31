@@ -27,8 +27,10 @@ import argparse
 import csv
 import json
 import pickle
+import queue
 import random
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Iterator
@@ -38,10 +40,11 @@ AGENT_ROOT = REPO_ROOT / "agents" / "rl_mcts"
 SRC_ROOT = AGENT_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
+import numpy as np  # noqa: E402
 import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
-from rl_mcts.mcts import MAX_ACTIONS, LearnInput  # noqa: E402
+from rl_mcts.mcts import MAX_ACTIONS  # noqa: E402
 from rl_mcts.model import create_model  # noqa: E402
 
 
@@ -50,47 +53,71 @@ def load_shard(path: Path) -> list[tuple]:
         return pickle.load(f)
 
 
-def build_batch_tensors(batch: list[tuple], device: torch.device):
-    input_enc = LearnInput()
-    input_dec = LearnInput()
-    mask: list[float] = []
-    label_value: list[float] = []
-    chosen_indices: list[int] = []
+def build_batch_tensors_cpu(batch: list[tuple], pin: bool):
+    """バッチをCPUテンソルに変換する（numpyでベクトル化、必要ならpinned memory化）。
 
-    for enc_index, enc_value, enc_offset, dec_index, dec_value, dec_offset, chosen_index, value in batch:
-        enc_count = len(input_enc.index)
-        input_enc.index.extend(enc_index)
-        input_enc.value.extend(enc_value)
-        input_enc.offset.extend(o + enc_count for o in enc_offset)
-
-        dec_count = len(input_dec.index)
-        input_dec.index.extend(dec_index)
-        input_dec.value.extend(dec_value)
-        input_dec.offset.extend(o + dec_count for o in dec_offset)
-
-        label_value.append(value)
-        chosen_indices.append(chosen_index)
-
-        n_candidates = len(dec_offset)
-        mask.extend([1.0] * n_candidates)
-        for _ in range(MAX_ACTIONS - n_candidates):
-            mask.append(0.0)
-            input_dec.offset.append(len(input_dec.index))
-
+    サンプルの各フィールドは Python list でも numpy 配列でも受け付ける
+    （新しい preprocess はメモリ削減のため numpy int32/float32 で保存する）。
+    GPU転送は呼び出し側が to_device() で行う。
+    """
     n = len(batch)
-    mask_tensor = torch.tensor(mask, dtype=torch.float32, device=device).view(n, -1)
-    label_value_tensor = torch.tensor(label_value, dtype=torch.float32, device=device).view(n, -1)
-    chosen_index_tensor = torch.tensor(chosen_indices, dtype=torch.long, device=device)
+    enc_idx, enc_val, enc_off = [], [], []
+    dec_idx, dec_val, dec_off = [], [], []
+    mask = np.zeros((n, MAX_ACTIONS), dtype=np.float32)
+    label_value = np.empty((n, 1), dtype=np.float32)
+    chosen = np.empty(n, dtype=np.int64)
+
+    enc_base = 0
+    dec_base = 0
+    for i, (e_i, e_v, e_o, d_i, d_v, d_o, chosen_index, value) in enumerate(batch):
+        enc_idx.append(np.asarray(e_i, dtype=np.int32))
+        enc_val.append(np.asarray(e_v, dtype=np.float32))
+        enc_off.append(np.asarray(e_o, dtype=np.int32) + enc_base)
+        enc_base += len(e_i)
+
+        dec_idx.append(np.asarray(d_i, dtype=np.int32))
+        dec_val.append(np.asarray(d_v, dtype=np.float32))
+        off = np.asarray(d_o, dtype=np.int32) + dec_base
+        dec_base += len(d_i)
+        n_candidates = len(d_o)
+        if n_candidates < MAX_ACTIONS:
+            # 旧実装と同じく、空バッグ（開始位置=現在の末尾）でMAX_ACTIONSまで埋める。
+            off = np.concatenate([off, np.full(MAX_ACTIONS - n_candidates, dec_base, dtype=np.int32)])
+        dec_off.append(off)
+
+        mask[i, :n_candidates] = 1.0
+        label_value[i, 0] = value
+        chosen[i] = chosen_index
 
     tensors = (
-        torch.tensor(input_enc.index, dtype=torch.int32, device=device),
-        torch.tensor(input_enc.value, dtype=torch.float32, device=device),
-        torch.tensor(input_enc.offset, dtype=torch.int32, device=device),
-        torch.tensor(input_dec.index, dtype=torch.int32, device=device),
-        torch.tensor(input_dec.value, dtype=torch.float32, device=device),
-        torch.tensor(input_dec.offset, dtype=torch.int32, device=device),
+        torch.from_numpy(np.concatenate(enc_idx)),
+        torch.from_numpy(np.concatenate(enc_val)),
+        torch.from_numpy(np.concatenate(enc_off)),
+        torch.from_numpy(np.concatenate(dec_idx)),
+        torch.from_numpy(np.concatenate(dec_val)),
+        torch.from_numpy(np.concatenate(dec_off)),
     )
+    mask_tensor = torch.from_numpy(mask)
+    label_value_tensor = torch.from_numpy(label_value)
+    chosen_index_tensor = torch.from_numpy(chosen)
+
+    if pin:
+        tensors = tuple(t.pin_memory() for t in tensors)
+        mask_tensor = mask_tensor.pin_memory()
+        label_value_tensor = label_value_tensor.pin_memory()
+        chosen_index_tensor = chosen_index_tensor.pin_memory()
     return tensors, mask_tensor, label_value_tensor, chosen_index_tensor
+
+
+def to_device(built, device: torch.device):
+    """build_batch_tensors_cpu の結果をGPUへ非同期転送する（pinned前提でnon_blocking）。"""
+    tensors, mask_tensor, label_value_tensor, chosen_index_tensor = built
+    return (
+        tuple(t.to(device, non_blocking=True) for t in tensors),
+        mask_tensor.to(device, non_blocking=True),
+        label_value_tensor.to(device, non_blocking=True),
+        chosen_index_tensor.to(device, non_blocking=True),
+    )
 
 
 def iter_batches(shard_paths: list[Path], batch_size: int, shuffle: bool) -> Iterator[list[tuple]]:
@@ -111,36 +138,96 @@ def iter_batches(shard_paths: list[Path], batch_size: int, shuffle: bool) -> Ite
             yield samples[start : start + batch_size]
 
 
-def train_one_epoch(model, optimizer, shard_paths: list[Path], batch_size: int, device: torch.device) -> dict:
+def iter_built_batches(
+    shard_paths: list[Path],
+    batch_size: int,
+    shuffle: bool,
+    pin: bool,
+    prefetch: int,
+) -> Iterator[tuple]:
+    """バックグラウンドスレッドでシャード読み込み＋テンソル構築を先行実行する。
+
+    GPUが現在のバッチを計算している間に、次バッチのディスクI/OとCPU側の
+    テンソル構築を進める（先読み深さ=prefetch）。prefetch<=0 なら同期実行。
+    """
+    if prefetch <= 0:
+        for batch in iter_batches(shard_paths, batch_size, shuffle):
+            yield build_batch_tensors_cpu(batch, pin)
+        return
+
+    q: queue.Queue = queue.Queue(maxsize=prefetch)
+    sentinel = object()
+
+    def producer() -> None:
+        try:
+            for batch in iter_batches(shard_paths, batch_size, shuffle):
+                q.put(build_batch_tensors_cpu(batch, pin))
+        except BaseException as exc:  # 例外は消費側スレッドへ運ぶ
+            q.put(exc)
+            return
+        q.put(sentinel)
+
+    thread = threading.Thread(target=producer, daemon=True)
+    thread.start()
+    while True:
+        item = q.get()
+        if item is sentinel:
+            break
+        if isinstance(item, BaseException):
+            raise item
+        yield item
+    thread.join()
+
+
+def _autocast(device: torch.device, enabled: bool):
+    """CUDA時のみbf16 autocastを返す（未対応環境・CPUでは無効）。"""
+    use = enabled and device.type == "cuda" and torch.cuda.is_bf16_supported()
+    return torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use)
+
+
+def train_one_epoch(
+    model,
+    optimizer,
+    shard_paths: list[Path],
+    batch_size: int,
+    device: torch.device,
+    amp: bool = False,
+    prefetch: int = 4,
+) -> dict:
     model.train()
     loss_fn_value = torch.nn.HuberLoss(delta=0.2)
+    pin = device.type == "cuda"
 
     batch_count = 0
-    total_loss = total_loss_value = total_loss_policy = 0.0
-    total_correct = total_seen = 0
+    total_seen = 0
+    # GPU同期(.item())を毎バッチ呼ぶとCPU側の先読みが止まるため、
+    # 集計はテンソルのまま持ち回してエポック末に1回だけ同期する。
+    sum_loss = torch.zeros((), device=device)
+    sum_loss_value = torch.zeros((), device=device)
+    sum_loss_policy = torch.zeros((), device=device)
+    sum_correct = torch.zeros((), dtype=torch.long, device=device)
 
-    for batch in iter_batches(shard_paths, batch_size, shuffle=True):
-        tensors, mask_tensor, label_value_tensor, chosen_index_tensor = build_batch_tensors(batch, device)
+    for built in iter_built_batches(shard_paths, batch_size, shuffle=True, pin=pin, prefetch=prefetch):
+        tensors, mask_tensor, label_value_tensor, chosen_index_tensor = to_device(built, device)
 
         optimizer.zero_grad()
-        out_enc, out_dec = model(*tensors)
+        with _autocast(device, amp):
+            out_enc, out_dec = model(*tensors)
+            loss_value = loss_fn_value(out_enc.float(), label_value_tensor)
+            masked_logits = out_dec.float().masked_fill(mask_tensor == 0, float("-inf"))
+            loss_policy = F.cross_entropy(masked_logits, chosen_index_tensor)
+            loss = loss_value + loss_policy
 
-        loss_value = loss_fn_value(out_enc, label_value_tensor)
-        masked_logits = out_dec.masked_fill(mask_tensor == 0, float("-inf"))
-        loss_policy = F.cross_entropy(masked_logits, chosen_index_tensor)
-
-        loss = loss_value + loss_policy
         loss.backward()
         optimizer.step()
 
         with torch.no_grad():
             pred = masked_logits.argmax(dim=1)
-            total_correct += int((pred == chosen_index_tensor).sum().item())
-            total_seen += len(batch)
-
-        total_loss += float(loss.item())
-        total_loss_value += float(loss_value.item())
-        total_loss_policy += float(loss_policy.item())
+            sum_correct += (pred == chosen_index_tensor).sum()
+            sum_loss += loss.detach()
+            sum_loss_value += loss_value.detach()
+            sum_loss_policy += loss_policy.detach()
+        total_seen += len(chosen_index_tensor)
         batch_count += 1
 
     if batch_count == 0:
@@ -148,29 +235,39 @@ def train_one_epoch(model, optimizer, shard_paths: list[Path], batch_size: int, 
 
     return {
         "batches": batch_count,
-        "loss": total_loss / batch_count,
-        "loss_value": total_loss_value / batch_count,
-        "loss_policy": total_loss_policy / batch_count,
-        "accuracy": total_correct / total_seen,
+        "loss": float(sum_loss.item()) / batch_count,
+        "loss_value": float(sum_loss_value.item()) / batch_count,
+        "loss_policy": float(sum_loss_policy.item()) / batch_count,
+        "accuracy": int(sum_correct.item()) / total_seen,
     }
 
 
-def evaluate(model, shard_paths: list[Path], batch_size: int, device: torch.device) -> float:
+def evaluate(
+    model,
+    shard_paths: list[Path],
+    batch_size: int,
+    device: torch.device,
+    amp: bool = False,
+    prefetch: int = 4,
+) -> float:
     if not shard_paths:
         return 0.0
 
     model.eval()
-    correct = total = 0
+    pin = device.type == "cuda"
+    correct = torch.zeros((), dtype=torch.long, device=device)
+    total = 0
     with torch.no_grad():
-        for batch in iter_batches(shard_paths, batch_size, shuffle=False):
-            tensors, mask_tensor, _, chosen_index_tensor = build_batch_tensors(batch, device)
-            _, out_dec = model(*tensors)
-            masked_logits = out_dec.masked_fill(mask_tensor == 0, float("-inf"))
+        for built in iter_built_batches(shard_paths, batch_size, shuffle=False, pin=pin, prefetch=prefetch):
+            tensors, mask_tensor, _, chosen_index_tensor = to_device(built, device)
+            with _autocast(device, amp):
+                _, out_dec = model(*tensors)
+            masked_logits = out_dec.float().masked_fill(mask_tensor == 0, float("-inf"))
             pred = masked_logits.argmax(dim=1)
-            correct += int((pred == chosen_index_tensor).sum().item())
-            total += len(batch)
+            correct += (pred == chosen_index_tensor).sum()
+            total += len(chosen_index_tensor)
 
-    return correct / total if total else 0.0
+    return int(correct.item()) / total if total else 0.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -192,6 +289,18 @@ def parse_args() -> argparse.Namespace:
         default=AGENT_ROOT / "train" / "logs" / "imitation_metrics.csv",
     )
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument(
+        "--amp",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="CUDA時にbf16 autocast + TF32行列演算を使う（--no-ampで旧来のfp32厳密計算）",
+    )
+    parser.add_argument(
+        "--prefetch-batches",
+        type=int,
+        default=4,
+        help="バックグラウンドで先読み構築するバッチ数（0で同期実行）",
+    )
     return parser.parse_args()
 
 
@@ -202,7 +311,11 @@ def main() -> None:
         torch.manual_seed(args.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"device: {device}")
+    use_amp = bool(args.amp) and device.type == "cuda" and torch.cuda.is_bf16_supported()
+    if use_amp:
+        # TF32(行列演算)とbf16 autocastを併用。--no-ampで従来のfp32厳密計算に戻せる。
+        torch.set_float32_matmul_precision("high")
+    print(f"device: {device} amp={'bf16+tf32' if use_amp else 'off'} prefetch={args.prefetch_batches}")
 
     shard_paths = sorted(args.shards.glob("shard_*.pkl"))
     if not shard_paths:
@@ -243,8 +356,14 @@ def main() -> None:
 
     t0 = time.time()
     for epoch in range(args.epochs):
-        stats = train_one_epoch(model, optimizer, train_shards, args.batch_size, device)
-        val_acc = evaluate(model, val_shards, args.batch_size, device)
+        stats = train_one_epoch(
+            model, optimizer, train_shards, args.batch_size, device,
+            amp=use_amp, prefetch=args.prefetch_batches,
+        )
+        val_acc = evaluate(
+            model, val_shards, args.batch_size, device,
+            amp=use_amp, prefetch=args.prefetch_batches,
+        )
         elapsed = time.time() - t0
 
         print(
