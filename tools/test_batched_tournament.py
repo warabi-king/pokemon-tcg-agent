@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections import Counter
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import os
 import queue
 import subprocess
 import sys
+import tempfile
 import unittest
 
 import numpy as np
@@ -21,12 +24,23 @@ from batched_tournament import (
     _CudaEnsembleEvaluator,
     _collect_ready_messages,
     _enumerate_actions,
+    _evaluation_model_key,
+    _is_setup_context,
+    _load_participants,
     _load_runtime,
     _merge_combined_sparse,
     _pad_empty_sparse_rows,
     _pad_sparse_offsets,
     _pad_remote_decoder,
     run_batched_tournament,
+    run_worker_batched_tournament,
+)
+from deck_belief import (
+    _candidate_rank,
+    _reconcile_candidate,
+    predict_full_deck,
+    public_cards_by_player,
+    sample_hidden_zones,
 )
 from batched_training import (
     BatchedTrainingAgent,
@@ -35,6 +49,171 @@ from batched_training import (
 
 
 class ActionBatchTest(unittest.TestCase):
+    def test_database_tie_break_uses_wins_only(self) -> None:
+        lower_win_rate_more_wins = {"wins": 10, "win_rate": 0.1, "games": 10}
+        higher_win_rate_fewer_wins = {"wins": 9, "win_rate": 0.9, "games": 9999}
+
+        self.assertGreater(
+            _candidate_rank(lower_win_rate_more_wins, 1),
+            _candidate_rank(higher_win_rate_fewer_wins, 0),
+        )
+
+    def test_distinct_opponent_checkpoint_gets_distinct_model_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            src = Path(directory)
+            (src / "model.pth").touch()
+            (src / "opponent_model.pth").touch()
+            spec = SimpleNamespace(
+                name="a",
+                agent_path=src / "main.py",
+                deck_path=ROOT / "agents" / "rl_mcts_r_robin1" / "src" / "deck.csv",
+            )
+
+            participant = _load_participants(
+                [spec],
+                runtime=SimpleNamespace(),
+                device=SimpleNamespace(type="cpu"),
+                load_models=False,
+            )["a"]
+
+        self.assertNotEqual(participant.model_key, participant.opponent_model_key)
+        self.assertTrue(participant.model_key.endswith("model.pth"))
+        self.assertTrue(participant.opponent_model_key.endswith("opponent_model.pth"))
+
+    def test_setup_with_facedown_active_skips_tree_search(self) -> None:
+        participant = SimpleNamespace(model_key="self", opponent_model_key="opponent")
+        context = SimpleNamespace(
+            participant=participant,
+            your_index=0,
+            session=SimpleNamespace(
+                observation={
+                    "select": {"context": 0},
+                    "current": {
+                        "players": [
+                            {"active": [{"id": 1}]},
+                            {"active": [None]},
+                        ]
+                    },
+                }
+            ),
+        )
+
+        self.assertTrue(_is_setup_context(context))
+        self.assertEqual(_evaluation_model_key(context, 0), "self")
+        self.assertEqual(_evaluation_model_key(context, 1), "opponent")
+
+    def test_public_cards_include_pokemon_stack_and_resolving_effect(self) -> None:
+        state = {
+            "players": [
+                {
+                    "active": [
+                        {
+                            "id": 10,
+                            "serial": 1,
+                            "preEvolution": [{"id": 11, "serial": 2}],
+                            "energyCards": [{"id": 12, "serial": 3}],
+                            "tools": [{"id": 13, "serial": 4}],
+                        }
+                    ],
+                    "bench": [],
+                    "discard": [{"id": 14, "serial": 5}],
+                },
+                {"active": [], "bench": [], "discard": []},
+            ],
+            "stadium": [{"id": 15, "serial": 6, "playerIndex": 0}],
+            "looking": [{"id": 17, "serial": 8, "playerIndex": 0}],
+        }
+        select = {
+            "effect": {"id": 16, "serial": 7, "playerIndex": 0},
+            # 同じphysical cardはserialで重複計上しない。
+            "contextCard": {"id": 10, "serial": 1, "playerIndex": 0},
+        }
+
+        public = public_cards_by_player(state, select)
+
+        self.assertEqual(
+            Counter(public[0]),
+            Counter([10, 11, 12, 13, 14, 15, 16, 17]),
+        )
+        self.assertEqual(public[1], [])
+
+    def test_resolving_card_still_in_hand_is_not_counted_twice(self) -> None:
+        state = {
+            "players": [
+                {
+                    "active": [],
+                    "bench": [],
+                    "discard": [],
+                    "hand": [{"id": 2, "serial": 46, "playerIndex": 0}],
+                    "prize": [],
+                },
+                {"active": [], "bench": [], "discard": []},
+            ]
+        }
+        select = {
+            "contextCard": {"id": 2, "serial": 46, "playerIndex": 0},
+            "effect": None,
+        }
+
+        self.assertEqual(public_cards_by_player(state, select)[0], [])
+
+    def test_own_hand_is_not_sampled(self) -> None:
+        full_deck = predict_full_deck([])
+        own_hand = [
+            {"id": card_id, "serial": index + 1, "playerIndex": 0}
+            for index, card_id in enumerate(full_deck[:7])
+        ]
+        observation = {
+            "current": {
+                "yourIndex": 0,
+                "players": [
+                    {
+                        "active": [],
+                        "bench": [],
+                        "deckCount": 47,
+                        "discard": [],
+                        "prize": [None] * 6,
+                        "handCount": 7,
+                        "hand": own_hand,
+                    },
+                    {
+                        "active": [],
+                        "bench": [],
+                        "deckCount": 47,
+                        "discard": [],
+                        "prize": [None] * 6,
+                        "handCount": 7,
+                        "hand": None,
+                    },
+                ],
+                "stadium": [],
+            },
+            "select": {"effect": None, "contextCard": None},
+        }
+
+        hidden = sample_hidden_zones(
+            observation,
+            your_index=0,
+            your_full_deck=full_deck,
+            seen_opponent_cards=[],
+        )
+
+        self.assertEqual(observation["current"]["players"][0]["hand"], own_hand)
+        self.assertFalse(hasattr(hidden, "your_hand"))
+        self.assertEqual(len(hidden.your_deck), 47)
+        self.assertEqual(len(hidden.your_prize), 6)
+        self.assertEqual(len(hidden.opponent_deck), 47)
+        self.assertEqual(len(hidden.opponent_prize), 6)
+        self.assertEqual(len(hidden.opponent_hand), 7)
+
+    def test_database_candidate_is_repaired_to_include_observed_cards(self) -> None:
+        candidate = list(range(60))
+        repaired = _reconcile_candidate(candidate, Counter({9999: 2, 0: 1}))
+
+        self.assertEqual(len(repaired), 60)
+        self.assertGreaterEqual(Counter(repaired)[9999], 2)
+        self.assertGreaterEqual(Counter(repaired)[0], 1)
+
     def test_ready_worker_messages_are_collected_without_waiting(self) -> None:
         first = object()
         second = object()
@@ -212,6 +391,60 @@ print('lightweight-worker-ok')
 
 
 class BatchedTournamentIntegrationTest(unittest.TestCase):
+    def test_worker_batched_hidden_sampling_survives_spawn(self) -> None:
+        src = ROOT / "agents" / "rl_mcts_r_robin1" / "src"
+        specs = [
+            SimpleNamespace(
+                name=name,
+                agent_path=src / "main.py",
+                deck_path=src / "deck.csv",
+            )
+            for name in ("a", "b")
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            training_json_dir = Path(directory)
+            output = run_worker_batched_tournament(
+                specs,
+                [("a", "b")],
+                2,
+                device_name="cpu",
+                batch_size=8,
+                lanes=2,
+                search_count=1,
+                max_selections=500,
+                seed=456,
+                cpu_workers=2,
+                training_json_dir=training_json_dir,
+            )
+            episode_paths = sorted(training_json_dir.glob("episode_*.json"))
+            episodes = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in episode_paths
+            ]
+
+        self.assertEqual(len(output.results), 2)
+        self.assertTrue(all(result.error is None for result in output.results))
+        self.assertGreater(output.profile.nn_evaluations, 0)
+        self.assertEqual(len(episodes), 2)
+        for episode in episodes:
+            self.assertEqual(
+                set(episode),
+                {"format", "rewards", "decks", "decisions"},
+            )
+            self.assertEqual([len(deck) for deck in episode["decks"]], [60, 60])
+            self.assertGreater(len(episode["decisions"]), 0)
+            for decision in episode["decisions"]:
+                self.assertEqual(
+                    set(decision),
+                    {"player", "observation", "chosenIndex"},
+                )
+                self.assertNotIn("logs", decision["observation"])
+                player = decision["player"]
+                self.assertIsNotNone(
+                    decision["observation"]["players"][player]["hand"]
+                )
+
     def test_cuda_stream_backend_rejects_cpu_device(self) -> None:
         with self.assertRaisesRegex(ValueError, "CUDA device"):
             run_batched_tournament(

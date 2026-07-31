@@ -143,6 +143,18 @@ MCTS nodeはObservation全体を保持せず、次の展開に必要なSearch ID
 複数選択の候補手では、同じoptionのdecoder特徴を組合せごとに再計算せず、局面内で
 一度だけ生成した小配列を各候補手へ再利用します。
 
+`worker-batched`のSearchBeginでは、自分の手札は現在のObservationをそのまま使い、
+予測しません。自分の60枚から手札・場・トラッシュ・表向きサイドを除外し、山札と
+裏向きサイドだけをsampleします。相手の60枚は
+`tools/deck_generator_dbrecon`の対戦デッキDBから観測済みカードに最も合う候補を選び、
+現在公開中のカードを除外します。相手の山札・サイド・手札は残りpoolからsampleします。
+セットアップ中に
+相手Activeが裏向きの間はSearchBeginを呼ばず、1-step policyで選択します。
+
+agentの`src/`に`opponent_model.pth`があれば、MCTS内の相手番nodeはそのcheckpointを
+使います。存在しない場合は互換性のため`model.pth`へfallbackします。実際の対戦で
+手番を持つagentは従来どおり自身の`model.pth`を使います。
+
 ```bash
 python tools/run_matches_round_robin.py \
   --backend worker-batched --device cuda --workers 0 \

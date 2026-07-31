@@ -24,6 +24,7 @@ DIST_ROOT = ROOT / "dist"
 CODE_FILES = ("main.py",)
 CODE_DIRS = ("cg", "rl_mcts")
 PARAM_FILES = ("deck.csv", "model.pth")
+OPTIONAL_PARAM_FILES = ("opponent_model.pth",)
 
 
 def ignore_generated(_directory: str, names: list[str]) -> set[str]:
@@ -86,6 +87,10 @@ def prepare_src(template_src: Path, match_agent_dir: Path) -> Path:
 
     for name in PARAM_FILES:
         shutil.copy2(match_agent_dir / name, target_src / name)
+    for name in OPTIONAL_PARAM_FILES:
+        source = match_agent_dir / name
+        if source.is_file():
+            shutil.copy2(source, target_src / name)
 
     return target_src
 

@@ -21,6 +21,7 @@ import copy
 import ctypes
 from dataclasses import dataclass, field
 from functools import lru_cache
+import hashlib
 import json
 import math
 import multiprocessing
@@ -35,6 +36,11 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, Iterable
 
 import numpy as np
+
+try:
+    from deck_belief import sample_hidden_zones, update_seen_opponent_cards
+except ModuleNotFoundError:  # ``python -m unittest tools...``用
+    from .deck_belief import sample_hidden_zones, update_seen_opponent_cards
 
 try:
     import msgspec
@@ -131,6 +137,22 @@ _TorchModuleBase = torch.nn.Module if torch is not None else object
 
 
 MAX_ACTIONS = 64
+SETUP_SELECT_CONTEXTS = frozenset((1, 2))
+TRAINING_EPISODE_FORMAT = "pokemon-tcg-agent/imitation-episode-v1"
+_TRAINING_OPTION_FIELDS = (
+    "type",
+    "number",
+    "area",
+    "index",
+    "playerIndex",
+    "toolIndex",
+    "energyIndex",
+    "inPlayArea",
+    "inPlayIndex",
+    "attackId",
+    "cardId",
+    "specialConditionType",
+)
 
 
 @dataclass(frozen=True)
@@ -292,6 +314,8 @@ class _Participant:
     model: torch.nn.Module | None
     model_key: str | None
     random_policy: bool
+    opponent_model: torch.nn.Module | None = None
+    opponent_model_key: str | None = None
 
 
 @dataclass
@@ -302,6 +326,10 @@ class _MatchSession:
     observation: dict[str, Any]
     select_player: int
     selections: int = 0
+    seen_opponent_cards: tuple[dict[int, int], dict[int, int]] = field(
+        default_factory=lambda: ({}, {})
+    )
+    training_decisions: list[dict[str, Any]] = field(default_factory=list)
 
 
 class _Child:
@@ -359,6 +387,8 @@ class _SearchContext:
     your_index: int
     root: _Node | None = None
     root_sample: BatchedLearnSample | None = None
+    full_decks: tuple[tuple[int, ...], tuple[int, ...]] | None = None
+    policy_only: bool = False
 
 
 @dataclass
@@ -368,6 +398,7 @@ class _EvalRequest:
     actions: list[list[int]]
     encoder: Any
     decoder: Any
+    model_key: str
     reserved_child: _Child | None = None
 
 
@@ -451,8 +482,12 @@ class _CudaEnsembleEvaluator:
     ) -> None:
         model_by_key: dict[str, torch.nn.Module] = {}
         for participant in participants:
-            if participant.model_key is not None and participant.model is not None:
-                model_by_key.setdefault(participant.model_key, participant.model)
+            for model_key, model in (
+                (participant.model_key, participant.model),
+                (participant.opponent_model_key, participant.opponent_model),
+            ):
+                if model_key is not None and model is not None:
+                    model_by_key.setdefault(model_key, model)
         if not model_by_key:
             raise ValueError("CUDA ensembleには少なくとも1つNNモデルが必要です。")
 
@@ -764,6 +799,18 @@ def _load_participants(
     participants: dict[str, _Participant] = {}
     model_cache: dict[str, torch.nn.Module] = {}
 
+    def load_model(model_path: Path) -> tuple[str, torch.nn.Module | None]:
+        model_key = str(model_path.resolve())
+        model = model_cache.get(model_key) if load_models else None
+        if load_models and model is None:
+            model = runtime.create_model()
+            state = torch.load(model_path, map_location=torch.device("cpu"))
+            model.load_state_dict(state)
+            model.eval()
+            model.to(device)
+            model_cache[model_key] = model
+        return model_key, model
+
     for spec in specs:
         agent_path = Path(spec.agent_path).resolve()
         deck_path = Path(spec.deck_path).resolve()
@@ -772,21 +819,21 @@ def _load_participants(
         model_path = agent_path.parent / "model.pth"
 
         if model_path.exists():
-            model_key = str(model_path.resolve())
-            model = model_cache.get(model_key) if load_models else None
-            if load_models and model is None:
-                model = runtime.create_model()
-                state = torch.load(model_path, map_location=torch.device("cpu"))
-                model.load_state_dict(state)
-                model.eval()
-                model.to(device)
-                model_cache[model_key] = model
+            model_key, model = load_model(model_path)
+            opponent_model_path = agent_path.parent / "opponent_model.pth"
+            if opponent_model_path.exists():
+                opponent_model_key, opponent_model = load_model(opponent_model_path)
+            else:
+                # 別学習済みcheckpointが用意されるまでは従来modelへfallbackする。
+                opponent_model_key, opponent_model = model_key, model
             participants[spec.name] = _Participant(
                 name=spec.name,
                 deck=deck,
                 model=model,
                 model_key=model_key,
                 random_policy=False,
+                opponent_model=opponent_model,
+                opponent_model_key=opponent_model_key,
             )
         elif _is_random_agent(agent_path):
             participants[spec.name] = _Participant(
@@ -835,13 +882,15 @@ def _start_session(
             f"errorType={start_data.errorType}"
         )
     observation, select_player = _battle_observation(runtime, battle_ptr)
-    return _MatchSession(
+    session = _MatchSession(
         request=request,
         players=players,
         battle_ptr=battle_ptr,
         observation=observation,
         select_player=select_player,
     )
+    update_seen_opponent_cards(observation, session.seen_opponent_cards)
+    return session
 
 
 @lru_cache(maxsize=512)
@@ -872,11 +921,187 @@ def _enumerate_actions(
     return actions
 
 
+def _training_card_id(card: dict[str, Any] | None) -> int | None:
+    return None if card is None else int(card["id"])
+
+
+def _minimal_training_pokemon(pokemon: dict[str, Any] | None) -> dict[str, Any] | None:
+    if pokemon is None:
+        return None
+    return {
+        "id": int(pokemon["id"]),
+        "hp": int(pokemon["hp"]),
+        "energyCards": [
+            _training_card_id(card) for card in pokemon["energyCards"]
+        ],
+        "tools": [_training_card_id(card) for card in pokemon["tools"]],
+    }
+
+
+def _minimal_training_player(player: dict[str, Any]) -> dict[str, Any]:
+    hand = player["hand"]
+    return {
+        "active": [
+            _minimal_training_pokemon(pokemon) for pokemon in player["active"]
+        ],
+        "bench": [
+            _minimal_training_pokemon(pokemon) for pokemon in player["bench"]
+        ],
+        "deckCount": int(player["deckCount"]),
+        "discard": [_training_card_id(card) for card in player["discard"]],
+        "prize": [_training_card_id(card) for card in player["prize"]],
+        "handCount": int(player["handCount"]),
+        "hand": (
+            None
+            if hand is None
+            else [_training_card_id(card) for card in hand]
+        ),
+        "poisoned": bool(player["poisoned"]),
+        "burned": bool(player["burned"]),
+        "asleep": bool(player["asleep"]),
+        "paralyzed": bool(player["paralyzed"]),
+        "confused": bool(player["confused"]),
+    }
+
+
+def _minimal_training_observation(observation: dict[str, Any]) -> dict[str, Any]:
+    current = observation["current"]
+    select = observation["select"]
+    looking = current["looking"]
+    select_deck = select["deck"]
+    return {
+        "turn": int(current["turn"]),
+        "firstPlayer": int(current["firstPlayer"]),
+        "stadium": [_training_card_id(card) for card in current["stadium"]],
+        "looking": (
+            None
+            if looking is None
+            else [_training_card_id(card) for card in looking]
+        ),
+        "players": [
+            _minimal_training_player(player) for player in current["players"]
+        ],
+        "select": {
+            "context": int(select["context"]),
+            "maxCount": int(select["maxCount"]),
+            "option": [
+                {
+                    key: option[key]
+                    for key in _TRAINING_OPTION_FIELDS
+                    if key in option and option[key] is not None
+                }
+                for option in select["option"]
+            ],
+            "deck": (
+                None
+                if select_deck is None
+                else [_training_card_id(card) for card in select_deck]
+            ),
+        },
+    }
+
+
+def _build_training_decision(
+    observation: dict[str, Any],
+    selected_action: list[int],
+) -> dict[str, Any] | None:
+    select = observation.get("select")
+    current = observation.get("current")
+    if select is None or current is None:
+        return None
+
+    actions = _enumerate_actions(
+        len(select["option"]),
+        int(select["maxCount"]),
+    )
+    target = tuple(sorted(selected_action))
+    chosen_index = next(
+        (
+            index
+            for index, candidate in enumerate(actions)
+            if tuple(candidate) == target
+        ),
+        None,
+    )
+    if chosen_index is None:
+        return None
+    return {
+        "player": int(current["yourIndex"]),
+        "observation": _minimal_training_observation(observation),
+        "chosenIndex": chosen_index,
+    }
+
+
+def _safe_training_name(value: str) -> str:
+    visible = "".join(
+        character if character.isalnum() or character in "-_." else "_"
+        for character in value
+    )[:40]
+    digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:8]
+    return f"{visible or 'agent'}_{digest}"
+
+
+def _write_training_episode(session: _MatchSession, output_dir: Path) -> Path:
+    result = _raw_result(session)
+    if result not in (0, 1, 2):
+        raise ValueError("終局していない試合は学習JSONへ保存できません。")
+    rewards = [0, 0]
+    if result in (0, 1):
+        rewards[result] = 1
+        rewards[1 - result] = -1
+
+    episode = {
+        "format": TRAINING_EPISODE_FORMAT,
+        "rewards": rewards,
+        "decks": [list(player.deck) for player in session.players],
+        "decisions": session.training_decisions,
+    }
+    request = session.request
+    matchup = hashlib.sha1(
+        f"{request.name0}\0{request.name1}".encode("utf-8")
+    ).hexdigest()[:8]
+    filename = (
+        f"episode_{_safe_training_name(request.name0)}_vs_"
+        f"{_safe_training_name(request.name1)}_{matchup}_"
+        f"g{request.game_index:06d}_s{int(request.swap)}.json"
+    )
+    output_path = output_dir / filename
+    temporary_path = output_path.with_suffix(f".{os.getpid()}.tmp")
+    temporary_path.write_text(
+        json.dumps(episode, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    os.replace(temporary_path, output_path)
+    return output_path
+
+
 def _pad_sparse_offsets(sparse: Any, target: int) -> None:
     """EmbeddingBagの空bagを末尾へ足し、全局面の候補手数を揃える。"""
     if len(sparse.offset) > target:
         raise ValueError(f"decoder action数が上限を超えました: {len(sparse.offset)} > {target}")
     sparse.offset.extend([len(sparse.index)] * (target - len(sparse.offset)))
+
+
+def _evaluation_model_key(context: _SearchContext, player_index: int) -> str:
+    participant = context.participant
+    if player_index != context.your_index:
+        model_key = participant.opponent_model_key or participant.model_key
+    else:
+        model_key = participant.model_key
+    if model_key is None:
+        raise RuntimeError("NN評価要求にモデルがありません。")
+    return model_key
+
+
+def _evaluation_model(request: _EvalRequest) -> torch.nn.Module:
+    participant = request.context.participant
+    if request.model_key == participant.opponent_model_key:
+        model = participant.opponent_model
+    else:
+        model = participant.model
+    if model is None:
+        raise RuntimeError(f"NNモデルがありません: {request.model_key}")
+    return model
 
 
 def _prepare_node(
@@ -915,10 +1140,20 @@ def _prepare_node(
         return node, None
 
     started = time.perf_counter()
-    encoder = runtime.get_encoder_input(observation, context.participant.deck)
+    full_deck = context.participant.deck
+    if context.full_decks is not None:
+        full_deck = context.full_decks[int(state.yourIndex)]
+    encoder = runtime.get_encoder_input(observation, full_deck)
     decoder = runtime.get_decoder_input(observation, actions)
     profile.feature_seconds += time.perf_counter() - started
-    return node, _EvalRequest(context, node, actions, encoder, decoder)
+    return node, _EvalRequest(
+        context,
+        node,
+        actions,
+        encoder,
+        decoder,
+        _evaluation_model_key(context, int(state.yourIndex)),
+    )
 
 
 def _combine_sparse(vectors: list[Any]) -> tuple[list[int], list[float], list[int]]:
@@ -1040,10 +1275,7 @@ class _RemoteEvaluationClient:
     ) -> None:
         grouped: dict[str, list[_EvalRequest]] = defaultdict(list)
         for request in requests:
-            model_key = request.context.participant.model_key
-            if model_key is None:
-                raise RuntimeError("NN評価要求にモデルがありません。")
-            grouped[model_key].append(request)
+            grouped[request.model_key].append(request)
         if not grouped:
             return
 
@@ -1101,7 +1333,7 @@ def _commit_evaluation_rows(
         chunk, value_rows, policy_rows, strict=True
     ):
         value = float(value_row[0])
-        if request.node.parent is None:
+        if request.node.parent is None and not request.context.policy_only:
             request.context.root_sample = BatchedLearnSample(
                 value=value,
                 policy=[
@@ -1159,9 +1391,7 @@ def _apply_evaluations_cuda_streams(
     used_streams: dict[str, torch.cuda.Stream] = {}
 
     for model_key, model_requests in grouped.items():
-        model = model_requests[0].context.participant.model
-        if model is None:
-            raise RuntimeError("NNモデルがありません。")
+        model = _evaluation_model(model_requests[0])
         stream = cuda_streams.setdefault(model_key, torch.cuda.Stream(device=device))
         # modelのdefault stream上での初期化と、前waveのcurrent stream処理を待つ。
         stream.wait_stream(current_stream)
@@ -1384,10 +1614,7 @@ def _apply_evaluations(
 
     grouped: dict[str, list[_EvalRequest]] = defaultdict(list)
     for request in requests:
-        key = request.context.participant.model_key
-        if key is None:
-            raise RuntimeError("NN評価要求にモデルがありません。")
-        grouped[key].append(request)
+        grouped[request.model_key].append(request)
 
     mean_model_batch = len(requests) / max(len(grouped), 1)
     if (
@@ -1409,9 +1636,7 @@ def _apply_evaluations(
         return
 
     for model_requests in grouped.values():
-        model = model_requests[0].context.participant.model
-        if model is None:
-            raise RuntimeError("NNモデルがありません。")
+        model = _evaluation_model(model_requests[0])
         for offset in range(0, len(model_requests), batch_size):
             chunk = model_requests[offset : offset + batch_size]
             encoder, decoder = _prepare_evaluation_chunk(chunk)
@@ -1442,24 +1667,71 @@ def _begin_search(
     profile: BatchedProfile,
 ) -> _EvalRequest | None:
     observation = runtime.to_observation_class(context.session.observation)
-    state = observation.current
-    active = state.players[1 - context.your_index].active
-    deck = context.participant.deck
+    belief = sample_hidden_zones(
+        context.session.observation,
+        context.your_index,
+        context.participant.deck,
+        context.session.seen_opponent_cards[context.your_index].values(),
+    )
+    context.full_decks = belief.full_decks
 
     started = time.perf_counter()
     search_state = runtime.search_begin(
         observation,
-        your_deck=random.sample(deck, min(len(deck), state.players[context.your_index].deckCount)),
-        your_prize=random.sample(deck, min(len(deck), len(state.players[context.your_index].prize))),
-        opponent_deck=[1072] * state.players[1 - context.your_index].deckCount,
-        opponent_prize=[1] * len(state.players[1 - context.your_index].prize),
-        opponent_hand=[1] * state.players[1 - context.your_index].handCount,
-        opponent_active=[1072] if len(active) > 0 and active[0] is None else [],
+        your_deck=belief.your_deck,
+        your_prize=belief.your_prize,
+        opponent_deck=belief.opponent_deck,
+        opponent_prize=belief.opponent_prize,
+        opponent_hand=belief.opponent_hand,
+        opponent_active=belief.opponent_active,
     )
     profile.search_begin_seconds += time.perf_counter() - started
     root, request = _prepare_node(runtime, context, None, search_state, profile)
     context.root = root
     return request
+
+
+def _is_setup_context(context: _SearchContext) -> bool:
+    observation = context.session.observation
+    select = observation.get("select") or {}
+    if int(select.get("context", -1)) in SETUP_SELECT_CONTEXTS:
+        return True
+    state = observation.get("current") or {}
+    return any(
+        any(pokemon is None for pokemon in (player.get("active") or []))
+        for player in (state.get("players") or [])
+    )
+
+
+def _prepare_policy_only_root(
+    runtime: _Runtime,
+    context: _SearchContext,
+    profile: BatchedProfile,
+) -> _EvalRequest | None:
+    """セットアップをSearchBeginなしの1-step policyで選ぶ。"""
+    observation = runtime.to_observation_class(context.session.observation)
+    state = observation.current
+    node = _Node(None, -1, int(state.yourIndex), int(state.result))
+    context.root = node
+    context.policy_only = True
+    actions = _enumerate_actions(
+        len(observation.select.option),
+        observation.select.maxCount,
+    )
+    if not actions:
+        return None
+    started = time.perf_counter()
+    encoder = runtime.get_encoder_input(observation, context.participant.deck)
+    decoder = runtime.get_decoder_input(observation, actions)
+    profile.feature_seconds += time.perf_counter() - started
+    return _EvalRequest(
+        context,
+        node,
+        actions,
+        encoder,
+        decoder,
+        _evaluation_model_key(context, int(state.yourIndex)),
+    )
 
 
 def _select_leaf(
@@ -1590,9 +1862,14 @@ def _run_search_wave(
     search_started = False
     try:
         root_requests: list[_EvalRequest] = []
+        tree_contexts: list[_SearchContext] = []
         for context in contexts:
-            request = _begin_search(runtime, context, profile)
-            search_started = True
+            if _is_setup_context(context):
+                request = _prepare_policy_only_root(runtime, context, profile)
+            else:
+                request = _begin_search(runtime, context, profile)
+                tree_contexts.append(context)
+                search_started = True
             if request is not None:
                 root_requests.append(request)
         _apply_evaluations(
@@ -1605,11 +1882,11 @@ def _run_search_wave(
             remote_evaluator,
         )
 
-        remaining = {id(context): search_count for context in contexts}
+        remaining = {id(context): search_count for context in tree_contexts}
         while any(count > 0 for count in remaining.values()):
             leaf_requests: list[_EvalRequest] = []
             made_progress = False
-            for context in contexts:
+            for context in tree_contexts:
                 # 1試合から複数の独立root branchを同時に発行する。これにより
                 # 少数試合でもGPU batchを十分大きくできる。
                 while remaining[id(context)] > 0:
@@ -1690,6 +1967,7 @@ def run_batched_tournament(
     seed: int = 0,
     parallel_cuda_models: bool = False,
     cuda_ensemble_models: bool = False,
+    training_json_dir: Path | None = None,
     _evaluation_client: _RemoteEvaluationClient | None = None,
     _game_requests: list[BatchedGameRequest] | None = None,
     _load_worker_models: bool = True,
@@ -1701,6 +1979,14 @@ def run_batched_tournament(
         raise ValueError("lanesは1以上で指定してください。")
     if search_count < 0:
         raise ValueError("search_countは0以上で指定してください。")
+
+    training_output_dir = (
+        Path(training_json_dir).resolve()
+        if training_json_dir is not None
+        else None
+    )
+    if training_output_dir is not None:
+        training_output_dir.mkdir(parents=True, exist_ok=True)
 
     random.seed(seed)
     if torch is not None:
@@ -1733,9 +2019,13 @@ def run_batched_tournament(
     cuda_streams: dict[str, torch.cuda.Stream] | None = None
     if parallel_cuda_models:
         cuda_streams = {
-            participant.model_key: torch.cuda.Stream(device=device)
+            model_key: torch.cuda.Stream(device=device)
             for participant in participants.values()
-            if participant.model_key is not None
+            for model_key in (
+                participant.model_key,
+                participant.opponent_model_key,
+            )
+            if model_key is not None
         }
         # model.to(cuda)を行ったdefault streamの初期化を完了してから専用streamを使う。
         torch.cuda.synchronize(device)
@@ -1762,6 +2052,17 @@ def run_batched_tournament(
     active: list[_MatchSession] = []
     results: list[BatchedGameResult] = []
 
+    def finish_session(
+        session: _MatchSession,
+        error: str | None = None,
+    ) -> None:
+        try:
+            if error is None and training_output_dir is not None:
+                _write_training_episode(session, training_output_dir)
+            results.append(_to_result(session, error=error))
+        finally:
+            runtime.lib.BattleFinish(session.battle_ptr)
+
     def fill_lanes() -> None:
         while requests and len(active) < lanes:
             request = requests.popleft()
@@ -1786,16 +2087,12 @@ def run_batched_tournament(
             survivors: list[_MatchSession] = []
             for session in active:
                 if _raw_result(session) is not None:
-                    results.append(_to_result(session))
-                    runtime.lib.BattleFinish(session.battle_ptr)
+                    finish_session(session)
                 elif session.selections >= max_selections:
-                    results.append(
-                        _to_result(
-                            session,
-                            error=f"max_selections={max_selections}を超えました。",
-                        )
+                    finish_session(
+                        session,
+                        error=f"max_selections={max_selections}を超えました。",
                     )
-                    runtime.lib.BattleFinish(session.battle_ptr)
                 else:
                     survivors.append(session)
             active = survivors
@@ -1845,6 +2142,13 @@ def run_batched_tournament(
             next_active: list[_MatchSession] = []
             for session in active:
                 action = selected_actions[session.battle_ptr]
+                if training_output_dir is not None:
+                    decision = _build_training_decision(
+                        session.observation,
+                        action,
+                    )
+                    if decision is not None:
+                        session.training_decisions.append(decision)
                 argument = (ctypes.c_int * len(action))(*action)
                 try:
                     started = time.perf_counter()
@@ -1856,15 +2160,19 @@ def run_batched_tournament(
                     session.observation, session.select_player = _battle_observation(
                         runtime, session.battle_ptr
                     )
+                    update_seen_opponent_cards(
+                        session.observation,
+                        session.seen_opponent_cards,
+                    )
                     profile.battle_step_seconds += time.perf_counter() - started
                     profile.battle_steps += 1
                     session.selections += 1
                     next_active.append(session)
                 except Exception as exc:  # noqa: BLE001
-                    results.append(
-                        _to_result(session, error=f"{type(exc).__name__}: {exc}")
+                    finish_session(
+                        session,
+                        error=f"{type(exc).__name__}: {exc}",
                     )
-                    runtime.lib.BattleFinish(session.battle_ptr)
             active = next_active
     finally:
         for session in active:
@@ -1887,6 +2195,7 @@ def _parallel_worker_main(
     max_selections: int,
     seed: int,
     remote_batch_size: int,
+    training_json_dir: str | None,
     request_queue: Any,
     response_queue: Any,
     result_queue: Any,
@@ -1921,6 +2230,11 @@ def _parallel_worker_main(
             search_count=search_count,
             max_selections=max_selections,
             seed=seed + worker_id,
+            training_json_dir=(
+                Path(training_json_dir)
+                if training_json_dir is not None
+                else None
+            ),
             _evaluation_client=client,
             _game_requests=game_requests,
             _load_worker_models=False,
@@ -2289,10 +2603,19 @@ def run_worker_batched_tournament(
     max_selections: int = 2000,
     seed: int = 0,
     cpu_workers: int = 2,
+    training_json_dir: Path | None = None,
 ) -> BatchedTournamentOutput:
     """CPU libcg worker群と中央NN batcherで総当たりを実行する。"""
     if cpu_workers < 1:
         raise ValueError("cpu_workersは1以上で指定してください。")
+
+    training_output_dir = (
+        Path(training_json_dir).resolve()
+        if training_json_dir is not None
+        else None
+    )
+    if training_output_dir is not None:
+        training_output_dir.mkdir(parents=True, exist_ok=True)
 
     device = select_device(device_name)
     game_requests = [
@@ -2348,6 +2671,7 @@ def run_worker_batched_tournament(
                 max_selections,
                 seed,
                 remote_batch_size,
+                str(training_output_dir) if training_output_dir is not None else None,
                 request_queue,
                 response_queues[worker_id],
                 result_queue,
@@ -2374,9 +2698,13 @@ def run_worker_batched_tournament(
     runtime = _load_runtime(Path(canonical_spec.agent_path).resolve().parent)
     participants = _load_participants(specs, runtime, device)
     models = {
-        participant.model_key: participant.model
+        model_key: model
         for participant in participants.values()
-        if participant.model_key is not None and participant.model is not None
+        for model_key, model in (
+            (participant.model_key, participant.model),
+            (participant.opponent_model_key, participant.opponent_model),
+        )
+        if model_key is not None and model is not None
     }
     cuda_ensemble = (
         _CudaEnsembleEvaluator(participants.values(), device)

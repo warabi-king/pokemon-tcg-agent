@@ -795,6 +795,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--save-json", action="store_true", help="results/に大会全体の詳細ログをJSONで保存する"
     )
+    parser.add_argument(
+        "--training-json-dir",
+        type=Path,
+        default=None,
+        help=(
+            "batched/worker-batched対戦中に、学習に必要な局面だけを"
+            "1試合1JSONで直接保存するディレクトリ"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -807,6 +816,23 @@ def main() -> None:
         args.batch_size = 256 if args.backend == "worker-batched" else 128
     if args.batch_size < 1:
         raise SystemExit("--batch-size は1以上で指定してください。")
+    if args.training_json_dir is not None:
+        if args.backend not in ("batched", "worker-batched", "cuda-streams", "cuda-ensemble"):
+            raise SystemExit(
+                "--training-json-dirはbatched/worker-batched/cuda-streams/"
+                "cuda-ensemble backendで使用してください。"
+            )
+        args.training_json_dir = args.training_json_dir.resolve()
+        args.training_json_dir.mkdir(parents=True, exist_ok=True)
+        existing_training_json = next(
+            args.training_json_dir.glob("episode_*.json"),
+            None,
+        )
+        if existing_training_json is not None:
+            raise SystemExit(
+                "--training-json-dirに既存の学習JSONがあります。"
+                f"別ディレクトリを指定してください: {existing_training_json}"
+            )
 
     specs: list[AgentSpec] = []
     if args.config:
@@ -909,6 +935,7 @@ def main() -> None:
             search_count=args.search_count,
             seed=args.seed,
             cpu_workers=workers,
+            training_json_dir=args.training_json_dir,
         )
         h2h_map, all_game_logs = aggregate_tournament_results(
             pairings,
@@ -959,6 +986,7 @@ def main() -> None:
             seed=args.seed,
             parallel_cuda_models=args.backend == "cuda-streams",
             cuda_ensemble_models=args.backend == "cuda-ensemble",
+            training_json_dir=args.training_json_dir,
         )
         h2h_map, all_game_logs = aggregate_tournament_results(
             pairings,
@@ -1047,6 +1075,15 @@ def main() -> None:
         )
 
     print(f"\n所要時間: {elapsed:.1f}秒")
+
+    if args.training_json_dir is not None:
+        training_json_count = sum(
+            1 for _ in args.training_json_dir.glob("episode_*.json")
+        )
+        print(
+            f"学習JSON: {training_json_count}試合を保存しました: "
+            f"{args.training_json_dir}"
+        )
 
     if batched_output is not None:
         profile = batched_output.profile
