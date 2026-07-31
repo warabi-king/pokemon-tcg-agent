@@ -10,6 +10,7 @@ import torch
 from cg.api import SearchState, search_begin, search_end, search_step, to_observation_class
 from rl_mcts.features import SparseVector, get_decoder_input, get_encoder_input
 from rl_mcts.model import MyModel
+from rl_mcts.opponent_hand import HiddenCards
 
 SEARCH_COUNT = 10
 MAX_ACTIONS = 64
@@ -73,6 +74,15 @@ class Node:
         self.visit += 1
         if self.parent is not None:
             self.parent.backprop(value)
+
+
+class MctsRun:
+    """Root statistics from one concrete hidden-state determinization."""
+
+    def __init__(self, sample: LearnSample | None, root: Node, selected: list[int]) -> None:
+        self.sample = sample
+        self.root = root
+        self.selected = selected
 
 
 def enumerate_actions(option_count: int, select_count: int, limit: int = MAX_ACTIONS) -> list[list[int]]:
@@ -165,34 +175,51 @@ def create_node(
     return node, LearnSample(value, policy, sv_enc, sv_dec)
 
 
-def mcts_agent(
-    obs_dict: dict,
-    your_deck: list[int],
-    model: MyModel,
-    search_count: int = SEARCH_COUNT,
-) -> tuple[list[int], LearnSample | None]:
-    """MCTSで手を選び、root局面の学習サンプルを返す。"""
-    obs = to_observation_class(obs_dict)
-    if obs.select is None:
-        return your_deck, None
+def _legacy_hidden_cards(obs, your_deck: list[int]) -> HiddenCards:
+    """Compatibility fallback used by the self-play training script."""
 
     your_index = obs.current.yourIndex
     state = obs.current
     active = state.players[1 - your_index].active
-    search_state = search_begin(
-        obs,
-        your_deck=random.sample(your_deck, min(len(your_deck), state.players[your_index].deckCount)),
-        your_prize=random.sample(your_deck, min(len(your_deck), len(state.players[your_index].prize))),
+    return HiddenCards(
+        your_deck=random.sample(
+            your_deck, min(len(your_deck), state.players[your_index].deckCount)
+        ),
+        your_prize=random.sample(
+            your_deck, min(len(your_deck), len(state.players[your_index].prize))
+        ),
         opponent_deck=[1072] * state.players[1 - your_index].deckCount,
         opponent_prize=[1] * len(state.players[1 - your_index].prize),
         opponent_hand=[1] * state.players[1 - your_index].handCount,
         opponent_active=[1072] if len(active) > 0 and active[0] is None else [],
     )
 
+
+def _run_determinization(
+    obs,
+    your_deck: list[int],
+    model: MyModel,
+    hidden: HiddenCards,
+    search_count: int,
+) -> MctsRun:
+    """Run one ordinary perfect-information MCTS for a sampled hidden state."""
+
+    your_index = obs.current.yourIndex
+    search_state = search_begin(
+        obs,
+        your_deck=hidden.your_deck,
+        your_prize=hidden.your_prize,
+        opponent_deck=hidden.opponent_deck,
+        opponent_prize=hidden.opponent_prize,
+        opponent_hand=hidden.opponent_hand,
+        opponent_active=hidden.opponent_active,
+    )
+
     try:
         root, sample = create_node(None, search_state, your_index, your_deck, model)
         if not root.children:
-            return random.sample(list(range(len(obs.select.option))), obs.select.maxCount), sample
+            selected = random.sample(list(range(len(obs.select.option))), obs.select.maxCount)
+            return MctsRun(sample, root, selected)
 
         for _ in range(search_count):
             current = root
@@ -254,6 +281,43 @@ def mcts_agent(
                     v = child.node.total / max(child.node.visit, 1) - v
                 sample.policy[i] = max(-1.0, min(1.0, v))
 
-        return max_child.select, sample
+        return MctsRun(sample, root, max_child.select)
     finally:
         search_end()
+
+
+def mcts_agent(
+    obs_dict: dict,
+    your_deck: list[int],
+    model: MyModel,
+    search_count: int = SEARCH_COUNT,
+    determinizations: list[HiddenCards] | None = None,
+) -> tuple[list[int], LearnSample | None]:
+    """Select a move with MCTS, aggregating root visits over hidden-state particles."""
+
+    obs = to_observation_class(obs_dict)
+    if obs.select is None:
+        return your_deck, None
+
+    particles = determinizations or [_legacy_hidden_cards(obs, your_deck)]
+    runs = [
+        _run_determinization(obs, your_deck, model, hidden, search_count)
+        for hidden in particles
+    ]
+    if len(runs) == 1:
+        return runs[0].selected, runs[0].sample
+
+    visits: dict[tuple[int, ...], int] = {}
+    priors: dict[tuple[int, ...], float] = {}
+    for run in runs:
+        for child in run.root.children:
+            key = tuple(child.select)
+            priors[key] = priors.get(key, 0.0) + child.prob
+            visits.setdefault(key, 0)
+            if child.node is not None:
+                visits[key] += child.node.visit
+
+    if not visits:
+        return runs[0].selected, runs[0].sample
+    selected_key = max(visits, key=lambda key: (visits[key], priors.get(key, 0.0)))
+    return list(selected_key), runs[0].sample
