@@ -467,29 +467,68 @@ class _CudaEnsembleTail(_TorchModuleBase):
         return values, torch.tanh(policies)
 
 
-class _CudaEnsembleEvaluator:
-    """複数モデルをmodel次元へstackし、1回のCUDA演算で評価する。
+def _models_from_participants(
+    participants: Iterable[_Participant],
+) -> list[tuple[str, torch.nn.Module]]:
+    model_by_key: dict[str, torch.nn.Module] = {}
+    for participant in participants:
+        for model_key, model in (
+            (participant.model_key, participant.model),
+            (participant.opponent_model_key, participant.opponent_model),
+        ):
+            if model_key is not None and model is not None:
+                model_by_key.setdefault(model_key, model)
+    return list(model_by_key.items())
 
-    EmbeddingBagにはvmapのbatching ruleがなくモデルごとのfallbackになるため、
-    疎埋め込みはmodel-awareなgather/scatter_addで明示的に並列化する。以降の
-    Transformer/Linear部分のみtorch.vmapへ渡す。
-    """
+
+def _model_axis_embedding_bag(
+    weights: torch.Tensor,
+    indices: torch.Tensor,
+    per_sample_weights: torch.Tensor,
+    offsets: torch.Tensor,
+) -> torch.Tensor:
+    """model次元を保ったままweighted EmbeddingBag(sum)を計算する。"""
+    model_count, value_count = indices.shape
+    vocabulary_size = weights.shape[1]
+    model_indices = torch.arange(
+        model_count,
+        dtype=indices.dtype,
+        device=indices.device,
+    )
+    flat_indices = (
+        indices + model_indices.unsqueeze(1) * vocabulary_size
+    ).reshape(-1)
+    model_value_offsets = torch.arange(
+        model_count,
+        dtype=offsets.dtype,
+        device=offsets.device,
+    ).unsqueeze(1)
+    flat_offsets = (
+        offsets + model_value_offsets * value_count
+    ).reshape(-1)
+    bags = torch.nn.functional.embedding_bag(
+        flat_indices,
+        weights.reshape(-1, weights.shape[-1]),
+        flat_offsets,
+        mode="sum",
+        per_sample_weights=per_sample_weights.reshape(-1),
+    )
+    return bags.reshape(model_count, offsets.shape[1], weights.shape[-1])
+
+
+class _MpsModelAxisEngine:
+    """MPS専用。active modelの重みをまとめて手動batched演算する。"""
 
     def __init__(
         self,
-        participants: Iterable[_Participant],
+        model_items: Iterable[tuple[str, torch.nn.Module]],
         device: torch.device,
     ) -> None:
-        model_by_key: dict[str, torch.nn.Module] = {}
-        for participant in participants:
-            for model_key, model in (
-                (participant.model_key, participant.model),
-                (participant.opponent_model_key, participant.opponent_model),
-            ):
-                if model_key is not None and model is not None:
-                    model_by_key.setdefault(model_key, model)
+        if device.type != "mps":
+            raise ValueError("MPS model-axis blockにはMPS deviceが必要です。")
+        model_by_key = dict(model_items)
         if not model_by_key:
-            raise ValueError("CUDA ensembleには少なくとも1つNNモデルが必要です。")
+            raise ValueError("MPS model-axis blockには少なくとも1つNNモデルが必要です。")
 
         self.model_keys = list(model_by_key)
         self.model_indices = {
@@ -497,6 +536,8 @@ class _CudaEnsembleEvaluator:
         }
         models = [model_by_key[model_key] for model_key in self.model_keys]
         first = models[0]
+        self.model_count = len(models)
+        self.d_model = int(first.d_model)
         self.num_words_encoder = int(first.num_words_encoder)
         required_attributes = (
             "encoder_bag",
@@ -510,8 +551,290 @@ class _CudaEnsembleEvaluator:
         )
         if any(not hasattr(model, name) for model in models for name in required_attributes):
             raise TypeError(
-                "CUDA ensembleはEmbeddingBag + Transformer形式の同一モデルを必要とします。"
+                "MPS model-axisはEmbeddingBag + Transformer形式の同一モデルを必要とします。"
             )
+        first_state_shapes = {
+            key: tuple(value.shape) for key, value in first.state_dict().items()
+        }
+        for model in models[1:]:
+            if {
+                key: tuple(value.shape) for key, value in model.state_dict().items()
+            } != first_state_shapes:
+                raise ValueError("MPS model-axis block内のモデル構造が一致していません。")
+
+        self.encoder_weights = torch.stack(
+            [model.encoder_bag.weight.detach() for model in models]
+        )
+        self.decoder_weights = torch.stack(
+            [model.decoder_bag.weight.detach() for model in models]
+        )
+        self.device = device
+        state_dicts = [model.state_dict() for model in models]
+        self.stacked_state = {
+            key: torch.stack([state[key].detach() for state in state_dicts])
+            for key in state_dicts[0]
+            if key not in ("encoder_bag.weight", "decoder_bag.weight")
+        }
+        self.num_encoder_layers = len(first.encoder.layers)
+        self.num_decoder_layers = len(first.decoder)
+        self.num_heads = int(first.encoder.layers[0].self_attn.num_heads)
+        self.encoder_norm_eps = [
+            (float(layer.norm1.eps), float(layer.norm2.eps))
+            for layer in first.encoder.layers
+        ]
+        self.decoder_norm_eps = [
+            (float(layer.norm1.eps), float(layer.norm2.eps))
+            for layer in first.decoder
+        ]
+
+    @staticmethod
+    def _linear(
+        inputs: torch.Tensor,
+        weight: torch.Tensor,
+        bias: torch.Tensor,
+    ) -> torch.Tensor:
+        """model別Linearを1回のbmmとして計算する。"""
+        model_count = inputs.shape[0]
+        leading_shape = inputs.shape[1:-1]
+        outputs = torch.bmm(
+            inputs.reshape(model_count, -1, inputs.shape[-1]),
+            weight.transpose(1, 2),
+        )
+        outputs = outputs + bias.unsqueeze(1)
+        return outputs.reshape(model_count, *leading_shape, weight.shape[1])
+
+    @staticmethod
+    def _layer_norm(
+        inputs: torch.Tensor,
+        weight: torch.Tensor,
+        bias: torch.Tensor,
+        eps: float,
+    ) -> torch.Tensor:
+        """model別LayerNorm。最後のfeature軸だけを正規化する。"""
+        variance, mean = torch.var_mean(
+            inputs,
+            dim=-1,
+            correction=0,
+            keepdim=True,
+        )
+        normalized = (inputs - mean) * torch.rsqrt(variance + eps)
+        expand = (slice(None),) + (None,) * (inputs.ndim - 2) + (slice(None),)
+        return normalized * weight[expand] + bias[expand]
+
+    def _attention(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        prefix: str,
+        state: dict[str, torch.Tensor],
+    ) -> torch.Tensor:
+        """model別MultiheadAttentionを通常のbatched matmulへ畳み込む。"""
+        projection_weight = state[f"{prefix}.in_proj_weight"]
+        projection_bias = state[f"{prefix}.in_proj_bias"]
+        d_model = self.d_model
+        q = self._linear(
+            query,
+            projection_weight[:, :d_model],
+            projection_bias[:, :d_model],
+        )
+        k = self._linear(
+            key,
+            projection_weight[:, d_model : 2 * d_model],
+            projection_bias[:, d_model : 2 * d_model],
+        )
+        v = self._linear(
+            value,
+            projection_weight[:, 2 * d_model :],
+            projection_bias[:, 2 * d_model :],
+        )
+
+        model_count, batch_count, query_words, _ = q.shape
+        key_words = k.shape[2]
+        head_size = d_model // self.num_heads
+
+        def split_heads(tensor: torch.Tensor) -> torch.Tensor:
+            return tensor.reshape(
+                model_count,
+                batch_count,
+                -1,
+                self.num_heads,
+                head_size,
+            ).permute(0, 1, 3, 2, 4)
+
+        q = split_heads(q).reshape(-1, query_words, head_size)
+        k = split_heads(k).reshape(-1, key_words, head_size)
+        v = split_heads(v).reshape(-1, key_words, head_size)
+        scores = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(head_size)
+        attention = torch.softmax(scores, dim=-1)
+        context = torch.bmm(attention, v)
+        context = context.reshape(
+            model_count,
+            batch_count,
+            self.num_heads,
+            query_words,
+            head_size,
+        ).permute(0, 1, 3, 2, 4).reshape(
+            model_count,
+            batch_count,
+            query_words,
+            d_model,
+        )
+        return self._linear(
+            context,
+            state[f"{prefix}.out_proj.weight"],
+            state[f"{prefix}.out_proj.bias"],
+        )
+
+    def _manual_forward(
+        self,
+        encoder_bags: torch.Tensor,
+        decoder_bags: torch.Tensor,
+        state: dict[str, torch.Tensor],
+        model_count: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """vmap非対応のMPS attentionを使わないmodel-axis forward。"""
+        encoder = encoder_bags.reshape(
+            model_count,
+            -1,
+            self.num_words_encoder,
+            self.d_model,
+        )
+        for layer_index in range(self.num_encoder_layers):
+            prefix = f"encoder.layers.{layer_index}"
+            attended = self._attention(
+                encoder,
+                encoder,
+                encoder,
+                f"{prefix}.self_attn",
+                state,
+            )
+            residual = self._layer_norm(
+                encoder + attended,
+                state[f"{prefix}.norm1.weight"],
+                state[f"{prefix}.norm1.bias"],
+                self.encoder_norm_eps[layer_index][0],
+            )
+            hidden = self._linear(
+                residual,
+                state[f"{prefix}.linear1.weight"],
+                state[f"{prefix}.linear1.bias"],
+            ).relu_()
+            hidden = self._linear(
+                hidden,
+                state[f"{prefix}.linear2.weight"],
+                state[f"{prefix}.linear2.bias"],
+            )
+            encoder = self._layer_norm(
+                residual + hidden,
+                state[f"{prefix}.norm2.weight"],
+                state[f"{prefix}.norm2.bias"],
+                self.encoder_norm_eps[layer_index][1],
+            )
+
+        values = self._linear(
+            encoder,
+            state["encoder_fc.weight"],
+            state["encoder_fc.bias"],
+        ).mean(dim=2)
+        values = torch.tanh(values)
+
+        batch_count = encoder.shape[1]
+        decoder = decoder_bags.reshape(
+            model_count,
+            batch_count,
+            -1,
+            self.d_model,
+        )
+        for layer_index in range(self.num_decoder_layers):
+            prefix = f"decoder.{layer_index}"
+            attended = self._attention(
+                decoder,
+                encoder,
+                encoder,
+                f"{prefix}.attention",
+                state,
+            )
+            residual = self._layer_norm(
+                decoder + attended,
+                state[f"{prefix}.norm1.weight"],
+                state[f"{prefix}.norm1.bias"],
+                self.decoder_norm_eps[layer_index][0],
+            )
+            hidden = self._linear(
+                residual,
+                state[f"{prefix}.fc1.weight"],
+                state[f"{prefix}.fc1.bias"],
+            ).relu_()
+            hidden = self._linear(
+                hidden,
+                state[f"{prefix}.fc2.weight"],
+                state[f"{prefix}.fc2.bias"],
+            )
+            decoder = self._layer_norm(
+                residual + hidden,
+                state[f"{prefix}.norm2.weight"],
+                state[f"{prefix}.norm2.bias"],
+                self.decoder_norm_eps[layer_index][1],
+            )
+        policies = self._linear(
+            decoder,
+            state["decoder_fc.weight"],
+            state["decoder_fc.bias"],
+        ).squeeze(-1)
+        return values, torch.tanh(policies)
+
+    def evaluate(
+        self,
+        index_encoder: torch.Tensor,
+        value_encoder: torch.Tensor,
+        offset_encoder: torch.Tensor,
+        index_decoder: torch.Tensor,
+        value_decoder: torch.Tensor,
+        offset_decoder: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        encoder_bags = _model_axis_embedding_bag(
+            self.encoder_weights,
+            index_encoder,
+            value_encoder,
+            offset_encoder,
+        )
+        decoder_bags = _model_axis_embedding_bag(
+            self.decoder_weights,
+            index_decoder,
+            value_decoder,
+            offset_decoder,
+        )
+        return self._manual_forward(
+            encoder_bags,
+            decoder_bags,
+            self.stacked_state,
+            self.model_count,
+        )
+
+class _CudaEnsembleEvaluator:
+    """CUDA専用。stackした全モデルをtorch.vmapで1回に評価する。"""
+
+    _embedding_bag = staticmethod(_model_axis_embedding_bag)
+
+    def __init__(
+        self,
+        participants: Iterable[_Participant],
+        device: torch.device,
+    ) -> None:
+        if device.type != "cuda":
+            raise ValueError("CUDA ensembleにはCUDA deviceが必要です。")
+        model_items = _models_from_participants(participants)
+        if not model_items:
+            raise ValueError("CUDA ensembleには少なくとも1つNNモデルが必要です。")
+        self.model_keys = [key for key, _model in model_items]
+        self.model_indices = {
+            model_key: index for index, model_key in enumerate(self.model_keys)
+        }
+        models = [model for _key, model in model_items]
+        first = models[0]
+        self.model_count = len(models)
+        self.num_words_encoder = int(first.num_words_encoder)
         first_state_shapes = {
             key: tuple(value.shape) for key, value in first.state_dict().items()
         }
@@ -543,44 +866,7 @@ class _CudaEnsembleEvaluator:
                 (encoder_bags, decoder_bags),
             )
 
-        self.call = torch.vmap(
-            call_one,
-            in_dims=(0, 0, 0, 0),
-        )
-        self.device = device
-
-    @staticmethod
-    def _embedding_bag(
-        weights: torch.Tensor,
-        indices: torch.Tensor,
-        per_sample_weights: torch.Tensor,
-        offsets: torch.Tensor,
-    ) -> torch.Tensor:
-        """model次元を保ったままweighted EmbeddingBag(sum)を計算する。"""
-        model_count, value_count = indices.shape
-        vocabulary_size = weights.shape[1]
-        model_indices = torch.arange(
-            model_count,
-            dtype=indices.dtype,
-            device=indices.device,
-        ).unsqueeze(1)
-        flat_indices = (indices + model_indices * vocabulary_size).reshape(-1)
-        model_value_offsets = torch.arange(
-            model_count,
-            dtype=offsets.dtype,
-            device=offsets.device,
-        ).unsqueeze(1)
-        flat_offsets = (
-            offsets + model_value_offsets * value_count
-        ).reshape(-1)
-        bags = torch.nn.functional.embedding_bag(
-            flat_indices,
-            weights.reshape(-1, weights.shape[-1]),
-            flat_offsets,
-            mode="sum",
-            per_sample_weights=per_sample_weights.reshape(-1),
-        )
-        return bags.reshape(model_count, offsets.shape[1], weights.shape[-1])
+        self.call = torch.vmap(call_one, in_dims=(0, 0, 0, 0))
 
     def evaluate(
         self,
@@ -611,10 +897,64 @@ class _CudaEnsembleEvaluator:
         )
 
 
+class _MpsModelAxisEvaluator:
+    """MPS専用。固定した全モデルをmanual batched演算で評価する。"""
+
+    def __init__(
+        self,
+        participants: Iterable[_Participant],
+        device: torch.device,
+    ) -> None:
+        if device.type != "mps":
+            raise ValueError("MPS model-axis evaluatorにはMPS deviceが必要です。")
+        model_items = _models_from_participants(participants)
+        if not model_items:
+            raise ValueError("MPS model-axisには少なくとも1つNNモデルが必要です。")
+        self.model_count = len(model_items)
+        self.model_keys = [key for key, _model in model_items]
+        self.model_indices = {
+            model_key: index for index, model_key in enumerate(self.model_keys)
+        }
+        self.engine = _MpsModelAxisEngine(model_items, device)
+        self.num_words_encoder = self.engine.num_words_encoder
+
+    def evaluate(
+        self,
+        index_encoder: torch.Tensor,
+        value_encoder: torch.Tensor,
+        offset_encoder: torch.Tensor,
+        index_decoder: torch.Tensor,
+        value_decoder: torch.Tensor,
+        offset_decoder: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.engine.evaluate(
+            index_encoder,
+            value_encoder,
+            offset_encoder,
+            index_decoder,
+            value_decoder,
+            offset_decoder,
+        )
+
 # RTX 3050実測では標準EmbeddingBagで5モデルを統合するとmodel当たり32件まで
 # model-axisがper-modelより1.6倍以上速く、64件で同等になる。不均等batchの
 # padding余裕を残し、平均32件未満だけmodel-axisへ切り替える。
-_CUDA_ENSEMBLE_BATCH_CROSSOVER = 32.0
+#
+# MPSは固定した全モデルのdense weightを一度だけstackし、waveごとのweight
+# コピーを行わない。inactive modelのpaddingを考慮した閾値より小さいwaveだけ
+# manual model-axisを使い、それ以上はqueued per-modelにする。
+_CUDA_MODEL_AXIS_BATCH_CROSSOVER = 32.0
+_MPS_MODEL_AXIS_BATCH_CROSSOVER = 16.0
+_MPS_MODEL_AXIS_MIN_ROW_EFFICIENCY = 0.30
+
+
+def _model_axis_batch_crossover(
+    device: torch.device,
+    evaluator: _CudaEnsembleEvaluator,
+    active_model_count: int,
+) -> float:
+    del evaluator, active_model_count
+    return _CUDA_MODEL_AXIS_BATCH_CROSSOVER if device.type == "cuda" else 0.0
 
 
 def select_device(requested: str) -> torch.device:
@@ -1620,7 +1960,8 @@ def _apply_evaluations(
     if (
         cuda_ensemble is not None
         and len(grouped) >= 2
-        and mean_model_batch < _CUDA_ENSEMBLE_BATCH_CROSSOVER
+        and mean_model_batch
+        < _model_axis_batch_crossover(device, cuda_ensemble, len(grouped))
     ):
         profile.cuda_ensemble_waves += 1
         _apply_evaluations_cuda_ensemble(
@@ -1936,6 +2277,33 @@ def _raw_result(session: _MatchSession) -> int | None:
     return result if result in (0, 1, 2) else None
 
 
+def _raw_turn(session: _MatchSession) -> int:
+    current = session.observation.get("current") or {}
+    return int(current.get("turn", 0))
+
+
+def _set_result_from_remaining_prizes(session: _MatchSession) -> int:
+    """上限到達時の勝敗を残りサイド枚数で確定する。
+
+    残りサイドが少ない側を勝者とし、同数なら引き分けにする。返すresultは
+    Battle内部のplayer index基準で、通常終局時のcurrent.resultと同じ形式。
+    """
+    current = session.observation.get("current")
+    if current is None:
+        raise ValueError("現在の対戦状態がないためサイド枚数を比較できません。")
+    players = current.get("players") or []
+    if len(players) != 2:
+        raise ValueError("プレイヤー2人分のサイド枚数を取得できません。")
+
+    remaining_prizes = [len(player.get("prize") or []) for player in players]
+    if remaining_prizes[0] == remaining_prizes[1]:
+        result = 2
+    else:
+        result = 0 if remaining_prizes[0] < remaining_prizes[1] else 1
+    current["result"] = result
+    return result
+
+
 def _to_result(session: _MatchSession, error: str | None = None) -> BatchedGameResult:
     raw_result = _raw_result(session)
     if raw_result in (0, 1):
@@ -1964,6 +2332,7 @@ def run_batched_tournament(
     lanes: int = 128,
     search_count: int = 10,
     max_selections: int = 2000,
+    max_turns: int | None = None,
     seed: int = 0,
     parallel_cuda_models: bool = False,
     cuda_ensemble_models: bool = False,
@@ -1979,6 +2348,10 @@ def run_batched_tournament(
         raise ValueError("lanesは1以上で指定してください。")
     if search_count < 0:
         raise ValueError("search_countは0以上で指定してください。")
+    if max_selections < 1:
+        raise ValueError("max_selectionsは1以上で指定してください。")
+    if max_turns is not None and max_turns < 1:
+        raise ValueError("max_turnsは1以上またはNoneにしてください。")
 
     training_output_dir = (
         Path(training_json_dir).resolve()
@@ -2088,11 +2461,12 @@ def run_batched_tournament(
             for session in active:
                 if _raw_result(session) is not None:
                     finish_session(session)
+                elif max_turns is not None and _raw_turn(session) >= max_turns:
+                    _set_result_from_remaining_prizes(session)
+                    finish_session(session)
                 elif session.selections >= max_selections:
-                    finish_session(
-                        session,
-                        error=f"max_selections={max_selections}を超えました。",
-                    )
+                    _set_result_from_remaining_prizes(session)
+                    finish_session(session)
                 else:
                     survivors.append(session)
             active = survivors
@@ -2193,6 +2567,7 @@ def _parallel_worker_main(
     lanes: int,
     search_count: int,
     max_selections: int,
+    max_turns: int | None,
     seed: int,
     remote_batch_size: int,
     training_json_dir: str | None,
@@ -2229,6 +2604,7 @@ def _parallel_worker_main(
             lanes=min(lanes, len(game_requests)),
             search_count=search_count,
             max_selections=max_selections,
+            max_turns=max_turns,
             seed=seed + worker_id,
             training_json_dir=(
                 Path(training_json_dir)
@@ -2244,6 +2620,305 @@ def _parallel_worker_main(
         result_queue.put(("error", worker_id, traceback.format_exc()))
 
 
+def _mps_sparse_inputs(
+    encoder: tuple[np.ndarray, np.ndarray, np.ndarray],
+    decoder: tuple[np.ndarray, np.ndarray, np.ndarray],
+    device: torch.device,
+) -> tuple[torch.Tensor, ...]:
+    """6本のsparse配列をdtype別の2転送にまとめ、MPS上でviewへ戻す。"""
+    integer_arrays = (encoder[0], encoder[2], decoder[0], decoder[2])
+    float_arrays = (encoder[1], decoder[1])
+    integer_sizes = [array.size for array in integer_arrays]
+    float_sizes = [array.size for array in float_arrays]
+    integer_device = torch.from_numpy(
+        np.concatenate([array.reshape(-1) for array in integer_arrays])
+    ).to(device)
+    float_device = torch.from_numpy(
+        np.concatenate([array.reshape(-1) for array in float_arrays])
+    ).to(device)
+
+    integer_tensors: list[torch.Tensor] = []
+    position = 0
+    for array, size in zip(integer_arrays, integer_sizes, strict=True):
+        integer_tensors.append(
+            integer_device[position : position + size].reshape(array.shape)
+        )
+        position += size
+    float_tensors: list[torch.Tensor] = []
+    position = 0
+    for array, size in zip(float_arrays, float_sizes, strict=True):
+        float_tensors.append(
+            float_device[position : position + size].reshape(array.shape)
+        )
+        position += size
+    return (
+        integer_tensors[0],
+        float_tensors[0],
+        integer_tensors[1],
+        integer_tensors[2],
+        float_tensors[1],
+        integer_tensors[3],
+    )
+
+
+def _mps_sparse_input_batches(
+    sparse_batches: list[
+        tuple[
+            tuple[np.ndarray, np.ndarray, np.ndarray],
+            tuple[np.ndarray, np.ndarray, np.ndarray],
+        ]
+    ],
+    device: torch.device,
+) -> list[tuple[torch.Tensor, ...]]:
+    """同じwaveの全model入力をdtype別の2転送にまとめる。"""
+    if not sparse_batches:
+        return []
+
+    integer_arrays: list[np.ndarray] = []
+    float_arrays: list[np.ndarray] = []
+    integer_metadata: list[list[tuple[int, tuple[int, ...]]]] = []
+    float_metadata: list[list[tuple[int, tuple[int, ...]]]] = []
+    for encoder, decoder in sparse_batches:
+        batch_integer_arrays = (encoder[0], encoder[2], decoder[0], decoder[2])
+        batch_float_arrays = (encoder[1], decoder[1])
+        integer_arrays.extend(batch_integer_arrays)
+        float_arrays.extend(batch_float_arrays)
+        integer_metadata.append(
+            [(array.size, array.shape) for array in batch_integer_arrays]
+        )
+        float_metadata.append(
+            [(array.size, array.shape) for array in batch_float_arrays]
+        )
+
+    integer_device = torch.from_numpy(
+        np.concatenate([array.reshape(-1) for array in integer_arrays])
+    ).to(device)
+    float_device = torch.from_numpy(
+        np.concatenate([array.reshape(-1) for array in float_arrays])
+    ).to(device)
+
+    batches: list[tuple[torch.Tensor, ...]] = []
+    integer_position = 0
+    float_position = 0
+    for batch_integer_metadata, batch_float_metadata in zip(
+        integer_metadata,
+        float_metadata,
+        strict=True,
+    ):
+        integer_tensors: list[torch.Tensor] = []
+        for size, shape in batch_integer_metadata:
+            integer_tensors.append(
+                integer_device[integer_position : integer_position + size].reshape(shape)
+            )
+            integer_position += size
+        float_tensors: list[torch.Tensor] = []
+        for size, shape in batch_float_metadata:
+            float_tensors.append(
+                float_device[float_position : float_position + size].reshape(shape)
+            )
+            float_position += size
+        batches.append(
+            (
+                integer_tensors[0],
+                float_tensors[0],
+                integer_tensors[1],
+                integer_tensors[2],
+                float_tensors[1],
+                integer_tensors[3],
+            )
+        )
+    return batches
+
+
+def _evaluate_remote_messages_mps_queued(
+    grouped: dict[str, list[tuple[int, int, int, _RemoteEvalJob]]],
+    responses: dict[tuple[int, int], list[Any]],
+    models: dict[str, torch.nn.Module],
+    device: torch.device,
+    batch_size: int,
+    profile: BatchedProfile,
+) -> None:
+    """per-model forwardを全てMPSへ投入してから、出力をまとめて待つ。
+
+    モデルごとに直後の.cpu()を呼ぶとMPS command queueを毎回同期してしまう。
+    NumPyのmergeを先に済ませ、全model/chunkのforwardをsubmitした後で出力を
+    CPUへ戻すことで、1つの中央waveにつき実質1回の完了待ちにする。
+    """
+    prepared: list[
+        tuple[
+            list[tuple[int, int, int, _RemoteEvalJob]],
+            torch.nn.Module,
+            tuple[np.ndarray, np.ndarray, np.ndarray],
+            tuple[np.ndarray, np.ndarray, np.ndarray],
+            int,
+        ]
+    ] = []
+    for model_key, entries in grouped.items():
+        model = models.get(model_key)
+        if model is None:
+            raise RuntimeError(f"中央NN batcherにモデルがありません: {model_key}")
+        entries.sort(key=lambda entry: entry[3].decoder_words)
+        central_chunks: list[list[tuple[int, int, int, _RemoteEvalJob]]] = []
+        current: list[tuple[int, int, int, _RemoteEvalJob]] = []
+        current_size = 0
+        for entry in entries:
+            job_size = entry[3].batch_count
+            if current and current_size + job_size > batch_size:
+                central_chunks.append(current)
+                current = []
+                current_size = 0
+            current.append(entry)
+            current_size += job_size
+        if current:
+            central_chunks.append(current)
+
+        for central_chunk in central_chunks:
+            merge_started = time.perf_counter()
+            jobs = [entry[3] for entry in central_chunk]
+            decoder_words = max(job.decoder_words for job in jobs)
+            encoder = _merge_combined_sparse([job.encoder for job in jobs])
+            decoder = _merge_combined_sparse(
+                [_pad_remote_decoder(job, decoder_words) for job in jobs]
+            )
+            evaluation_count = sum(job.batch_count for job in jobs)
+            profile.nn_decoder_source_tokens += sum(
+                job.batch_count * job.decoder_words for job in jobs
+            )
+            profile.nn_decoder_padded_tokens += evaluation_count * decoder_words
+            profile.nn_merge_seconds += time.perf_counter() - merge_started
+            prepared.append(
+                (central_chunk, model, encoder, decoder, evaluation_count)
+            )
+
+    submitted: list[
+        tuple[
+            list[tuple[int, int, int, _RemoteEvalJob]],
+            int,
+            torch.Tensor,
+        ]
+    ] = []
+    started = time.perf_counter()
+    with torch.inference_mode():
+        input_started = time.perf_counter()
+        input_batches = _mps_sparse_input_batches(
+            [(encoder, decoder) for _, _, encoder, decoder, _ in prepared],
+            device,
+        )
+        profile.nn_input_seconds += time.perf_counter() - input_started
+        for (
+            central_chunk,
+            model,
+            _encoder,
+            _decoder,
+            evaluation_count,
+        ), inputs in zip(prepared, input_batches, strict=True):
+            forward_started = time.perf_counter()
+            values, policies = model(*inputs)
+            combined_output = torch.cat((values, policies), dim=-1)
+            profile.nn_forward_submit_seconds += time.perf_counter() - forward_started
+            submitted.append(
+                (
+                    central_chunk,
+                    evaluation_count,
+                    combined_output.detach(),
+                )
+            )
+
+        completed: list[
+            tuple[
+                list[tuple[int, int, int, _RemoteEvalJob]],
+                list[Any],
+                list[Any],
+            ]
+        ] = []
+        for central_chunk, evaluation_count, combined_output in submitted:
+            output_started = time.perf_counter()
+            output_rows_tensor = combined_output.cpu()
+            profile.nn_output_wait_seconds += time.perf_counter() - output_started
+
+            tolist_started = time.perf_counter()
+            value_rows = output_rows_tensor[:, :1].tolist()
+            policy_rows = output_rows_tensor[:, 1:].tolist()
+            profile.nn_tolist_seconds += time.perf_counter() - tolist_started
+            profile.nn_evaluations += evaluation_count
+            profile.nn_batches += 1
+            profile.batch_sizes.append(evaluation_count)
+            completed.append((central_chunk, value_rows, policy_rows))
+    profile.nn_seconds += time.perf_counter() - started
+
+    response_pack_started = time.perf_counter()
+    for central_chunk, value_rows, policy_rows in completed:
+        row_offset = 0
+        for worker_id, request_id, job_index, job in central_chunk:
+            row_end = row_offset + job.batch_count
+            responses[(worker_id, request_id)][job_index] = (
+                value_rows[row_offset:row_end],
+                policy_rows[row_offset:row_end],
+            )
+            row_offset = row_end
+    profile.nn_response_pack_seconds += time.perf_counter() - response_pack_started
+
+
+def _evaluate_remote_messages_mps_active(
+    grouped: dict[str, list[tuple[int, int, int, _RemoteEvalJob]]],
+    responses: dict[tuple[int, int], list[Any]],
+    models: dict[str, torch.nn.Module],
+    evaluator: _MpsModelAxisEvaluator,
+    device: torch.device,
+    batch_size: int,
+    profile: BatchedProfile,
+) -> None:
+    """固定MPS model-axisか、queued per-modelをwaveごとに選ぶ。"""
+    active_model_keys = [
+        model_key for model_key in evaluator.model_keys if model_key in grouped
+    ]
+    active_model_count = len(active_model_keys)
+    evaluation_count = sum(
+        entry[3].batch_count
+        for entries in grouped.values()
+        for entry in entries
+    )
+    mean_model_batch = evaluation_count / max(active_model_count, 1)
+    max_model_batch = max(
+        sum(entry[3].batch_count for entry in entries)
+        for entries in grouped.values()
+    )
+    dense_row_efficiency = evaluation_count / (
+        evaluator.model_count * max_model_batch
+    )
+    # stackは常に同じ全モデルとし、waveごとの重みindex_selectを避ける。
+    # inactive modelのpadding費用を考慮して、active率に比例して閾値を下げる。
+    model_axis_crossover = (
+        _MPS_MODEL_AXIS_BATCH_CROSSOVER
+        * active_model_count
+        / evaluator.model_count
+    )
+    if (
+        active_model_count >= 4
+        and mean_model_batch < model_axis_crossover
+        and dense_row_efficiency >= _MPS_MODEL_AXIS_MIN_ROW_EFFICIENCY
+    ):
+        profile.cuda_ensemble_waves += 1
+        _evaluate_remote_messages_model_axis(
+            grouped,
+            responses,
+            evaluator,
+            device,
+            batch_size,
+            profile,
+        )
+    else:
+        profile.cuda_per_model_waves += 1
+        _evaluate_remote_messages_mps_queued(
+            grouped,
+            responses,
+            models,
+            device,
+            batch_size,
+            profile,
+        )
+
+
 def _evaluate_remote_messages(
     messages: list[tuple[int, int, list[_RemoteEvalJob]]],
     models: dict[str, torch.nn.Module],
@@ -2251,7 +2926,7 @@ def _evaluate_remote_messages(
     batch_size: int,
     profile: BatchedProfile,
     response_queues: list[Any],
-    cuda_ensemble: _CudaEnsembleEvaluator | None = None,
+    model_axis_evaluator: _CudaEnsembleEvaluator | _MpsModelAxisEvaluator | None = None,
 ) -> None:
     """複数workerから届いた要求をmodel・decoder幅ごとに中央評価する。"""
     responses: dict[tuple[int, int], list[Any]] = {
@@ -2265,22 +2940,12 @@ def _evaluate_remote_messages(
                 (worker_id, request_id, job_index, job)
             )
 
-    evaluation_count = sum(
-        entry[3].batch_count
-        for entries in grouped.values()
-        for entry in entries
-    )
-    mean_model_batch = evaluation_count / max(len(grouped), 1)
-    if (
-        cuda_ensemble is not None
-        and len(grouped) >= 2
-        and mean_model_batch < _CUDA_ENSEMBLE_BATCH_CROSSOVER
-    ):
-        profile.cuda_ensemble_waves += 1
-        _evaluate_remote_messages_cuda_ensemble(
+    if isinstance(model_axis_evaluator, _MpsModelAxisEvaluator):
+        _evaluate_remote_messages_mps_active(
             grouped,
             responses,
-            cuda_ensemble,
+            models,
+            model_axis_evaluator,
             device,
             batch_size,
             profile,
@@ -2293,8 +2958,61 @@ def _evaluate_remote_messages(
             )
         profile.response_put_seconds += time.perf_counter() - response_put_started
         return
-    if cuda_ensemble is not None:
+
+    evaluation_count = sum(
+        entry[3].batch_count
+        for entries in grouped.values()
+        for entry in entries
+    )
+    mean_model_batch = evaluation_count / max(len(grouped), 1)
+    if (
+        model_axis_evaluator is not None
+        and len(grouped) >= 2
+        and mean_model_batch
+        < _model_axis_batch_crossover(
+            device,
+            model_axis_evaluator,
+            len(grouped),
+        )
+    ):
+        profile.cuda_ensemble_waves += 1
+        _evaluate_remote_messages_model_axis(
+            grouped,
+            responses,
+            model_axis_evaluator,
+            device,
+            batch_size,
+            profile,
+        )
+        profile.ipc_messages += len(messages)
+        response_put_started = time.perf_counter()
+        for worker_id, request_id, _jobs in messages:
+            response_queues[worker_id].put(
+                (request_id, responses[(worker_id, request_id)])
+            )
+        profile.response_put_seconds += time.perf_counter() - response_put_started
+        return
+    if model_axis_evaluator is not None:
         profile.cuda_per_model_waves += 1
+
+    if device.type == "mps" and len(grouped) >= 2:
+        profile.cuda_per_model_waves += 1
+        _evaluate_remote_messages_mps_queued(
+            grouped,
+            responses,
+            models,
+            device,
+            batch_size,
+            profile,
+        )
+        profile.ipc_messages += len(messages)
+        response_put_started = time.perf_counter()
+        for worker_id, request_id, _jobs in messages:
+            response_queues[worker_id].put(
+                (request_id, responses[(worker_id, request_id)])
+            )
+        profile.response_put_seconds += time.perf_counter() - response_put_started
+        return
 
     for model_key, entries in grouped.items():
         model = models.get(model_key)
@@ -2419,15 +3137,18 @@ def _pad_empty_sparse_rows(
     )
 
 
-def _evaluate_remote_messages_cuda_ensemble(
+def _evaluate_remote_messages_model_axis(
     grouped: dict[str, list[tuple[int, int, int, _RemoteEvalJob]]],
     responses: dict[tuple[int, int], list[Any]],
-    evaluator: _CudaEnsembleEvaluator,
+    evaluator: _CudaEnsembleEvaluator | _MpsModelAxisEvaluator,
     device: torch.device,
     batch_size: int,
     profile: BatchedProfile,
+    *,
+    model_keys: list[str] | None = None,
 ) -> None:
-    """CPU worker群の小batchを8モデルのmodel軸へ積み、1回で評価する。"""
+    """CPU worker群の小batchをmodel軸へ積み、1回で評価する。"""
+    wave_model_keys = evaluator.model_keys if model_keys is None else model_keys
     chunked: dict[
         str,
         list[list[tuple[int, int, int, _RemoteEvalJob]]],
@@ -2474,7 +3195,7 @@ def _evaluate_remote_messages_cuda_ensemble(
             for entry in entries
         )
         profile.nn_decoder_padded_tokens += (
-            len(evaluator.model_keys) * model_batch * decoder_words
+            len(wave_model_keys) * model_batch * decoder_words
         )
 
         combined_rows: list[
@@ -2483,7 +3204,7 @@ def _evaluate_remote_messages_cuda_ensemble(
                 tuple[np.ndarray, np.ndarray, np.ndarray],
             ]
         ] = []
-        for model_key in evaluator.model_keys:
+        for model_key in wave_model_keys:
             entries = active_chunks.get(model_key, [])
             row_count = model_counts.get(model_key, 0)
             encoder = _merge_combined_sparse(
@@ -2519,46 +3240,59 @@ def _evaluate_remote_messages_cuda_ensemble(
 
         started = time.perf_counter()
         input_started = time.perf_counter()
-        inputs = (
-            torch.from_numpy(
-                np.stack([row[0][0] for row in combined_rows])
-            ).to(device),
-            torch.from_numpy(
-                np.stack([row[0][1] for row in combined_rows])
-            ).to(device),
-            torch.from_numpy(
-                np.stack([row[0][2] for row in combined_rows])
-            ).to(device),
-            torch.from_numpy(
-                np.stack([row[1][0] for row in combined_rows])
-            ).to(device),
-            torch.from_numpy(
-                np.stack([row[1][1] for row in combined_rows])
-            ).to(device),
-            torch.from_numpy(
-                np.stack([row[1][2] for row in combined_rows])
-            ).to(device),
+        stacked_encoder = tuple(
+            np.stack([row[0][component] for row in combined_rows])
+            for component in range(3)
         )
+        stacked_decoder = tuple(
+            np.stack([row[1][component] for row in combined_rows])
+            for component in range(3)
+        )
+        if isinstance(evaluator, _MpsModelAxisEvaluator):
+            inputs = _mps_sparse_inputs(
+                stacked_encoder,
+                stacked_decoder,
+                device,
+            )
+        else:
+            inputs = tuple(
+                torch.from_numpy(array).to(device)
+                for array in (*stacked_encoder, *stacked_decoder)
+            )
         profile.nn_input_seconds += time.perf_counter() - input_started
         with torch.inference_mode():
             forward_started = time.perf_counter()
-            values, policies = evaluator.evaluate(*inputs)
+            if isinstance(evaluator, _MpsModelAxisEvaluator):
+                values, policies = evaluator.evaluate(*inputs)
+                combined_output = torch.cat((values, policies), dim=-1)
+            else:
+                values, policies = evaluator.evaluate(*inputs)
             profile.nn_forward_submit_seconds += time.perf_counter() - forward_started
 
             output_started = time.perf_counter()
-            value_rows_tensor = values.detach().cpu()
-            policy_rows_tensor = policies.detach().cpu()
+            if isinstance(evaluator, _MpsModelAxisEvaluator):
+                output_rows_tensor = combined_output.detach().cpu()
+            else:
+                value_rows_tensor = values.detach().cpu()
+                policy_rows_tensor = policies.detach().cpu()
             profile.nn_output_wait_seconds += time.perf_counter() - output_started
 
             tolist_started = time.perf_counter()
-            value_rows = value_rows_tensor.tolist()
-            policy_rows = policy_rows_tensor.tolist()
+            if isinstance(evaluator, _MpsModelAxisEvaluator):
+                value_rows = output_rows_tensor[..., :1].tolist()
+                policy_rows = output_rows_tensor[..., 1:].tolist()
+            else:
+                value_rows = value_rows_tensor.tolist()
+                policy_rows = policy_rows_tensor.tolist()
             profile.nn_tolist_seconds += time.perf_counter() - tolist_started
         profile.nn_seconds += time.perf_counter() - started
 
         response_pack_started = time.perf_counter()
+        output_model_indices = {
+            model_key: index for index, model_key in enumerate(wave_model_keys)
+        }
         for model_key, entries in active_chunks.items():
-            model_index = evaluator.model_indices[model_key]
+            model_index = output_model_indices[model_key]
             row_offset = 0
             for worker_id, request_id, job_index, job in entries:
                 row_end = row_offset + job.batch_count
@@ -2595,14 +3329,19 @@ def run_worker_batched_tournament(
     pairings: list[tuple[str, str]],
     num_games: int,
     *,
+    games_per_pairing: list[int] | None = None,
+    game_index_offset: int = 0,
+    game_index_offsets: list[int] | None = None,
     alternate_sides: bool = True,
     device_name: str = "auto",
     batch_size: int = 256,
     lanes: int = 128,
     search_count: int = 10,
     max_selections: int = 2000,
+    max_turns: int | None = None,
     seed: int = 0,
     cpu_workers: int = 2,
+    model_axis_models: bool = True,
     training_json_dir: Path | None = None,
 ) -> BatchedTournamentOutput:
     """CPU libcg worker群と中央NN batcherで総当たりを実行する。"""
@@ -2618,25 +3357,55 @@ def run_worker_batched_tournament(
         training_output_dir.mkdir(parents=True, exist_ok=True)
 
     device = select_device(device_name)
+    if games_per_pairing is None:
+        games_per_pairing = [num_games] * len(pairings)
+    if len(games_per_pairing) != len(pairings):
+        raise ValueError("games_per_pairingはpairingsと同じ長さにしてください。")
+    if any(count < 0 for count in games_per_pairing):
+        raise ValueError("games_per_pairingの各試合数は0以上にしてください。")
+    if game_index_offset < 0:
+        raise ValueError("game_index_offsetは0以上にしてください。")
+    if game_index_offsets is None:
+        game_index_offsets = [game_index_offset] * len(pairings)
+    if len(game_index_offsets) != len(pairings):
+        raise ValueError("game_index_offsetsはpairingsと同じ長さにしてください。")
+    if any(offset < 0 for offset in game_index_offsets):
+        raise ValueError("game_index_offsetsの各値は0以上にしてください。")
+
     game_requests = [
         BatchedGameRequest(
             name0=name0,
             name1=name1,
-            game_index=game_index + 1,
-            swap=alternate_sides and game_index % 2 == 1,
+            game_index=pairing_offset + game_index + 1,
+            swap=(
+                alternate_sides
+                and (pairing_offset + game_index) % 2 == 1
+            ),
         )
-        for name0, name1 in pairings
-        for game_index in range(num_games)
+        for (name0, name1), pairing_games, pairing_offset in zip(
+            pairings,
+            games_per_pairing,
+            game_index_offsets,
+            strict=True,
+        )
+        for game_index in range(pairing_games)
     ]
     if not game_requests:
         return BatchedTournamentOutput([], BatchedProfile(), str(device))
 
     worker_count = min(cpu_workers, len(game_requests))
-    request_chunks = [game_requests[index::worker_count] for index in range(worker_count)]
+    request_chunks = [
+        game_requests[index::worker_count] for index in range(worker_count)
+    ]
     worker_lanes = max(1, math.ceil(lanes / worker_count))
     # worker jobを中央batchへ隙間なく詰められるよう、worker数で均等分割する。
     # 大きなjobは途中分割できず、実測で平均batchとgames/sを悪化させた。
-    remote_batch_size = max(1, batch_size // worker_count)
+    if device.type == "mps":
+        # 30モデル条件では28件上限がjobを細分化しすぎるため、中央batchへ
+        # worker数の約半分を中央batchへ同居させつつ、worker内jobを大きくする。
+        remote_batch_size = max(1, batch_size // math.ceil(worker_count / 2))
+    else:
+        remote_batch_size = max(1, batch_size // worker_count)
     spec_records = [
         (
             str(spec.name),
@@ -2669,6 +3438,7 @@ def run_worker_batched_tournament(
                 worker_lanes,
                 search_count,
                 max_selections,
+                max_turns,
                 seed,
                 remote_batch_size,
                 str(training_output_dir) if training_output_dir is not None else None,
@@ -2706,12 +3476,16 @@ def run_worker_batched_tournament(
         )
         if model_key is not None and model is not None
     }
-    cuda_ensemble = (
-        _CudaEnsembleEvaluator(participants.values(), device)
-        if device.type == "cuda"
-        else None
-    )
-    if cuda_ensemble is not None:
+    model_axis_evaluator: _CudaEnsembleEvaluator | _MpsModelAxisEvaluator | None
+    if model_axis_models and device.type == "cuda":
+        model_axis_evaluator = _CudaEnsembleEvaluator(participants.values(), device)
+    elif model_axis_models and device.type == "mps":
+        # wave単位の一括H2D後は、矩形paddingを伴うmanual model-axisより
+        # 通常model forwardをqueueへ連続投入する方がMPSで速い。
+        model_axis_evaluator = None
+    else:
+        model_axis_evaluator = None
+    if isinstance(model_axis_evaluator, _CudaEnsembleEvaluator):
         torch.cuda.synchronize(device)
 
     profile = BatchedProfile(cpu_workers=worker_count)
@@ -2759,7 +3533,7 @@ def run_worker_batched_tournament(
                 batch_size,
                 profile,
                 response_queues,
-                cuda_ensemble,
+                model_axis_evaluator,
             )
     except BaseException:
         for process in processes:

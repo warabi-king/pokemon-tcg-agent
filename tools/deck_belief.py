@@ -153,6 +153,59 @@ def _known_cards(cards: Any) -> list[int]:
     return [card_id for card in cards if (card_id := _card_id(card)) is not None]
 
 
+def _reconcile_transient_public_cards(
+    public_cards: list[int],
+    state: dict[str, Any],
+    select: dict[str, Any] | None,
+    player_index: int,
+) -> list[int]:
+    """zone数に対して余分な、効果解決中カードの重複だけを除く。"""
+    player = (state.get("players") or [])[player_index]
+    hand_count = int(
+        player.get("handCount", len(player.get("hand") or []))
+    )
+    expected_public_count = (
+        DECK_SIZE
+        - int(player.get("deckCount", 0))
+        - len(player.get("prize") or [])
+        - hand_count
+    )
+    excess = len(public_cards) - expected_public_count
+    if excess <= 0:
+        return public_cards
+
+    # contextCard/effectやlookingは、エンジンの効果解決段階によって元zoneにも
+    # 一時的に残ることがある。安定zone（場・トラッシュ等）には触れず、これらを
+    # 優先して余分な分だけ取り除く。
+    transient_ids: list[int] = []
+    for field_name in ("contextCard", "effect"):
+        card = (select or {}).get(field_name)
+        if isinstance(card, dict) and card.get("playerIndex") == player_index:
+            if (card_id := _card_id(card)) is not None:
+                transient_ids.append(card_id)
+    for card in state.get("looking") or []:
+        if isinstance(card, dict) and card.get("playerIndex") == player_index:
+            if (card_id := _card_id(card)) is not None:
+                transient_ids.append(card_id)
+
+    reconciled = list(public_cards)
+    for card_id in transient_ids:
+        if excess <= 0:
+            break
+        try:
+            reconciled.remove(card_id)
+        except ValueError:
+            continue
+        excess -= 1
+    if excess:
+        raise DeckBeliefError(
+            "公開zoneの枚数が60枚構成と一致せず、解決中カードだけでは"
+            f"補正できません: player={player_index}, "
+            f"public={len(public_cards)}, expected={expected_public_count}"
+        )
+    return reconciled
+
+
 def update_seen_opponent_cards(
     observation: dict[str, Any],
     seen_by_viewer: tuple[dict[int, int], dict[int, int]],
@@ -364,7 +417,16 @@ def sample_hidden_zones(
     full_decks_list[opponent_index] = opponent_full
     full_decks = (full_decks_list[0], full_decks_list[1])
 
-    public = public_cards_by_player(state, observation.get("select"))
+    select = observation.get("select")
+    raw_public = public_cards_by_player(state, select)
+    public = (
+        _reconcile_transient_public_cards(
+            raw_public[0], state, select, 0
+        ),
+        _reconcile_transient_public_cards(
+            raw_public[1], state, select, 1
+        ),
+    )
 
     # 自分の手札はすべて見えており、BattleのObservationをそのまま使う。
     # ここで生成するのはSearchBegin引数になる山札と裏向きサイドだけ。
@@ -382,8 +444,17 @@ def sample_hidden_zones(
     own_pool = list(own_remaining.elements())
     rng.shuffle(own_pool)
     own_deck_count = int(own_player.get("deckCount", 0))
-    your_deck = _take(own_pool, own_deck_count, "自分の山札")
     own_unknown_prize_count = len(own_prize_slots) - len(own_known_prize)
+    if len(own_pool) < own_deck_count + own_unknown_prize_count:
+        raise DeckBeliefError(
+            "自分の非公開zoneへカードを割り当てられません: "
+            f"pool={len(own_pool)}, deck={own_deck_count}, "
+            f"unknown_prize={own_unknown_prize_count}, "
+            f"public={len(public[your_index])}, "
+            f"known_hand={len(_known_cards(own_player.get('hand')))}, "
+            f"known_prize={len(own_known_prize)}"
+        )
+    your_deck = _take(own_pool, own_deck_count, "自分の山札")
     your_prize = _fill_card_slots(
         own_prize_slots,
         _take(own_pool, own_unknown_prize_count, "自分のサイド"),

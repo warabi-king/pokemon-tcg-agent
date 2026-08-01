@@ -716,6 +716,36 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--games", type=int, default=10, help="1対戦カードあたりの対戦回数")
     parser.add_argument(
+        "--total-games",
+        type=int,
+        default=None,
+        help=(
+            "worker-batchedで回す総試合数。対戦カードごとの試合数を差1以内で"
+            "均等配分する（指定時は--gamesより優先）"
+        ),
+    )
+    parser.add_argument(
+        "--games-per-pairing-json",
+        default=None,
+        help=(
+            "worker-batched内部用。対戦カード順の試合数をJSON配列で指定する。"
+            "--total-gamesとは併用不可"
+        ),
+    )
+    parser.add_argument(
+        "--game-index-offsets-json",
+        default=None,
+        help=(
+            "worker-batched内部用。対戦カード順のgame index開始値をJSON配列で指定する"
+        ),
+    )
+    parser.add_argument(
+        "--game-index-offset",
+        type=int,
+        default=0,
+        help="追加対戦時にファイル名と先後交替へ加える試合index offset",
+    )
+    parser.add_argument(
         "--backend",
         choices=(
             "legacy",
@@ -760,6 +790,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--no-model-axis",
+        action="store_true",
+        help=(
+            "worker-batchedの複数モデル一括評価を無効化する。"
+            "per-model直列評価とのベンチマーク比較用"
+        ),
+    )
+    parser.add_argument(
         "--lanes",
         type=int,
         default=0,
@@ -773,6 +811,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=10,
         help="batched backendの1手あたりMCTS simulation数（デフォルト: 10）",
+    )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=0,
+        help="worker-batchedの最大ターン数。0は無制限（デフォルト: 0）",
+    )
+    parser.add_argument(
+        "--max-selections",
+        type=int,
+        default=2000,
+        help="worker-batchedの最大選択数（デフォルト: 2000）",
     )
     parser.add_argument(
         "--seed",
@@ -804,6 +854,11 @@ def parse_args() -> argparse.Namespace:
             "1試合1JSONで直接保存するディレクトリ"
         ),
     )
+    parser.add_argument(
+        "--allow-existing-training-json",
+        action="store_true",
+        help="不足分の追加対戦用に、既存学習JSONがある出力先を許可する",
+    )
     return parser.parse_args()
 
 
@@ -812,10 +867,37 @@ def main() -> None:
 
     if args.games < 1:
         raise SystemExit("--games は1以上で指定してください。")
+    if args.total_games is not None:
+        if args.total_games < 1:
+            raise SystemExit("--total-games は1以上で指定してください。")
+        if args.backend != "worker-batched":
+            raise SystemExit("--total-gamesはworker-batched backendで使用してください。")
+    if args.games_per_pairing_json is not None:
+        if args.backend != "worker-batched":
+            raise SystemExit(
+                "--games-per-pairing-jsonはworker-batched backendで使用してください。"
+            )
+        if args.total_games is not None:
+            raise SystemExit(
+                "--games-per-pairing-jsonと--total-gamesは併用できません。"
+            )
+    if (
+        args.game_index_offsets_json is not None
+        and args.games_per_pairing_json is None
+    ):
+        raise SystemExit(
+            "--game-index-offsets-jsonは--games-per-pairing-jsonと併用してください。"
+        )
+    if args.game_index_offset < 0:
+        raise SystemExit("--game-index-offsetは0以上で指定してください。")
     if args.batch_size is None:
         args.batch_size = 256 if args.backend == "worker-batched" else 128
     if args.batch_size < 1:
         raise SystemExit("--batch-size は1以上で指定してください。")
+    if args.max_turns < 0:
+        raise SystemExit("--max-turns は0以上で指定してください。")
+    if args.max_selections < 1:
+        raise SystemExit("--max-selections は1以上で指定してください。")
     if args.training_json_dir is not None:
         if args.backend not in ("batched", "worker-batched", "cuda-streams", "cuda-ensemble"):
             raise SystemExit(
@@ -828,7 +910,7 @@ def main() -> None:
             args.training_json_dir.glob("episode_*.json"),
             None,
         )
-        if existing_training_json is not None:
+        if existing_training_json is not None and not args.allow_existing_training_json:
             raise SystemExit(
                 "--training-json-dirに既存の学習JSONがあります。"
                 f"別ディレクトリを指定してください: {existing_training_json}"
@@ -878,7 +960,61 @@ def main() -> None:
     else:
         pairings = list(itertools.combinations_with_replacement(names, 2))
 
-    total_games = len(pairings) * args.games
+    games_per_pairing: list[int] | None = None
+    game_index_offsets: list[int] | None = None
+    if args.games_per_pairing_json is not None:
+        try:
+            decoded_counts = json.loads(args.games_per_pairing_json)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(
+                f"--games-per-pairing-jsonが不正なJSONです: {exc}"
+            ) from exc
+        if (
+            not isinstance(decoded_counts, list)
+            or len(decoded_counts) != len(pairings)
+            or any(type(count) is not int or count < 0 for count in decoded_counts)
+        ):
+            raise SystemExit(
+                "--games-per-pairing-jsonは対戦カード数と同じ長さの"
+                "0以上の整数配列にしてください。"
+            )
+        games_per_pairing = decoded_counts
+        total_games = sum(games_per_pairing)
+        if total_games < 1:
+            raise SystemExit("--games-per-pairing-jsonの合計は1以上にしてください。")
+
+        if args.game_index_offsets_json is None:
+            game_index_offsets = [args.game_index_offset] * len(pairings)
+        else:
+            try:
+                decoded_offsets = json.loads(args.game_index_offsets_json)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(
+                    f"--game-index-offsets-jsonが不正なJSONです: {exc}"
+                ) from exc
+            if (
+                not isinstance(decoded_offsets, list)
+                or len(decoded_offsets) != len(pairings)
+                or any(
+                    type(offset) is not int or offset < 0
+                    for offset in decoded_offsets
+                )
+            ):
+                raise SystemExit(
+                    "--game-index-offsets-jsonは対戦カード数と同じ長さの"
+                    "0以上の整数配列にしてください。"
+                )
+            game_index_offsets = decoded_offsets
+    elif args.total_games is not None:
+        from parallel_selfplay_training import _balanced_games_per_pairing
+
+        games_per_pairing = _balanced_games_per_pairing(
+            pairings,
+            args.total_games,
+        )
+        total_games = args.total_games
+    else:
+        total_games = len(pairings) * args.games
     if args.lanes < 0:
         raise SystemExit("--lanes は0以上で指定してください。")
     # 0は全試合をlaneへ載せる。8エージェント・自己対戦込みなら
@@ -912,14 +1048,20 @@ def main() -> None:
         )
     )
 
+    games_label = (
+        f"カードあたり{min(games_per_pairing)}〜{max(games_per_pairing)}試合, "
+        f"合計{total_games}試合"
+        if games_per_pairing is not None
+        else f"カードあたり{args.games}試合"
+    )
     print(
         f"\n=== 総当たり戦開始 (対戦カード数={len(pairings)}, "
-        f"カードあたり{args.games}試合, 自己対戦={'除外' if args.no_self else '含む'}, "
+        f"{games_label}, 自己対戦={'除外' if args.no_self else '含む'}, "
         f"backend={execution_label}) ===\n"
     )
 
     overall: dict[str, OverallRecord] = {name: OverallRecord(name=name) for name in names}
-    started = time.time()
+    started = time.perf_counter()
     batched_output = None
     if args.backend == "worker-batched":
         from batched_tournament import run_worker_batched_tournament
@@ -928,19 +1070,25 @@ def main() -> None:
             specs=specs,
             pairings=pairings,
             num_games=args.games,
+            games_per_pairing=games_per_pairing,
+            game_index_offset=args.game_index_offset,
+            game_index_offsets=game_index_offsets,
             alternate_sides=not args.no_alternate,
             device_name=args.device,
             batch_size=args.batch_size,
             lanes=lanes,
             search_count=args.search_count,
+            max_turns=args.max_turns or None,
+            max_selections=args.max_selections,
             seed=args.seed,
             cpu_workers=workers,
+            model_axis_models=not args.no_model_axis,
             training_json_dir=args.training_json_dir,
         )
         h2h_map, all_game_logs = aggregate_tournament_results(
             pairings,
             batched_output.results,
-            num_games=args.games,
+            num_games=max(games_per_pairing) if games_per_pairing else args.games,
             verbose=not args.quiet,
         )
     elif args.backend == "gpu-tree":
@@ -1057,7 +1205,7 @@ def main() -> None:
                     f"/ 引き分け {h2h.draws}\n"
                 )
 
-    elapsed = time.time() - started
+    elapsed = time.perf_counter() - started
 
     print("=== 対戦カード別 勝ち数（行 vs 列） ===")
     print_head_to_head_table(names, h2h_map)
@@ -1112,7 +1260,7 @@ def main() -> None:
         )
         if args.backend == "cuda-ensemble":
             print(
-                "CUDA wave: "
+                "Model wave: "
                 f"model-axis={profile.cuda_ensemble_waves}, "
                 f"per-model={profile.cuda_per_model_waves}"
             )
@@ -1141,7 +1289,7 @@ def main() -> None:
                 f"IPC request={profile.ipc_messages}回"
             )
             print(
-                "CUDA wave: "
+                "Model wave: "
                 f"model-axis={profile.cuda_ensemble_waves}, "
                 f"per-model={profile.cuda_per_model_waves}"
             )

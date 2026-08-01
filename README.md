@@ -160,8 +160,8 @@ python tools/run_matches_round_robin.py \
   --backend worker-batched --device cuda --workers 0 \
   --lanes 0 --batch-size 256 \
   --games 1 \
-  --agent a00=agents/rl_mcts_match_00/src/main.py \
-  --agent a01=agents/rl_mcts_match_01/src/main.py
+  --agent a00=agents/16model_result/cluster_00/src/main.py \
+  --agent a01=agents/16model_result/cluster_01/src/main.py
 ```
 
 `worker-batched --workers 0`ではlaneごとに独立workerを作ります。したがって
@@ -183,8 +183,8 @@ per-model batchへ自動で切り替わります。カード効果と盤面遷�
 python tools/run_matches_round_robin.py \
   --backend cuda-ensemble --device cuda \
   --lanes 128 --batch-size 128 --games 4 --no-self \
-  --agent a00=agents/rl_mcts_match_00/src/main.py \
-  --agent a01=agents/rl_mcts_match_01/src/main.py
+  --agent a00=agents/16model_result/cluster_00/src/main.py \
+  --agent a01=agents/16model_result/cluster_01/src/main.py
 ```
 
 出力先:
@@ -272,19 +272,19 @@ CPUの1回のforwardへまとめます。チェックポイントとメトリク
 .venv/bin/python tools/create_match_training_agents.py
 ```
 
-生成される `rl_mcts_match_00`〜`07` を、全agentのLossが0.03以下になるまで
+生成される `agents/16model_result/cluster_00`〜`cluster_07` を、全agentのLossが0.03以下になるまで
 共有libcg＋CPUバッチで学習する例:
 
 ```bash
 .venv/bin/python tools/run_train_round_robin.py \
-  --agent agents/rl_mcts_match_00 \
-  --agent agents/rl_mcts_match_01 \
-  --agent agents/rl_mcts_match_02 \
-  --agent agents/rl_mcts_match_03 \
-  --agent agents/rl_mcts_match_04 \
-  --agent agents/rl_mcts_match_05 \
-  --agent agents/rl_mcts_match_06 \
-  --agent agents/rl_mcts_match_07 \
+  --agent agents/16model_result/cluster_00 \
+  --agent agents/16model_result/cluster_01 \
+  --agent agents/16model_result/cluster_02 \
+  --agent agents/16model_result/cluster_03 \
+  --agent agents/16model_result/cluster_04 \
+  --agent agents/16model_result/cluster_05 \
+  --agent agents/16model_result/cluster_06 \
+  --agent agents/16model_result/cluster_07 \
   --backend shared-cpu-batch \
   --device cpu --inference-device cpu \
   --iterations 12 --games 5 --search-count 10 \

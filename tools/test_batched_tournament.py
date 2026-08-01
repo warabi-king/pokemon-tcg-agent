@@ -28,10 +28,15 @@ from batched_tournament import (
     _is_setup_context,
     _load_participants,
     _load_runtime,
+    _mps_sparse_input_batches,
+    _mps_sparse_inputs,
     _merge_combined_sparse,
     _pad_empty_sparse_rows,
     _pad_sparse_offsets,
     _pad_remote_decoder,
+    _set_result_from_remaining_prizes,
+    _to_result,
+    _write_training_episode,
     run_batched_tournament,
     run_worker_batched_tournament,
 )
@@ -49,6 +54,69 @@ from batched_training import (
 
 
 class ActionBatchTest(unittest.TestCase):
+    @staticmethod
+    def _unfinished_session(
+        remaining_prizes: tuple[int, int],
+        *,
+        swap: bool = False,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            observation={
+                "current": {
+                    "result": -1,
+                    "players": [
+                        {"prize": [None] * remaining_prizes[0]},
+                        {"prize": [None] * remaining_prizes[1]},
+                    ],
+                }
+            },
+            request=SimpleNamespace(
+                name0="a",
+                name1="b",
+                game_index=1,
+                swap=swap,
+            ),
+            players=(
+                SimpleNamespace(deck=tuple(range(60))),
+                SimpleNamespace(deck=tuple(range(60))),
+            ),
+            selections=100,
+            training_decisions=[],
+        )
+
+    def test_limit_result_uses_fewer_remaining_prizes(self) -> None:
+        session = self._unfinished_session((2, 4))
+
+        result = _set_result_from_remaining_prizes(session)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(_to_result(session).result, 0)
+
+    def test_limit_result_respects_swapped_agent_order(self) -> None:
+        session = self._unfinished_session((2, 4), swap=True)
+
+        _set_result_from_remaining_prizes(session)
+
+        self.assertEqual(_to_result(session).result, 1)
+
+    def test_limit_result_is_draw_when_remaining_prizes_are_equal(self) -> None:
+        session = self._unfinished_session((3, 3))
+
+        result = _set_result_from_remaining_prizes(session)
+
+        self.assertEqual(result, 2)
+        self.assertEqual(_to_result(session).result, 2)
+
+    def test_limit_result_is_written_as_training_reward(self) -> None:
+        session = self._unfinished_session((5, 1))
+        _set_result_from_remaining_prizes(session)
+
+        with tempfile.TemporaryDirectory() as directory:
+            episode_path = _write_training_episode(session, Path(directory))
+            episode = json.loads(episode_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(episode["rewards"], [-1, 1])
+
     def test_database_tie_break_uses_wins_only(self) -> None:
         lower_win_rate_more_wins = {"wins": 10, "win_rate": 0.1, "games": 10}
         higher_win_rate_fewer_wins = {"wins": 9, "win_rate": 0.9, "games": 9999}
@@ -157,6 +225,58 @@ class ActionBatchTest(unittest.TestCase):
 
         self.assertEqual(public_cards_by_player(state, select)[0], [])
 
+    def test_hidden_zone_sampling_removes_transient_hand_duplicate(self) -> None:
+        full_deck = tuple(range(1, 61))
+        own_hand = [
+            {"id": card_id, "serial": 100 + card_id, "playerIndex": 0}
+            for card_id in range(7, 12)
+        ]
+        observation = {
+            "current": {
+                "yourIndex": 0,
+                "players": [
+                    {
+                        "active": [{"id": 1, "serial": 1}],
+                        "bench": [],
+                        "deckCount": 43,
+                        "discard": [
+                            {"id": card_id, "serial": card_id}
+                            for card_id in range(2, 7)
+                        ],
+                        "prize": [None] * 6,
+                        "handCount": 5,
+                        "hand": own_hand,
+                    },
+                    {
+                        "active": [],
+                        "bench": [],
+                        "deckCount": 47,
+                        "discard": [],
+                        "prize": [None] * 6,
+                        "handCount": 7,
+                        "hand": None,
+                    },
+                ],
+                "stadium": [],
+                "looking": [],
+            },
+            # 同じカードが別serialのcontextCardとして一時的に重複するケース。
+            "select": {
+                "contextCard": {"id": 7, "serial": 999, "playerIndex": 0},
+                "effect": None,
+            },
+        }
+
+        hidden = sample_hidden_zones(
+            observation,
+            your_index=0,
+            your_full_deck=full_deck,
+            seen_opponent_cards=[],
+        )
+
+        self.assertEqual(len(hidden.your_deck), 43)
+        self.assertEqual(len(hidden.your_prize), 6)
+
     def test_own_hand_is_not_sampled(self) -> None:
         full_deck = predict_full_deck([])
         own_hand = [
@@ -249,7 +369,7 @@ assert 'torch' not in sys.modules
 print('lightweight-worker-ok')
 """.format(
             tools=ROOT / "tools",
-            agent_src=ROOT / "agents" / "rl_mcts_match_00" / "src",
+            agent_src=ROOT / "agents" / "16model_result" / "cluster_00" / "src",
         )
         env = os.environ.copy()
         env["PTCG_BATCHED_LIGHTWEIGHT_WORKER"] = "1"
@@ -297,6 +417,60 @@ print('lightweight-worker-ok')
         )
         torch.testing.assert_close(actual, expected)
 
+    def test_mps_sparse_inputs_preserve_six_arrays(self) -> None:
+        encoder = (
+            np.arange(12, dtype=np.int32).reshape(2, 6),
+            np.linspace(0.0, 1.0, 12, dtype=np.float32).reshape(2, 6),
+            np.arange(8, dtype=np.int32).reshape(2, 4),
+        )
+        decoder = (
+            np.arange(10, dtype=np.int32).reshape(2, 5),
+            np.linspace(1.0, 2.0, 10, dtype=np.float32).reshape(2, 5),
+            np.arange(6, dtype=np.int32).reshape(2, 3),
+        )
+
+        actual = _mps_sparse_inputs(encoder, decoder, torch.device("cpu"))
+
+        for tensor, expected in zip(
+            actual,
+            (*encoder, *decoder),
+            strict=True,
+        ):
+            np.testing.assert_array_equal(tensor.numpy(), expected)
+
+    def test_mps_sparse_input_batches_preserve_each_batch(self) -> None:
+        sparse_batches = []
+        for base in (0, 100):
+            encoder = (
+                np.arange(base, base + 12, dtype=np.int32).reshape(2, 6),
+                np.linspace(0.0, 1.0, 12, dtype=np.float32).reshape(2, 6),
+                np.arange(base + 20, base + 28, dtype=np.int32).reshape(2, 4),
+            )
+            decoder = (
+                np.arange(base + 30, base + 40, dtype=np.int32).reshape(2, 5),
+                np.linspace(1.0, 2.0, 10, dtype=np.float32).reshape(2, 5),
+                np.arange(base + 40, base + 46, dtype=np.int32).reshape(2, 3),
+            )
+            sparse_batches.append((encoder, decoder))
+
+        actual_batches = _mps_sparse_input_batches(
+            sparse_batches,
+            torch.device("cpu"),
+        )
+
+        self.assertEqual(len(actual_batches), len(sparse_batches))
+        for actual, (encoder, decoder) in zip(
+            actual_batches,
+            sparse_batches,
+            strict=True,
+        ):
+            for tensor, expected in zip(
+                actual,
+                (*encoder, *decoder),
+                strict=True,
+            ):
+                np.testing.assert_array_equal(tensor.numpy(), expected)
+
     def test_enumerate_actions_respects_limit(self) -> None:
         actions = _enumerate_actions(option_count=10, select_count=2, limit=7)
         self.assertEqual(len(actions), 7)
@@ -310,7 +484,9 @@ print('lightweight-worker-ok')
         self.assertIs(first, second)
 
     def test_decoder_reused_options_keep_identical_sparse_rows(self) -> None:
-        runtime = _load_runtime(ROOT / "agents" / "rl_mcts_match_00" / "src")
+        runtime = _load_runtime(
+            ROOT / "agents" / "16model_result" / "cluster_00" / "src"
+        )
         from cg.api import OptionType
 
         observation = SimpleNamespace(
