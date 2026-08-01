@@ -45,7 +45,13 @@ python tools/pipeline/orchestrate.py
 | `PIPE_OFFICIAL_EPISODES` | `episodes/official/` | Phase0 用リプレイ（.zip or JSON ディレクトリ） |
 | `PIPE_DECKGEN_JSONL` | `tools/deck_generator/generated/deck_candidates_by_wins.jsonl` | 参加デッキ元（`hierarchical_cluster_*` 付与済み） |
 | `PIPE_LEAGUE_CMD` | (空=スタブ) | ①リーグ実行コマンド（`{manifest}` `{out}` を置換） |
-| `PIPE_LEAGUE_SEARCH_COUNT` | 10 | リーグ梱包エージェントの MCTS 探索回数（大量対戦を現実的な時間で回すため低め） |
+| `PIPE_LEAGUE_SEARCH_COUNT` | 10 | リーグ/AZ の MCTS 探索回数（大量対戦を現実的な時間で回すため低め） |
+| `PIPE_GEN_BACKEND` | league | 世代ループの実装。`league`=梱包→棋譜→模倣学習 / `az`=batched gpu-tree + AlphaZero(self/opp二重) |
+| `PIPE_LEAGUE_GAMES` | 5 | (az) 各対戦カードの試合数 |
+| `PIPE_LEAGUE_INCLUDE_SELF` | 1 | (az) 自己対戦カードを含めるか |
+| `PIPE_LANES` | 128 | (az) batched で同時進行させる試合数 |
+| `PIPE_LAMBDA_VALUE` | 0.9 | (az) value 教師の TD-λ 平滑化率 |
+| `PIPE_INFER_BATCH_SIZE` | 128 | (az) batched NN 評価の最大バッチ |
 | `PIPE_KEEP_INTERMEDIATE` | 1 | 0で中間世代と各世代の shards/episodes を消費後に削除（`--no-keep-intermediate` と同義） |
 
 ## モジュール
@@ -60,7 +66,8 @@ python tools/pipeline/orchestrate.py
 | `gen_agents.py` | 階層クラスタ代表(16)→エージェント（clusters.json + decks） |
 | `package_agent.py` | self+opp+deck を実行可能 src/ に梱包 |
 | `phase0.py` | 初期 self/opp をブートストラップ（前処理は preprocess_all で1パス。完全一致デッキは self コピー、それ以外も含め全クラスタで最寄り PRETRAINED を warm-start、シャード空はフォールバックコピー） |
-| `generation.py` | 世代1回（梱包→リーグ→継続学習） |
+| `generation.py` | 世代1回（梱包→リーグ→模倣継続学習）。`PIPE_GEN_BACKEND=league` |
+| `generation_az.py` | 世代1回（batched gpu-tree 対戦→AlphaZero学習, self/opp二重, ②相手推定）。`PIPE_GEN_BACKEND=az` |
 | `orchestrate.py` | 入口（生成→Phase0→世代ループ） |
 | `league_parallel.py` | ①リーグの並列版。full kaggle episode を多プロセスで生成（`PIPE_LEAGUE_CMD` で指定） |
 | `league_stub.py` | ①の動作確認用スタブ（逐次。本番は `league_parallel.py`） |

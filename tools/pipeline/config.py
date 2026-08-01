@@ -77,6 +77,16 @@ LEAGUE_STUB_GAMES = _int("PIPE_LEAGUE_STUB_GAMES", 2)  # スタブ時の各カ�
 # 大量対戦を現実的な時間で回すため低め（既定10）にできる。
 LEAGUE_SEARCH_COUNT = _int("PIPE_LEAGUE_SEARCH_COUNT", 10)
 
+# ---- 世代ループのバックエンド ----
+# "league": 現行の梱包→棋譜→preprocess→模倣学習（generation.py）
+# "az"    : batched gpu-tree で対戦＋AlphaZero学習（generation_az.py, self/opp二重）
+GEN_BACKEND = _str("PIPE_GEN_BACKEND", "league")
+LEAGUE_GAMES = _int("PIPE_LEAGUE_GAMES", 5)             # 各対戦カードの試合数
+LEAGUE_INCLUDE_SELF = bool(_int("PIPE_LEAGUE_INCLUDE_SELF", 1))  # 自己対戦カードを含めるか
+LANES = _int("PIPE_LANES", 128)                        # batched: 同時進行させる試合数
+LAMBDA_VALUE = _float("PIPE_LAMBDA_VALUE", 0.9)        # value 教師の TD-λ 平滑化率
+INFER_BATCH_SIZE = _int("PIPE_INFER_BATCH_SIZE", 128)  # batched NN 評価の最大バッチ
+
 # ---- 既存の事前学習済み資産（近いデッキのコピー元）----
 # name -> そのデッキと self モデル。opp は新規学習方針のため持たない。
 PRETRAINED = {

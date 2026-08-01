@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 import ctypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import random
 import time
@@ -35,6 +35,8 @@ class BatchedTrainingAgent:
     name: str
     model: torch.nn.Module
     deck: list[int]
+    # 探索木の相手ノード評価に使うモデル（self/opp 二重運用）。None なら model を流用。
+    opponent_model: torch.nn.Module | None = None
 
 
 @dataclass
@@ -42,6 +44,9 @@ class BatchedTrainingOutput:
     samples: dict[str, list[BatchedLearnSample]]
     results: list[BatchedGameResult]
     profile: BatchedProfile
+    # 各エージェントを相手にした側が打った手のサンプル（opp モデルの学習用）。
+    # 1つの着手サンプルは「打ち手の self」と「相手の opp」の両方へ振り分けられる。
+    opp_samples: dict[str, list[BatchedLearnSample]] = field(default_factory=dict)
 
 
 def _label_finished_game(
@@ -49,6 +54,7 @@ def _label_finished_game(
     per_player: list[list[BatchedLearnSample]],
     samples: dict[str, list[BatchedLearnSample]],
     lambda_value: float,
+    opp_samples: dict[str, list[BatchedLearnSample]] | None = None,
 ) -> None:
     result = _raw_result(session)
     if result is None:
@@ -59,11 +65,16 @@ def _label_finished_game(
             value = 0.0
         else:
             value = 1.0 if player_index == result else -1.0
+        opponent_name = session.players[1 - player_index].name
         for sample in reversed(player_samples):
             label = (value + sample.value) * 0.5
             value = value * lambda_value + sample.value * (1.0 - lambda_value)
             sample.value = label
+            # 打ち手の self へ。
             samples[session.players[player_index].name].append(sample)
+            # 同じサンプルを相手エージェントの opp（相手データ）へも振り分ける。
+            if opp_samples is not None:
+                opp_samples.setdefault(opponent_name, []).append(sample)
 
 
 def collect_batched_training_samples(
@@ -96,17 +107,27 @@ def collect_batched_training_samples(
     runtime = _load_runtime(canonical_src)
     participants: dict[str, _Participant] = {}
     samples: dict[str, list[BatchedLearnSample]] = {}
+    opp_samples: dict[str, list[BatchedLearnSample]] = {}
     for agent in agents:
         agent.model.eval()
         agent.model.to(device)
+        opp_model = agent.opponent_model
+        opp_key = None
+        if opp_model is not None:
+            opp_model.eval()
+            opp_model.to(device)
+            opp_key = f"{agent.name}__opp"
         participants[agent.name] = _Participant(
             name=agent.name,
             deck=agent.deck,
             model=agent.model,
             model_key=agent.name,
             random_policy=False,
+            opponent_model=opp_model,
+            opponent_model_key=opp_key,
         )
         samples[agent.name] = []
+        opp_samples[agent.name] = []
 
     profile = BatchedProfile()
     requests = deque(
@@ -130,6 +151,7 @@ def collect_batched_training_samples(
                 per_battle_samples[session.battle_ptr],
                 samples,
                 lambda_value,
+                opp_samples=opp_samples,
             )
         results.append(_to_result(session, error=error))
         runtime.lib.BattleFinish(session.battle_ptr)
@@ -249,4 +271,6 @@ def collect_batched_training_samples(
             runtime.lib.BattleFinish(session.battle_ptr)
 
     results.sort(key=lambda result: (result.name0, result.name1, result.game_index))
-    return BatchedTrainingOutput(samples=samples, results=results, profile=profile)
+    return BatchedTrainingOutput(
+        samples=samples, results=results, profile=profile, opp_samples=opp_samples
+    )

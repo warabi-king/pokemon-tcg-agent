@@ -80,9 +80,16 @@ def main() -> None:
         phase0.run_phase0(root)
 
     generations = config.GENERATIONS if args.generations is None else args.generations
+    if config.GEN_BACKEND == "az":
+        import generation_az
+        run_gen = generation_az.run_generation_az
+        print(f"[orchestrate] 世代バックエンド=az（batched gpu-tree + AlphaZero, self/opp二重）")
+    else:
+        run_gen = generation.run_generation
+        print(f"[orchestrate] 世代バックエンド=league（梱包→棋譜→模倣学習）")
     for g in range(generations):
         print(f"\n========== generation {g} / {generations} ==========")
-        generation.run_generation(g, root)
+        run_gen(g, root)
         if not args.keep_intermediate:
             # gen_{g+1} が出来た時点で gen_g は消費済み。
             _prune_generation(g, root)
