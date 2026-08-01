@@ -10,6 +10,7 @@ submission.tar.gz
 agents/*/train/checkpoints/
 agents/*/train/logs/
 agents/16model_result/model_episode*/
+agents/16model_pretrained/model_episode*/
 
 agents/match_agents/
 # agents/match_agents/*/src/
@@ -17,5 +18,5 @@ agents/match_agents/
 # Model weights are large; keep only the selected 16-model artifacts in Git.
 *.pth
 !agents/16model_result/**/*.pth
-!agents/16model_pretrained/**/*.pth
+!agents/16model_pretrained/cluster_*/src/*.pth
 !agents/pretrained_develop_nomura_gen_000_source/**/*.pth
