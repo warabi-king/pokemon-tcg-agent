@@ -14,4 +14,4 @@ agents/match_agents/*/src/
 episodes/
 shards/
 
-pipeline/gen_*/
+# pipeline/gen_*/
