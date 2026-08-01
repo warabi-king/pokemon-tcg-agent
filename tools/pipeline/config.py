@@ -52,6 +52,7 @@ BATCH_SIZE = _int("PIPE_BATCH_SIZE", 128)          # バッチサイズ
 SEARCH_COUNT = _int("PIPE_SEARCH_COUNT", 50)       # 梱包エージェントの MCTS 探索回数
 SIM_THRESHOLD = _float("PIPE_SIM_THRESHOLD", 0.75) # 近いデッキ判定 & Phase0 クラスタ割当のしきい値
 WARM_START = _int("PIPE_WARM_START", 1)            # 1: 世代間で前世代重みから継続学習
+KEEP_INTERMEDIATE = bool(_int("PIPE_KEEP_INTERMEDIATE", 1))  # 0で中間世代とshards/episodesを消費後に削除
 SHARD_SIZE = _int("PIPE_SHARD_SIZE", 20000)        # 前処理シャードあたりサンプル数
 WORKERS = _int("PIPE_WORKERS", 8)                  # 前処理(preprocess_all)の並列プロセス数
 MIN_AVAIL_MB = _int("PIPE_MIN_AVAIL_MB", 1200)     # 前処理中、空きメモリがこれを割ったら全バッファをフラッシュ
@@ -72,6 +73,9 @@ TEMPLATE_SRC = _path("PIPE_TEMPLATE_SRC", _RL_SRC)   # 梱包時にコピーす�
 #   実行時に "{manifest}" "{out}" が置換される。空ならスタブ(league_stub.py)を使う。
 LEAGUE_CMD = _str("PIPE_LEAGUE_CMD", "")
 LEAGUE_STUB_GAMES = _int("PIPE_LEAGUE_STUB_GAMES", 2)  # スタブ時の各カード試合数
+# リーグで梱包するエージェントの MCTS 探索回数。SEARCH_COUNT と別に持ち、
+# 大量対戦を現実的な時間で回すため低め（既定10）にできる。
+LEAGUE_SEARCH_COUNT = _int("PIPE_LEAGUE_SEARCH_COUNT", 10)
 
 # ---- 既存の事前学習済み資産（近いデッキのコピー元）----
 # name -> そのデッキと self モデル。opp は新規学習方針のため持たない。

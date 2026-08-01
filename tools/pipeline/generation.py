@@ -72,7 +72,7 @@ def run_generation(g: int, root: Path | None = None) -> Path:
             print(f"[gen {g}] {name}: モデル/デッキ不足のため除外")
             continue
         src = agdir / "src"
-        package_agent(self_pth, opp_pth, deck_csv, src)
+        package_agent(self_pth, opp_pth, deck_csv, src, search_count=config.LEAGUE_SEARCH_COUNT)
         manifest.append({"name": name, "src": str(src), "deck": str(deck_csv)})
     manifest_path = gen_g / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
