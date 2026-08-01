@@ -8,17 +8,32 @@ policyはHuberLoss回帰ではなく、実際に選ばれた手を正解クラ�
 valueはMCTS探索を使わず、そのエピソードの実際の勝敗(rewards)をそのまま使う。
 
 使い方:
-    事前に tools/train/preprocess_episodes.py でシャードを作っておく。
+    事前に tools/train/preprocess_episodes.py（または pipeline の preprocess_multi.py）で
+    シャードを作っておく。
 
     python tools/train/train_imitation.py \
-        --shards shards/all \
-        --epochs 3 \
-        --batch-size 128
+        --shards shards/group0 \
+        --epochs 5 \
+        --output-model agents/rl_mcts/src/model.pth
 
-    --output-modelのデフォルトは提出用のagents/rl_mcts/src/model.pthを誤って
-    上書きしないよう、agents/rl_mcts/train/checkpoints/imitation_model.pthにしている。
-    結果を提出物として使う場合は --output-model agents/rl_mcts/src/model.pth を指定する。
-    詳細な引数一覧は tools/train/README.md の「模倣学習（公式リプレイ）」節を参照。
+引数:
+    --shards PATH        シャードディレクトリ（shard_*.pkl と manifest.json）。必須
+    --val-shards N       検証用に取り分けるシャード数（既定1）
+    --epochs N           エポック数（既定5）
+    --batch-size N       バッチサイズ（既定128）
+    --lr F               学習率（既定3e-4, AdamW）
+    --initial-model PATH warm-start の初期重み（続きから学習）
+    --output-model PATH  出力重み。既定は agents/rl_mcts/train/checkpoints/imitation_model.pth
+                         （提出用 src/model.pth の誤上書き防止。提出に使うなら
+                         --output-model agents/rl_mcts/src/model.pth を明示）
+    --metrics-file PATH  epochごとのloss/accuracyを追記するCSV
+    --seed N             乱数seed
+    --[no-]amp           CUDA時 bf16 autocast + TF32（既定on。--no-amp で fp32 厳密計算）
+    --prefetch-batches N シャード読込+バッチ構築の先読み数（既定4。0で同期実行）
+
+policyは実際に選ばれた手を正解クラスとした交差エントロピー、valueはそのエピソードの
+実際の勝敗(rewards)。1シャードずつストリーミング学習し、numpyベクトル化・pinned転送・
+先読みでGPUを詰まらせない。詳細は tools/train/README.md の「模倣学習」節を参照。
 """
 
 from __future__ import annotations

@@ -306,4 +306,57 @@ tools/live_loss_recorder.py              学習中のバッチlossを逐次CSV/J
 主な部品: クラスタ→エージェント生成（`gen_agents.py`）、単一パス前処理
 （`preprocess_multi.py`）、self+opp を配線する梱包器（`package_agent.py`、
 `prepare_match_agent_submission.py`）、Phase0 ブートストラップ（`phase0.py`）、
-世代ループ（`generation.py`）、オーケストレータ（`orchestrate.py`、環境変数駆動）。
+世代ループ（模倣: `generation.py` / AlphaZero: `generation_az.py`）、
+オーケストレータ（`orchestrate.py`、環境変数駆動）。
+
+### 学習の実行コマンド
+
+学習は2段階（**模倣学習 Phase0** → **対戦学習 世代ループ**）。すべて `orchestrate.py`
+入口・環境変数駆動（既定値と全変数は [`tools/pipeline/config.py`](tools/pipeline/config.py)、
+一覧は [`tools/pipeline/README.md`](tools/pipeline/README.md)）。前提: 公式リプレイを
+`episodes/official/` に配置（`tools/deck_generator/download_daily_dataset.py`）。
+
+#### ① 模倣学習（Phase0・履歴からの事前学習）
+
+全公式リプレイを1回走査して16クラスタの own/opp シャードを作り、self/opp を
+学習して `pipeline/gen_000/` を作る。近いデッキは `imitation_group0-2` を warm-start
+に積極活用。クラッシュしても同じコマンドで途中から再開できる（完了マーカー方式）。
+
+```bash
+PIPE_WORKERS=3 PIPE_SHARD_SIZE=6000 \
+  nohup python tools/pipeline/orchestrate.py --skip-gen-agents --generations 0 > phase0.log 2>&1 &
+```
+
+- `--generations 0` = Phase0 のみ（世代ループを回さない）。
+- `PIPE_WORKERS` は前処理の並列数。メモリ 7.5GB 環境では 3 が安全（大きいと OOM）。
+- 単一モデルだけを既存シャードから学習したい場合は
+  `python tools/train/train_imitation.py --shards shards/group0 --epochs 5 --output-model <出力.pth>`。
+
+#### ② 対戦学習（世代ループ・Phase0 の gen_000 を起点に自己改善）
+
+**A. AlphaZero（推奨・強い / `generation_az.py`）** — batched エンジンで自己対戦し、
+MCTS 訪問分布と value を蒸留。self/opp を二重学習。相手デッキ推定は候補DB復元（②方式）。
+
+```bash
+PIPE_GEN_BACKEND=az PIPE_GENERATIONS=5 PIPE_LEAGUE_GAMES=5 \
+PIPE_LEAGUE_SEARCH_COUNT=10 PIPE_AZ_COLLECT_WORKERS=2 PIPE_EPOCHS_PER_GEN=3 \
+  nohup python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
+  --no-keep-intermediate > az.log 2>&1 &
+```
+
+- `PIPE_AZ_COLLECT_WORKERS` は対戦収集のプロセス並列数。RAM 7.5GB / GPU 8GB では
+  **2 が安全・3 が上限**（1ワーカー≈CPU0.8GB+GPU2GB）。大きいマシンなら増やすほど速い。
+- 実測（16体・探索10・workers=3）で約1.3試合/秒 → `--games 5` で1世代 約9分。
+- `--no-keep-intermediate` で中間世代・shards・episodes を消費後に削除（ディスク節約）。
+
+**B. 模倣リーグ（`generation.py`）** — full kaggle 棋譜を並列生成し、模倣学習で継続学習。
+
+```bash
+PIPE_GEN_BACKEND=league PIPE_GENERATIONS=5 PIPE_LEAGUE_SEARCH_COUNT=10 \
+PIPE_LEAGUE_CMD="python tools/pipeline/league_parallel.py --agents {manifest} --out {out} --games 5 --workers 4 --threads-per-worker 5" \
+  nohup python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
+  --no-keep-intermediate > league.log 2>&1 &
+```
+
+世代ごとの重みは `pipeline/gen_001/agents/<cl>/{self.pth,opp.pth}` … `gen_005/` に出力
+（Phase0 の `gen_000` とは別ディレクトリ）。進捗は `tail -f az.log`（または `league.log`）。

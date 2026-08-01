@@ -1,7 +1,14 @@
 """Phase0: 公式リプレイ履歴からの模倣学習で各エージェントの初期 {self, opp} を作る。
 
+通常は orchestrate.py 経由で呼ばれる（`--generations 0` で Phase0 のみ）。
+単体実行: `python tools/pipeline/phase0.py`。前提: 公式リプレイを PIPE_OFFICIAL_EPISODES
+（既定 episodes/official/）に配置。関係する環境変数: PIPE_WORKERS(前処理並列),
+PIPE_SHARD_SIZE, PIPE_PHASE0_EPOCHS, PIPE_SIM_THRESHOLD, PIPE_MIN_AVAIL_MB。
+
 前処理は preprocess_all で **全エピソードを1回だけ走査**し、全クラスタの own/opp シャードを
 同時生成する（旧版は agent×role ごとに全リプレイを再スキャンしていた）。
+完了マーカー(shards/.preprocess_done.json, agents/<name>/.self_done/.opp_done)により、
+クラッシュ後に同じコマンドで途中から再開できる。
 
 PRETRAINED（agents/match_agents/imitation_group0-2、shards/ 由来の self+opp 重み）は
 **全クラスタで積極的に再利用**する:

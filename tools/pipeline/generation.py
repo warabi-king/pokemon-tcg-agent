@@ -1,7 +1,13 @@
-"""世代ループ1回分: 梱包 → ①リーグ(履歴生成) → 履歴で self/opp を継続学習 → 次世代。
+"""世代ループ1回分(模倣リーグ版): 梱包 → ①リーグ(棋譜生成) → 前処理 → self/opp を継続学習。
 
-途中評価・採否ゲートは無し（設定どおり）。学習データが得られなかったエージェントは
-前世代の重みをそのまま次世代へ引き継ぐ（copy-forward）。
+PIPE_GEN_BACKEND=league（既定）のとき orchestrate.py から呼ばれる。
+AlphaZero 版は generation_az.py（PIPE_GEN_BACKEND=az）。
+単体実行: `python tools/pipeline/generation.py -g <世代番号>`。
+
+①リーグは PIPE_LEAGUE_CMD（{manifest} {out} を置換）で外部並列版を呼ぶ。未設定なら
+逐次スタブ league_stub.py。本番は league_parallel.py を指定する。梱包エージェントの
+探索回数は PIPE_LEAGUE_SEARCH_COUNT。途中評価・採否ゲートは無し。学習データが
+得られなかったエージェントは前世代の重みをそのまま引き継ぐ（copy-forward）。
 """
 
 from __future__ import annotations

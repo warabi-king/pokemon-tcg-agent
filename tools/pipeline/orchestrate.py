@@ -1,20 +1,36 @@
 """自己対戦パイプラインのオーケストレータ（入口）。
 
-設定はすべて環境変数（config.py）。実行:
+クラスタ→16エージェント生成 → Phase0(模倣事前学習) → 世代ループ×G(対戦学習)。
+設定はすべて環境変数（既定値は config.py）。
 
-    # 全体（クラスタ→エージェント生成 → Phase0 → 世代ループ G 回）
-    python tools/pipeline/orchestrate.py
-
-    # エージェント生成だけ確認（約63デッキと clusters.json を出すだけ）
+実行例:
+    # エージェント生成だけ確認（clusters.json と16デッキを出すだけ）
     python tools/pipeline/orchestrate.py --dry-run
 
-    # Phase0 をスキップして既存 gen_000 から世代ループだけ回す
-    python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0
+    # ① 模倣学習 Phase0 のみ（gen_000 を作る。--generations 0 で世代ループを回さない）
+    PIPE_WORKERS=3 python tools/pipeline/orchestrate.py --skip-gen-agents --generations 0
+
+    # ② 対戦学習 世代ループのみ（既存 gen_000 起点。AlphaZero）
+    PIPE_GEN_BACKEND=az python tools/pipeline/orchestrate.py \\
+        --skip-gen-agents --skip-phase0 --no-keep-intermediate
+
+CLI引数:
+    --dry-run            エージェント生成のみ（Phase0/世代ループを行わない）
+    --skip-gen-agents    clusters.json/decks 生成をスキップ
+    --skip-phase0        Phase0 をスキップ（既存 gen_000 を使う）
+    --generations N      世代数の上書き（既定は PIPE_GENERATIONS。0でPhase0のみ）
+    --[no-]keep-intermediate  中間世代・shards・episodes を残す/消費後に削除
 
 主な環境変数（既定値は config.py 参照）:
-    PIPE_GENERATIONS, PIPE_EPOCHS_PER_GEN, PIPE_PHASE0_EPOCHS, PIPE_SEARCH_COUNT,
-    PIPE_SIM_THRESHOLD, PIPE_LR, PIPE_BATCH_SIZE, PIPE_WARM_START, PIPE_SHARD_SIZE,
-    PIPE_ROOT, PIPE_OFFICIAL_EPISODES, PIPE_DECKGEN_JSONL, PIPE_LEAGUE_CMD
+    共通  : PIPE_GENERATIONS, PIPE_EPOCHS_PER_GEN, PIPE_LR, PIPE_BATCH_SIZE, PIPE_ROOT,
+            PIPE_OFFICIAL_EPISODES, PIPE_KEEP_INTERMEDIATE
+    Phase0: PIPE_PHASE0_EPOCHS, PIPE_SIM_THRESHOLD, PIPE_WARM_START, PIPE_SHARD_SIZE,
+            PIPE_WORKERS, PIPE_MIN_AVAIL_MB
+    世代  : PIPE_GEN_BACKEND(league|az), PIPE_LEAGUE_GAMES, PIPE_LEAGUE_SEARCH_COUNT,
+            PIPE_LEAGUE_INCLUDE_SELF
+    league: PIPE_LEAGUE_CMD（{manifest} {out} を置換する外部リーグコマンド）
+    az    : PIPE_AZ_COLLECT_WORKERS, PIPE_AZ_COLLECT_THREADS, PIPE_LANES,
+            PIPE_LAMBDA_VALUE, PIPE_INFER_BATCH_SIZE
 """
 
 from __future__ import annotations

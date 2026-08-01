@@ -1,16 +1,23 @@
-"""AlphaZero版の世代ループ1回: batched gpu-tree で対戦＋サンプル収集 → self/opp を学習。
+"""AlphaZero版の世代ループ1回: 自己対戦＋サンプル収集 → self/opp を学習。
 
 現行 generation.py（梱包→棋譜→preprocess→模倣学習）の高速・強化版。
+通常は orchestrate.py 経由（PIPE_GEN_BACKEND=az）で呼ばれる。
+単体実行: `python tools/pipeline/generation_az.py -g <世代番号>`。
 
-- 各エージェントを self.pth(model)＋opp.pth(opponent_model) で読み込み、
+- 各エージェントを self.pth(model)＋opp.pth(opponent_model) のペアで扱い、
   batched エンジンで全対戦を同時進行（NN評価をGPUバッチ化, lanes 本同時）。
-- 収集サンプルを「打ち手→self」「相手→opp」へ二重ルーティング
-  （collect_batched_training_samples の opp_samples）。
+  対戦収集は az_collect_parallel.collect_parallel でプロセス並列化
+  （PIPE_AZ_COLLECT_WORKERS。単一プロセスは libcg 状態遷移が1コア直列でCPU律速）。
+- 収集サンプルを「打ち手→self」「相手→opp」へ二重ルーティング（opp_samples）。
 - naoki の AlphaZero 損失(train_one_iteration_local: value=Huber回帰,
   policy=MCTS訪問分布へのマスク付きHuber)で self/opp を継続学習(warm-start)。
 - gen_{g+1}/agents/<name>/{self.pth,opp.pth} へ保存。データ不足は前世代を引き継ぐ。
 
 相手デッキ推定は batched 側の deck_belief（候補DB復元, ②方式）が使われる。
+
+主な環境変数(config.py): PIPE_GEN_BACKEND=az, PIPE_LEAGUE_GAMES, PIPE_LEAGUE_SEARCH_COUNT,
+    PIPE_AZ_COLLECT_WORKERS, PIPE_AZ_COLLECT_THREADS, PIPE_LANES, PIPE_LAMBDA_VALUE,
+    PIPE_INFER_BATCH_SIZE, PIPE_EPOCHS_PER_GEN, PIPE_BATCH_SIZE, PIPE_LR。
 """
 
 from __future__ import annotations
