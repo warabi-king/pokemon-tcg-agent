@@ -86,6 +86,11 @@ LEAGUE_INCLUDE_SELF = bool(_int("PIPE_LEAGUE_INCLUDE_SELF", 1))  # 自己対戦�
 LANES = _int("PIPE_LANES", 128)                        # batched: 同時進行させる試合数
 LAMBDA_VALUE = _float("PIPE_LAMBDA_VALUE", 0.9)        # value 教師の TD-λ 平滑化率
 INFER_BATCH_SIZE = _int("PIPE_INFER_BATCH_SIZE", 128)  # batched NN 評価の最大バッチ
+# AZ 対戦収集のプロセス並列数。単一プロセスは libcg 状態遷移が1コア直列でCPU律速。
+# このマシン(RAM 7.5GB/GPU 8GB)では 1ワーカー≈CPU0.8GB+GPU2GB のため 3 が実質上限
+# （3でRAM空き256MB/GPU6.3GBの限界。既定1=安全、増やすなら空きを監視）。
+AZ_COLLECT_WORKERS = _int("PIPE_AZ_COLLECT_WORKERS", 1)
+AZ_COLLECT_THREADS = _int("PIPE_AZ_COLLECT_THREADS", 2)  # 各ワーカーの torch/BLAS スレッド
 
 # ---- 既存の事前学習済み資産（近いデッキのコピー元）----
 # name -> そのデッキと self モデル。opp は新規学習方針のため持たない。

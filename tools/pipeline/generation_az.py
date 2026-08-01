@@ -25,8 +25,8 @@ from deck_utils import load_agents, read_deck_csv, write_deck_csv
 
 from rl_mcts.model import create_model  # noqa: E402
 from rl_mcts.mcts import LearnInput, MAX_ACTIONS  # noqa: E402
-from batched_training import BatchedTrainingAgent, collect_batched_training_samples  # noqa: E402
 from run_train_round_robin import train_one_iteration_local  # noqa: E402
+from az_collect_parallel import collect_parallel  # noqa: E402
 
 _API_MOD = {"LearnInput": LearnInput, "MAX_ACTIONS": MAX_ACTIONS}
 
@@ -70,8 +70,9 @@ def run_generation_az(g: int, root: Path | None = None) -> Path:
     logs_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # 1) エージェント読み込み（self=model, opp=opponent_model）
-    bt_agents: list[BatchedTrainingAgent] = []
+    # 1) エージェント spec（パス）を集める。並列 collect ではワーカーが自分でロードするため、
+    #    親プロセスはここではモデルを載せない（collect と学習でメモリのピークを重ねない）。
+    specs: list[tuple[str, str, str, list[int]]] = []
     for a in agents_meta:
         name = a["name"]
         agdir = gen_g / "agents" / name
@@ -79,49 +80,46 @@ def run_generation_az(g: int, root: Path | None = None) -> Path:
                 and (agdir / "deck.csv").exists()):
             print(f"[gen_az {g}] {name}: モデル/デッキ不足のため除外")
             continue
-        deck = read_deck_csv(agdir / "deck.csv")
-        bt_agents.append(BatchedTrainingAgent(
-            name=name, deck=deck,
-            model=_load_model(agdir / "self.pth", device),
-            opponent_model=_load_model(agdir / "opp.pth", device),
-        ))
-    if len(bt_agents) < 2:
+        specs.append((name, str(agdir / "self.pth"), str(agdir / "opp.pth"),
+                      read_deck_csv(agdir / "deck.csv")))
+    if len(specs) < 2:
         raise SystemExit(f"[gen_az {g}] 対戦可能なエージェントが2体未満です。")
 
-    names = [a.name for a in bt_agents]
+    names = [s[0] for s in specs]
+    deck_by_name = {s[0]: s[3] for s in specs}
     pairings = list(itertools.combinations(names, 2))
     if config.LEAGUE_INCLUDE_SELF:
         pairings += [(n, n) for n in names]
 
-    # 2) batched 対戦＋サンプル収集（self/opp 二重ルーティング）
+    # 2) batched 対戦＋サンプル収集（self/opp 二重ルーティング、プロセス並列）
     print(f"[gen_az {g}] collect: agents={len(names)} pairings={len(pairings)} "
-          f"games={config.LEAGUE_GAMES} lanes={config.LANES} "
-          f"search={config.LEAGUE_SEARCH_COUNT} device={device}", flush=True)
-    out = collect_batched_training_samples(
-        bt_agents, pairings, games=config.LEAGUE_GAMES,
-        canonical_src=config.TEMPLATE_SRC, device=device,
-        batch_size=config.INFER_BATCH_SIZE, lanes=config.LANES,
+          f"games={config.LEAGUE_GAMES} workers={config.AZ_COLLECT_WORKERS} "
+          f"lanes={config.LANES} search={config.LEAGUE_SEARCH_COUNT} device={device}", flush=True)
+    samples, opp_samples, done, total = collect_parallel(
+        specs, pairings, canonical_src=str(config.TEMPLATE_SRC),
+        workers=config.AZ_COLLECT_WORKERS, games=config.LEAGUE_GAMES,
+        device=str(device), batch_size=config.INFER_BATCH_SIZE, lanes=config.LANES,
         search_count=config.LEAGUE_SEARCH_COUNT, lambda_value=config.LAMBDA_VALUE,
-        seed=g,
+        threads=config.AZ_COLLECT_THREADS, seed=g,
     )
-    completed = sum(1 for r in out.results if r.result is not None)
-    print(f"[gen_az {g}] 対戦完了={completed}/{len(out.results)} "
-          f"self合計={sum(len(v) for v in out.samples.values())} "
-          f"opp合計={sum(len(v) for v in out.opp_samples.values())}", flush=True)
+    print(f"[gen_az {g}] 対戦完了={done}/{total} "
+          f"self合計={sum(len(v) for v in samples.values())} "
+          f"opp合計={sum(len(v) for v in opp_samples.values())}", flush=True)
 
     # 3) self/opp を AlphaZero 損失で継続学習 → gen_{g+1}
+    #    ここで初めて親がモデルをロード（collect ワーカーは終了済みなのでメモリが空いている）。
     import shutil
-    for a in bt_agents:
-        name = a.name
+    for name in names:
         out_dir = gen_next / "agents" / name
         out_dir.mkdir(parents=True, exist_ok=True)
-        write_deck_csv(out_dir / "deck.csv", a.deck)
+        write_deck_csv(out_dir / "deck.csv", deck_by_name[name])
         prev = gen_g / "agents" / name
 
-        for side, model, sample_list, prev_pth in (
-            ("self", a.model, out.samples[name], prev / "self.pth"),
-            ("opp", a.opponent_model, out.opp_samples[name], prev / "opp.pth"),
+        for side, prev_pth, sample_list in (
+            ("self", prev / "self.pth", samples[name]),
+            ("opp", prev / "opp.pth", opp_samples[name]),
         ):
+            model = _load_model(prev_pth, device)  # 前世代重み＝warm-start 起点
             out_pth = out_dir / f"{side}.pth"
             trained = _train_side(
                 model, sample_list, out_pth, device,
