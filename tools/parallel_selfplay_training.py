@@ -112,22 +112,26 @@ def _completed_pairing_games(
     episodes_dir: Path,
     pairings: list[tuple[str, str]],
 ) -> tuple[list[int], list[int]]:
-    """保存済みJSONからカード別の完了数と最大game indexを返す。"""
+    """保存済みepisodeからカード別の完了数と最大game indexを返す。"""
     completed: list[int] = []
     max_indices: list[int] = []
-    index_pattern = re.compile(r"_g(\d+)_s[01]\.json$")
+    index_pattern = re.compile(r"_g(\d+)_s[01]\.(?:json|pkl)$")
     for name0, name1 in pairings:
         matchup = hashlib.sha1(f"{name0}\0{name1}".encode("utf-8")).hexdigest()[:8]
         prefix = (
             f"episode_{_safe_training_name(name0)}_vs_"
             f"{_safe_training_name(name1)}_{matchup}_g"
         )
-        paths = list(episodes_dir.glob(f"{prefix}*_s*.json"))
-        indices = []
+        paths = [
+            path
+            for extension in ("json", "pkl")
+            for path in episodes_dir.glob(f"{prefix}*_s*.{extension}")
+        ]
+        indices: set[int] = set()
         for path in paths:
             match = index_pattern.search(path.name)
             if match is not None:
-                indices.append(int(match.group(1)))
+                indices.add(int(match.group(1)))
         completed.append(len(indices))
         max_indices.append(max(indices, default=0))
     return completed, max_indices
@@ -151,7 +155,7 @@ def run_parallel_games(
     max_selections: int = 500,
     max_attempts: int = 5,
 ) -> int:
-    """並列対戦を1更新単位だけ回し、生成された学習JSON数を返す。"""
+    """並列対戦を1更新単位だけ回し、生成された学習episode数を返す。"""
     if workers < 1:
         raise ValueError("workersは1以上で指定してください。")
     if lanes_per_worker < 1:
@@ -210,6 +214,8 @@ def run_parallel_games(
             "--quiet",
             "--training-json-dir",
             str(episodes_dir),
+            "--training-format",
+            "preencoded",
         ]
     )
     if not include_self:
@@ -234,7 +240,7 @@ def run_parallel_games(
         for completed, target in zip(completed_counts, target_counts, strict=True)
     ):
         raise RuntimeError(
-            "出力先に今回の対戦割当を超える学習JSONがあります: "
+            "出力先に今回の対戦割当を超える学習episodeがあります: "
             f"{episodes_dir}"
         )
     episode_count = sum(completed_counts)
@@ -282,7 +288,7 @@ def run_parallel_games(
                 if completed < target
             ]
             raise RuntimeError(
-                "追加対戦で完了した学習JSONが増えませんでした: "
+                "追加対戦で完了した学習episodeが増えませんでした: "
                 f"actual={updated_count}, missing={missing_labels}, "
                 f"dir={episodes_dir}"
             )

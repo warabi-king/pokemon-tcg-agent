@@ -58,6 +58,10 @@ class ParallelSelfplayTrainingTest(unittest.TestCase):
         self.assertEqual(command[command.index("--backend") + 1], "worker-batched")
         self.assertEqual(command[command.index("--workers") + 1], "2")
         self.assertEqual(command[command.index("--lanes") + 1], "6")
+        self.assertEqual(
+            command[command.index("--training-format") + 1],
+            "preencoded",
+        )
         self.assertEqual(command[command.index("--batch-size") + 1], "256")
         self.assertEqual(command[command.index("--search-count") + 1], "10")
         self.assertEqual(
@@ -105,8 +109,12 @@ class ParallelSelfplayTrainingTest(unittest.TestCase):
                     f"episode_{_safe_training_name(name0)}_vs_"
                     f"{_safe_training_name(name1)}_{matchup}_"
                 )
-                for game_index in indices:
-                    (episodes_dir / f"{prefix}g{game_index:06d}_s0.json").touch()
+                for position, game_index in enumerate(indices):
+                    extension = "json" if position % 2 == 0 else "pkl"
+                    (
+                        episodes_dir
+                        / f"{prefix}g{game_index:06d}_s0.{extension}"
+                    ).touch()
 
             completed, max_indices = _completed_pairing_games(
                 episodes_dir,

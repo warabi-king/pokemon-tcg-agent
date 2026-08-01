@@ -27,6 +27,7 @@ import math
 import multiprocessing
 import os
 from pathlib import Path
+import pickle
 import queue
 import random
 import sys
@@ -139,6 +140,10 @@ _TorchModuleBase = torch.nn.Module if torch is not None else object
 MAX_ACTIONS = 64
 SETUP_SELECT_CONTEXTS = frozenset((1, 2))
 TRAINING_EPISODE_FORMAT = "pokemon-tcg-agent/imitation-episode-v1"
+PREENCODED_TRAINING_EPISODE_FORMAT = (
+    "pokemon-tcg-agent/preencoded-episode-v1"
+)
+TRAINING_FORMATS = frozenset(("json", "preencoded", "comparison"))
 _TRAINING_OPTION_FIELDS = (
     "type",
     "number",
@@ -260,6 +265,89 @@ class _SparseVectorSnapshot:
 
 
 @dataclass
+class _RaggedTrainingBuffer:
+    """可変長特徴量を行オブジェクトを残さず連結して保持する。"""
+
+    values: list[Any] = field(default_factory=list)
+    boundaries: list[int] = field(default_factory=lambda: [0])
+
+    def append(self, row: list[Any]) -> None:
+        self.values.extend(row)
+        self.boundaries.append(len(self.values))
+
+    def pack(self, dtype: Any) -> dict[str, np.ndarray]:
+        return {
+            "values": np.asarray(self.values, dtype=dtype),
+            "boundaries": np.asarray(self.boundaries, dtype=np.int64),
+        }
+
+
+@dataclass
+class _PlayerTrainingBuffer:
+    chosen_indices: list[int] = field(default_factory=list)
+    encoder_index: _RaggedTrainingBuffer = field(
+        default_factory=_RaggedTrainingBuffer
+    )
+    encoder_value: _RaggedTrainingBuffer = field(
+        default_factory=_RaggedTrainingBuffer
+    )
+    encoder_offset: _RaggedTrainingBuffer = field(
+        default_factory=_RaggedTrainingBuffer
+    )
+    decoder_index: _RaggedTrainingBuffer = field(
+        default_factory=_RaggedTrainingBuffer
+    )
+    decoder_value: _RaggedTrainingBuffer = field(
+        default_factory=_RaggedTrainingBuffer
+    )
+    decoder_offset: _RaggedTrainingBuffer = field(
+        default_factory=_RaggedTrainingBuffer
+    )
+
+    def append(self, decision: tuple[Any, ...]) -> None:
+        self.encoder_index.append(decision[1])
+        self.encoder_value.append(decision[2])
+        self.encoder_offset.append(decision[3])
+        self.decoder_index.append(decision[4])
+        self.decoder_value.append(decision[5])
+        self.decoder_offset.append(decision[6])
+        self.chosen_indices.append(int(decision[7]))
+
+    def pack(self, reward: int) -> dict[str, Any]:
+        count = len(self.chosen_indices)
+        return {
+            "count": count,
+            "chosenIndex": np.asarray(self.chosen_indices, dtype=np.int64),
+            "value": np.full(count, reward, dtype=np.float32),
+            "encoderIndex": self.encoder_index.pack(np.int32),
+            "encoderValue": self.encoder_value.pack(np.float32),
+            "encoderOffset": self.encoder_offset.pack(np.int32),
+            "decoderIndex": self.decoder_index.pack(np.int32),
+            "decoderValue": self.decoder_value.pack(np.float32),
+            "decoderOffset": self.decoder_offset.pack(np.int32),
+        }
+
+
+@dataclass
+class _PreencodedTrainingBuffer:
+    players: tuple[_PlayerTrainingBuffer, _PlayerTrainingBuffer] = field(
+        default_factory=lambda: (
+            _PlayerTrainingBuffer(),
+            _PlayerTrainingBuffer(),
+        )
+    )
+
+    def append(self, decision: tuple[Any, ...]) -> None:
+        self.players[int(decision[0])].append(decision)
+
+    def pack(self, rewards: list[int]) -> list[dict[str, Any]]:
+        return [
+            player.pack(rewards[index])
+            for index, player in enumerate(self.players)
+        ]
+
+
+@dataclass
 class _Runtime:
     lib: Any
     to_observation_class: Any
@@ -329,7 +417,10 @@ class _MatchSession:
     seen_opponent_cards: tuple[dict[int, int], dict[int, int]] = field(
         default_factory=lambda: ({}, {})
     )
-    training_decisions: list[dict[str, Any]] = field(default_factory=list)
+    training_decisions: list[Any] = field(default_factory=list)
+    preencoded_training_decisions: _PreencodedTrainingBuffer = field(
+        default_factory=_PreencodedTrainingBuffer
+    )
 
 
 class _Child:
@@ -1372,6 +1463,46 @@ def _build_training_decision(
     }
 
 
+def _build_preencoded_training_decision(
+    observation: dict[str, Any],
+    selected_action: list[int],
+    sample: BatchedLearnSample | None,
+) -> tuple[Any, ...] | None:
+    """NN評価時に作成済みの特徴量を学習sampleとして保持する。"""
+    if sample is None:
+        return None
+    select = observation.get("select")
+    current = observation.get("current")
+    if select is None or current is None:
+        return None
+
+    actions = _enumerate_actions(
+        len(select["option"]),
+        int(select["maxCount"]),
+    )
+    target = tuple(sorted(selected_action))
+    chosen_index = next(
+        (
+            index
+            for index, candidate in enumerate(actions)
+            if tuple(candidate) == target
+        ),
+        None,
+    )
+    if chosen_index is None:
+        return None
+    return (
+        int(current["yourIndex"]),
+        sample.sv_enc.index,
+        sample.sv_enc.value,
+        sample.sv_enc.offset,
+        sample.sv_dec.index,
+        sample.sv_dec.value,
+        sample.sv_dec.offset,
+        chosen_index,
+    )
+
+
 def _safe_training_name(value: str) -> str:
     visible = "".join(
         character if character.isalnum() or character in "-_." else "_"
@@ -1381,21 +1512,63 @@ def _safe_training_name(value: str) -> str:
     return f"{visible or 'agent'}_{digest}"
 
 
-def _write_training_episode(session: _MatchSession, output_dir: Path) -> Path:
+def _pack_preencoded_decisions(
+    decisions: list[tuple[Any, ...]] | _PreencodedTrainingBuffer,
+    rewards: list[int],
+) -> list[dict[str, Any]]:
+    """学習特徴量を連結配列へまとめる。"""
+    if isinstance(decisions, _PreencodedTrainingBuffer):
+        return decisions.pack(rewards)
+    buffer = _PreencodedTrainingBuffer()
+    for decision in decisions:
+        buffer.append(decision)
+    return buffer.pack(rewards)
+
+
+def _write_training_episode(
+    session: _MatchSession,
+    output_dir: Path,
+    training_format: str = "json",
+    training_decisions: list[Any] | _PreencodedTrainingBuffer | None = None,
+) -> Path:
     result = _raw_result(session)
     if result not in (0, 1, 2):
         raise ValueError("終局していない試合は学習JSONへ保存できません。")
+    if training_format not in {"json", "preencoded"}:
+        raise ValueError(f"未対応の学習保存形式です: {training_format}")
     rewards = [0, 0]
     if result in (0, 1):
         rewards[result] = 1
         rewards[1 - result] = -1
 
-    episode = {
-        "format": TRAINING_EPISODE_FORMAT,
-        "rewards": rewards,
-        "decks": [list(player.deck) for player in session.players],
-        "decisions": session.training_decisions,
-    }
+    if training_format == "preencoded":
+        decisions = (
+            session.preencoded_training_decisions
+            if training_decisions is None
+            else training_decisions
+        )
+        episode = {
+            "format": PREENCODED_TRAINING_EPISODE_FORMAT,
+            "decks": [list(player.deck) for player in session.players],
+            "packedPlayerSamples": _pack_preencoded_decisions(
+                decisions,
+                rewards,
+            ),
+        }
+        extension = ".pkl"
+    else:
+        decisions = (
+            session.training_decisions
+            if training_decisions is None
+            else training_decisions
+        )
+        episode = {
+            "format": TRAINING_EPISODE_FORMAT,
+            "rewards": rewards,
+            "decks": [list(player.deck) for player in session.players],
+            "decisions": decisions,
+        }
+        extension = ".json"
     request = session.request
     matchup = hashlib.sha1(
         f"{request.name0}\0{request.name1}".encode("utf-8")
@@ -1403,14 +1576,18 @@ def _write_training_episode(session: _MatchSession, output_dir: Path) -> Path:
     filename = (
         f"episode_{_safe_training_name(request.name0)}_vs_"
         f"{_safe_training_name(request.name1)}_{matchup}_"
-        f"g{request.game_index:06d}_s{int(request.swap)}.json"
+        f"g{request.game_index:06d}_s{int(request.swap)}{extension}"
     )
     output_path = output_dir / filename
     temporary_path = output_path.with_suffix(f".{os.getpid()}.tmp")
-    temporary_path.write_text(
-        json.dumps(episode, ensure_ascii=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
+    if training_format == "preencoded":
+        with temporary_path.open("wb") as file:
+            pickle.dump(episode, file, protocol=pickle.HIGHEST_PROTOCOL)
+    else:
+        temporary_path.write_text(
+            json.dumps(episode, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
     os.replace(temporary_path, output_path)
     return output_path
 
@@ -1673,7 +1850,7 @@ def _commit_evaluation_rows(
         chunk, value_rows, policy_rows, strict=True
     ):
         value = float(value_row[0])
-        if request.node.parent is None and not request.context.policy_only:
+        if request.node.parent is None:
             request.context.root_sample = BatchedLearnSample(
                 value=value,
                 policy=[
@@ -2337,6 +2514,7 @@ def run_batched_tournament(
     parallel_cuda_models: bool = False,
     cuda_ensemble_models: bool = False,
     training_json_dir: Path | None = None,
+    training_format: str = "json",
     _evaluation_client: _RemoteEvaluationClient | None = None,
     _game_requests: list[BatchedGameRequest] | None = None,
     _load_worker_models: bool = True,
@@ -2352,6 +2530,8 @@ def run_batched_tournament(
         raise ValueError("max_selectionsは1以上で指定してください。")
     if max_turns is not None and max_turns < 1:
         raise ValueError("max_turnsは1以上またはNoneにしてください。")
+    if training_format not in TRAINING_FORMATS:
+        raise ValueError(f"未対応の学習保存形式です: {training_format}")
 
     training_output_dir = (
         Path(training_json_dir).resolve()
@@ -2431,7 +2611,25 @@ def run_batched_tournament(
     ) -> None:
         try:
             if error is None and training_output_dir is not None:
-                _write_training_episode(session, training_output_dir)
+                if training_format == "comparison":
+                    _write_training_episode(
+                        session,
+                        training_output_dir,
+                        "json",
+                        session.training_decisions,
+                    )
+                    _write_training_episode(
+                        session,
+                        training_output_dir,
+                        "preencoded",
+                        session.preencoded_training_decisions,
+                    )
+                else:
+                    _write_training_episode(
+                        session,
+                        training_output_dir,
+                        training_format,
+                    )
             results.append(_to_result(session, error=error))
         finally:
             runtime.lib.BattleFinish(session.battle_ptr)
@@ -2475,6 +2673,11 @@ def run_batched_tournament(
                 break
 
             selected_actions: dict[int, list[int]] = {}
+            preencoded_samples: dict[int, BatchedLearnSample] | None = (
+                {}
+                if training_format in {"preencoded", "comparison"}
+                else None
+            )
             contexts: list[_SearchContext] = []
             for session in active:
                 observation = session.observation
@@ -2507,6 +2710,7 @@ def run_batched_tournament(
                     device,
                     batch_size,
                     profile,
+                    sample_sink=preencoded_samples,
                     cuda_streams=cuda_streams,
                     cuda_ensemble=cuda_ensemble,
                     remote_evaluator=_evaluation_client,
@@ -2517,12 +2721,28 @@ def run_batched_tournament(
             for session in active:
                 action = selected_actions[session.battle_ptr]
                 if training_output_dir is not None:
-                    decision = _build_training_decision(
-                        session.observation,
-                        action,
-                    )
-                    if decision is not None:
-                        session.training_decisions.append(decision)
+                    preencoded_decision = None
+                    if training_format in {"preencoded", "comparison"}:
+                        preencoded_decision = _build_preencoded_training_decision(
+                            session.observation,
+                            action,
+                            (
+                                preencoded_samples.get(session.battle_ptr)
+                                if preencoded_samples is not None
+                                else None
+                            ),
+                        )
+                    if preencoded_decision is not None:
+                        session.preencoded_training_decisions.append(
+                            preencoded_decision
+                        )
+                    if training_format in {"json", "comparison"}:
+                        json_decision = _build_training_decision(
+                            session.observation,
+                            action,
+                        )
+                        if json_decision is not None:
+                            session.training_decisions.append(json_decision)
                 argument = (ctypes.c_int * len(action))(*action)
                 try:
                     started = time.perf_counter()
@@ -2571,6 +2791,7 @@ def _parallel_worker_main(
     seed: int,
     remote_batch_size: int,
     training_json_dir: str | None,
+    training_format: str,
     request_queue: Any,
     response_queue: Any,
     result_queue: Any,
@@ -2611,6 +2832,7 @@ def _parallel_worker_main(
                 if training_json_dir is not None
                 else None
             ),
+            training_format=training_format,
             _evaluation_client=client,
             _game_requests=game_requests,
             _load_worker_models=False,
@@ -3343,10 +3565,13 @@ def run_worker_batched_tournament(
     cpu_workers: int = 2,
     model_axis_models: bool = True,
     training_json_dir: Path | None = None,
+    training_format: str = "json",
 ) -> BatchedTournamentOutput:
     """CPU libcg worker群と中央NN batcherで総当たりを実行する。"""
     if cpu_workers < 1:
         raise ValueError("cpu_workersは1以上で指定してください。")
+    if training_format not in TRAINING_FORMATS:
+        raise ValueError(f"未対応の学習保存形式です: {training_format}")
 
     training_output_dir = (
         Path(training_json_dir).resolve()
@@ -3442,6 +3667,7 @@ def run_worker_batched_tournament(
                 seed,
                 remote_batch_size,
                 str(training_output_dir) if training_output_dir is not None else None,
+                training_format,
                 request_queue,
                 response_queues[worker_id],
                 result_queue,

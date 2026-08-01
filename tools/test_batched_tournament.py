@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 from pathlib import Path
+import pickle
 from types import SimpleNamespace
 import os
 import queue
@@ -31,6 +32,7 @@ from batched_tournament import (
     _mps_sparse_input_batches,
     _mps_sparse_inputs,
     _merge_combined_sparse,
+    _PreencodedTrainingBuffer,
     _pad_empty_sparse_rows,
     _pad_sparse_offsets,
     _pad_remote_decoder,
@@ -82,6 +84,7 @@ class ActionBatchTest(unittest.TestCase):
             ),
             selections=100,
             training_decisions=[],
+            preencoded_training_decisions=_PreencodedTrainingBuffer(),
         )
 
     def test_limit_result_uses_fewer_remaining_prizes(self) -> None:
@@ -98,6 +101,36 @@ class ActionBatchTest(unittest.TestCase):
         _set_result_from_remaining_prizes(session)
 
         self.assertEqual(_to_result(session).result, 1)
+
+    def test_preencoded_episode_preserves_sparse_samples_and_rewards(self) -> None:
+        session = self._unfinished_session((2, 4))
+        session.observation["current"]["result"] = 0
+        session.preencoded_training_decisions.append(
+            (0, [1], [0.5], [0], [2], [1.0], [0], 0)
+        )
+        session.preencoded_training_decisions.append(
+            (1, [3], [0.25], [0], [4], [1.0], [0], 0)
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            episode_path = _write_training_episode(
+                session,
+                Path(directory),
+                training_format="preencoded",
+            )
+            episode = pickle.loads(episode_path.read_bytes())
+
+        self.assertEqual(episode_path.suffix, ".pkl")
+        self.assertEqual(
+            episode["format"],
+            "pokemon-tcg-agent/preencoded-episode-v1",
+        )
+        packed = episode["packedPlayerSamples"]
+        self.assertEqual(packed[0]["count"], 1)
+        self.assertEqual(packed[1]["count"], 1)
+        self.assertEqual(packed[0]["value"].tolist(), [1.0])
+        self.assertEqual(packed[1]["value"].tolist(), [-1.0])
+        self.assertEqual(packed[0]["encoderIndex"]["values"].tolist(), [1])
 
     def test_limit_result_is_draw_when_remaining_prizes_are_equal(self) -> None:
         session = self._unfinished_session((3, 3))
@@ -567,6 +600,49 @@ print('lightweight-worker-ok')
 
 
 class BatchedTournamentIntegrationTest(unittest.TestCase):
+    def test_worker_batched_writes_preencoded_training_samples(self) -> None:
+        src = ROOT / "agents" / "rl_mcts_r_robin1" / "src"
+        specs = [
+            SimpleNamespace(
+                name=name,
+                agent_path=src / "main.py",
+                deck_path=src / "deck.csv",
+            )
+            for name in ("a", "b")
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            training_dir = Path(directory)
+            output = run_worker_batched_tournament(
+                specs,
+                [("a", "b")],
+                1,
+                device_name="cpu",
+                batch_size=8,
+                lanes=1,
+                search_count=1,
+                max_selections=500,
+                seed=456,
+                cpu_workers=1,
+                training_json_dir=training_dir,
+                training_format="preencoded",
+            )
+            episode_paths = sorted(training_dir.glob("episode_*.pkl"))
+            episodes = [pickle.loads(path.read_bytes()) for path in episode_paths]
+
+        self.assertEqual(len(output.results), 1)
+        self.assertIsNone(output.results[0].error)
+        self.assertEqual(len(episodes), 1)
+        self.assertEqual(
+            episodes[0]["format"],
+            "pokemon-tcg-agent/preencoded-episode-v1",
+        )
+        packed = episodes[0]["packedPlayerSamples"]
+        self.assertGreater(sum(player["count"] for player in packed), 0)
+        for player in packed:
+            self.assertEqual(len(player["chosenIndex"]), player["count"])
+            self.assertEqual(len(player["value"]), player["count"])
+
     def test_worker_batched_hidden_sampling_survives_spawn(self) -> None:
         src = ROOT / "agents" / "rl_mcts_r_robin1" / "src"
         specs = [

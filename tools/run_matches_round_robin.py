@@ -851,13 +851,22 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "batched/worker-batched対戦中に、学習に必要な局面だけを"
-            "1試合1JSONで直接保存するディレクトリ"
+            "1試合1episodeで直接保存するディレクトリ"
+        ),
+    )
+    parser.add_argument(
+        "--training-format",
+        choices=("json", "preencoded"),
+        default="json",
+        help=(
+            "学習episodeの保存形式。preencodedはNN評価時の特徴量を"
+            "再利用する高速バイナリ形式（デフォルト: json）"
         ),
     )
     parser.add_argument(
         "--allow-existing-training-json",
         action="store_true",
-        help="不足分の追加対戦用に、既存学習JSONがある出力先を許可する",
+        help="不足分の追加対戦用に、既存学習episodeがある出力先を許可する",
     )
     return parser.parse_args()
 
@@ -906,14 +915,21 @@ def main() -> None:
             )
         args.training_json_dir = args.training_json_dir.resolve()
         args.training_json_dir.mkdir(parents=True, exist_ok=True)
-        existing_training_json = next(
-            args.training_json_dir.glob("episode_*.json"),
+        existing_training_episode = next(
+            (
+                candidate
+                for pattern in ("episode_*.json", "episode_*.pkl")
+                for candidate in args.training_json_dir.glob(pattern)
+            ),
             None,
         )
-        if existing_training_json is not None and not args.allow_existing_training_json:
+        if (
+            existing_training_episode is not None
+            and not args.allow_existing_training_json
+        ):
             raise SystemExit(
-                "--training-json-dirに既存の学習JSONがあります。"
-                f"別ディレクトリを指定してください: {existing_training_json}"
+                "--training-json-dirに既存の学習episodeがあります。"
+                f"別ディレクトリを指定してください: {existing_training_episode}"
             )
 
     specs: list[AgentSpec] = []
@@ -1084,6 +1100,7 @@ def main() -> None:
             cpu_workers=workers,
             model_axis_models=not args.no_model_axis,
             training_json_dir=args.training_json_dir,
+            training_format=args.training_format,
         )
         h2h_map, all_game_logs = aggregate_tournament_results(
             pairings,
@@ -1135,6 +1152,7 @@ def main() -> None:
             parallel_cuda_models=args.backend == "cuda-streams",
             cuda_ensemble_models=args.backend == "cuda-ensemble",
             training_json_dir=args.training_json_dir,
+            training_format=args.training_format,
         )
         h2h_map, all_game_logs = aggregate_tournament_results(
             pairings,
@@ -1225,11 +1243,13 @@ def main() -> None:
     print(f"\n所要時間: {elapsed:.1f}秒")
 
     if args.training_json_dir is not None:
-        training_json_count = sum(
-            1 for _ in args.training_json_dir.glob("episode_*.json")
+        training_episode_count = sum(
+            1
+            for pattern in ("episode_*.json", "episode_*.pkl")
+            for _ in args.training_json_dir.glob(pattern)
         )
         print(
-            f"学習JSON: {training_json_count}試合を保存しました: "
+            f"学習episode: {training_episode_count}試合を保存しました: "
             f"{args.training_json_dir}"
         )
 
