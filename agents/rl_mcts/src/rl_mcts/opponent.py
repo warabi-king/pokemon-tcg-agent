@@ -5,6 +5,7 @@ from collections import Counter
 from functools import lru_cache
 
 from cg.api import Card, CardType, Log, Pokemon, State, all_card_data
+from rl_mcts.deck_belief_db import predict_full_deck
 
 OPPONENT_DECKS: dict[str, list[int]] = {
     "00": [
@@ -111,7 +112,46 @@ def revealed_opponent_energy_ids(state: State, opponent_index: int, logs: list[L
     return energies
 
 
+def _add_pokemon_all_cards(counter: Counter[int], pokemon: Pokemon | None) -> None:
+    """ポケモン1体から観測できる全カードID（本体・進化元・付随エネ/道具）を数える。"""
+    if pokemon is None:
+        return
+    counter[pokemon.id] += 1
+    for field_name in ("preEvolution", "energyCards", "tools"):
+        for card in getattr(pokemon, field_name, None) or []:
+            if card is not None:
+                counter[card.id] += 1
+
+
+def revealed_opponent_card_ids(state: State, opponent_index: int, logs: list[Log]) -> Counter[int]:
+    """相手について観測できた全カードID（エネルギーに限らない）を集計する。"""
+    cards: Counter[int] = Counter()
+    opponent = state.players[opponent_index]
+
+    for pokemon in opponent.active:
+        _add_pokemon_all_cards(cards, pokemon)
+    for pokemon in opponent.bench:
+        _add_pokemon_all_cards(cards, pokemon)
+    for card in opponent.discard:
+        if card is not None:
+            cards[card.id] += 1
+
+    for log in logs:
+        if log.playerIndex == opponent_index and log.cardId is not None:
+            cards[log.cardId] += 1
+
+    return cards
+
+
 def infer_opponent_deck(state: State, opponent_index: int, logs: list[Log]) -> list[int]:
+    # ② 候補DB(633デッキ)から観測カードに最も合致する実在デッキを推定する。
+    # DB無し・観測ゼロ・失敗時は None が返るので、従来の固定デッキ辞書へフォールバック。
+    observed = revealed_opponent_card_ids(state, opponent_index, logs)
+    predicted = predict_full_deck(observed.elements()) if observed else None
+    if predicted is not None:
+        return predicted
+
+    # --- フォールバック: エネルギー構成で固定8デッキの最寄りを選ぶ（旧①方式）---
     revealed_energies = revealed_opponent_energy_ids(state, opponent_index, logs)
     if not revealed_energies:
         return OPPONENT_DECKS["00"]
