@@ -2321,7 +2321,7 @@ def _select_leaf(
             return None, True
 
 
-# SELFPLAY_ACTION_TEMPERATURE_PATCH_V2
+# SELFPLAY_ACTION_TEMPERATURE_PATCH_V3
 def _selfplay_action_temperature(context: _SearchContext) -> float | None:
     """自己対戦学習時だけ、累計学習episode数とturn数から行動選択温度を返す。"""
     if os.environ.get("SELFPLAY_ACTION_TEMPERATURE_ENABLED") != "1":
@@ -2335,17 +2335,25 @@ def _selfplay_action_temperature(context: _SearchContext) -> float | None:
         int(os.environ["SELFPLAY_TEMPERATURE_TRAINED_EPISODES"]),
         0,
     )
+    schedule_start_episodes = max(
+        int(os.environ["SELFPLAY_TEMPERATURE_START_EPISODES"]),
+        0,
+    )
     total_episodes = max(
         int(os.environ["SELFPLAY_TEMPERATURE_TOTAL_EPISODES"]),
-        1,
+        schedule_start_episodes + 1,
     )
     max_turns = max(
         int(os.environ["SELFPLAY_TEMPERATURE_MAX_TURNS"]),
         1,
     )
 
+    episode_span = max(total_episodes - schedule_start_episodes, 1)
     episode_progress = min(
-        max(trained_episodes / total_episodes, 0.0),
+        max(
+            (trained_episodes - schedule_start_episodes) / episode_span,
+            0.0,
+        ),
         1.0,
     )
     turn_progress = min(
