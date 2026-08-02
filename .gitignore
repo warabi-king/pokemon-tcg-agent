@@ -17,3 +17,12 @@ agents/16model_pretrained_source/**/*.pyc
 # Model weights are large; keep only the selected 16-model artifacts in Git.
 *.pth
 !agents/16model_pretrained_source/**/*.pth
+
+episodes/
+shards/
+
+pipeline/gen_*/
+!pipeline/gen_000/
+
+tools/deck_generator/daily_dataset/
+tools/deck_generator/generated/deck_candidates.jsonl
