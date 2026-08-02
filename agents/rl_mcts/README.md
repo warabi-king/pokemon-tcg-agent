@@ -61,8 +61,8 @@ MAIN局面だけを使います。episode上限とsample上限は日付ZIPへ均
 
 ```powershell
 .\.venv\Scripts\python.exe agents\rl_mcts\train\train_hand_model.py `
-  --max-episodes 1300 `
-  --max-samples 30000 `
+  --max-episodes 2000 `
+  --max-samples 50000 `
   --epochs 5 `
   --batch-size 128 `
   --hidden-size 64 `
