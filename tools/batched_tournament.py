@@ -2321,6 +2321,94 @@ def _select_leaf(
             return None, True
 
 
+# SELFPLAY_ACTION_TEMPERATURE_PATCH_V1
+def _selfplay_action_temperature(context: _SearchContext) -> float | None:
+    """自己対戦学習時だけ、累計学習episode数とturn数から行動選択温度を返す。"""
+    if os.environ.get("SELFPLAY_ACTION_TEMPERATURE_ENABLED") != "1":
+        return None
+
+    tau_initial = float(os.environ["SELFPLAY_TEMPERATURE_INITIAL"])
+    tau_final = float(os.environ["SELFPLAY_TEMPERATURE_FINAL"])
+    episode_decay = float(os.environ["SELFPLAY_TEMPERATURE_EPISODE_DECAY"])
+    turn_decay = float(os.environ["SELFPLAY_TEMPERATURE_TURN_DECAY"])
+    trained_episodes = max(
+        int(os.environ["SELFPLAY_TEMPERATURE_TRAINED_EPISODES"]),
+        0,
+    )
+    total_episodes = max(
+        int(os.environ["SELFPLAY_TEMPERATURE_TOTAL_EPISODES"]),
+        1,
+    )
+    max_turns = max(
+        int(os.environ["SELFPLAY_TEMPERATURE_MAX_TURNS"]),
+        1,
+    )
+
+    episode_progress = min(
+        max(trained_episodes / total_episodes, 0.0),
+        1.0,
+    )
+    turn_progress = min(
+        max(_raw_turn(context.session) / max_turns, 0.0),
+        1.0,
+    )
+    return tau_final + (tau_initial - tau_final) * math.exp(
+        -episode_decay * episode_progress
+        -turn_decay * turn_progress
+    )
+
+
+def _sample_child_by_visit_temperature(
+    children: list[_Child],
+    temperature: float,
+) -> _Child | None:
+    """visit countを N^(1/tau) に変換して子ノードをサンプリングする。"""
+    visited_children = [
+        child
+        for child in children
+        if child.node is not None
+    ]
+    if not visited_children:
+        return None
+
+    if temperature <= 1e-8:
+        return max(
+            visited_children,
+            key=lambda child: child.node.visit,
+        )
+
+    visits = [
+        max(int(child.node.visit), 0)
+        for child in visited_children
+    ]
+    if max(visits, default=0) <= 0:
+        return None
+
+    inverse_temperature = 1.0 / temperature
+    log_weights = [
+        (
+            -math.inf
+            if visit <= 0
+            else inverse_temperature * math.log(visit)
+        )
+        for visit in visits
+    ]
+    max_log_weight = max(log_weights)
+    weights = [
+        (
+            0.0
+            if log_weight == -math.inf
+            else math.exp(log_weight - max_log_weight)
+        )
+        for log_weight in log_weights
+    ]
+    return random.choices(
+        visited_children,
+        weights=weights,
+        k=1,
+    )[0]
+
+
 def _finish_search(context: _SearchContext) -> list[int]:
     root = context.root
     if root is None or not root.children:
@@ -2345,6 +2433,15 @@ def _finish_search(context: _SearchContext) -> list[int]:
         )
     if max_child is None:
         max_child = max(root.children, key=lambda child: child.probability)
+
+    temperature = _selfplay_action_temperature(context)
+    if temperature is not None:
+        sampled_child = _sample_child_by_visit_temperature(
+            root.children,
+            temperature,
+        )
+        if sampled_child is not None:
+            max_child = sampled_child
 
     sample = context.root_sample
     if sample is not None:
