@@ -20,3 +20,12 @@ agents/match_agents/
 !agents/16model_result/**/*.pth
 !agents/16model_pretrained/cluster_*/src/*.pth
 !agents/pretrained_develop_nomura_gen_000_source/**/*.pth
+
+episodes/
+shards/
+
+pipeline/gen_*/
+!pipeline/gen_000/
+
+tools/deck_generator/daily_dataset/
+tools/deck_generator/generated/deck_candidates.jsonl
