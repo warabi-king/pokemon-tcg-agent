@@ -1,3 +1,16 @@
+"""勝率重み付きCBOW Transformerで部分デッキを60枚へ補完する。
+
+学習では、部分デッキをカードIDの重複を含む順序なしトークン集合として入力し、
+元デッキに残っているカード枚数の確率分布を予測する。生成では、確率サンプリング
+またはgreedy選択を用い、同名4枚、ACE SPEC 1枚、基本エネルギー上限を守って
+1枚ずつカードを追加する。
+
+実行例:
+    python tools/deck_generator/train_deck_transformer_cbow.py train --win-rate-beta 3
+    python tools/deck_generator/train_deck_transformer_cbow.py generate \
+        --strategy sample --temperature 1.2 --top-k 30 --observed 741,742,743
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -28,6 +41,7 @@ DECK_SIZE = 60
 class DeckRecord:
     deck: list[int]
     win_rate: float = 0.5
+    adjusted_win_rate: float = 0.5
     games: int = 1
     wins: int = 0
     cluster_wins: int = 0
@@ -48,6 +62,18 @@ class CardMeta:
     @property
     def is_ace_spec(self) -> bool:
         return "ACE SPEC" in f"{self.name} {self.rule}".upper()
+
+
+@dataclass
+class ResumeState:
+    """checkpointから復元した学習進捗と最良モデル情報。"""
+
+    completed_epochs: int
+    best_valid_loss: float
+    best_valid_top1: float
+    best_valid_top5: float
+    best_model_state: dict[str, torch.Tensor]
+    optimizer_restored: bool
 
 
 class DeckTransformerCBOW(torch.nn.Module):
@@ -120,14 +146,11 @@ class DeckTransformerDataset(Dataset[tuple[torch.Tensor, torch.Tensor, torch.Ten
         positions = list(range(len(deck)))
         context_size = rng.randint(self.min_context, min(self.max_context, len(positions) - 1))
         context_positions = set(rng.sample(positions, context_size))
-        context_cards: list[int] = []
-        remaining_counts = torch.zeros(self.pad_id, dtype=torch.float32)
-        for position, card_id in enumerate(deck):
-            if position in context_positions:
-                context_cards.append(card_id)
-            elif 0 <= card_id < self.pad_id:
-                remaining_counts[card_id] += 1.0
-        remaining_probs = remaining_counts / remaining_counts.sum().clamp_min(1.0)
+        context_cards, remaining_probs = split_context_and_remaining_distribution(
+            deck,
+            context_positions,
+            self.pad_id,
+        )
 
         tokens = [self.bos_id] + context_cards
         max_tokens = self.max_context + 1
@@ -157,6 +180,14 @@ def parse_args() -> argparse.Namespace:
     train.add_argument("--card-data", type=Path, default=DEFAULT_CARD_DATA)
     train.add_argument("--word2vec-checkpoint", type=Path, default=DEFAULT_WORD2VEC)
     train.add_argument("--random-init", action="store_true", help="Do not require a word2vec checkpoint.")
+    train.add_argument(
+        "--resume",
+        type=Path,
+        help=(
+            "Resume from a Transformer checkpoint. Existing legacy checkpoints restore model weights only; "
+            "new checkpoints also restore optimizer, epoch, best metrics, and RNG state."
+        ),
+    )
     train.add_argument("--output", type=Path, default=DEFAULT_MODEL)
     train.add_argument("--epochs", type=int, default=20)
     train.add_argument("--batch-size", type=int, default=256)
@@ -172,7 +203,14 @@ def parse_args() -> argparse.Namespace:
     train.add_argument("--max-context", type=int, default=59)
     train.add_argument("--max-decks", type=int, help="Use at most this many decks from the index.")
     train.add_argument("--valid-ratio", type=float, default=0.1)
-    train.add_argument("--win-rate-weight", type=float, default=0.0)
+    train.add_argument(
+        "--win-rate-beta",
+        type=float,
+        default=3.0,
+        help="Strength of adjusted-win-rate loss weighting. 0 disables quality weighting.",
+    )
+    train.add_argument("--win-rate-weight-min", type=float, default=0.25)
+    train.add_argument("--win-rate-weight-max", type=float, default=4.0)
     train.add_argument(
         "--deck-sampling",
         choices=["cluster-weight", "cluster-wins"],
@@ -196,7 +234,13 @@ def add_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--observed", action="append", default=[], help="Comma-separated observed/seed card IDs.")
     parser.add_argument("--observed-file", type=Path, help="File containing one observed card ID per line.")
-    parser.add_argument("--temperature", type=float, default=0.0, help="0 uses greedy generation; >0 samples.")
+    parser.add_argument(
+        "--strategy",
+        choices=["sample", "greedy"],
+        default="greedy",
+        help="sample draws from model probabilities; greedy chooses the highest-scoring legal card.",
+    )
+    parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature for --strategy sample.")
     parser.add_argument("--top-k", type=int, default=20, help="Limit sampling candidates when temperature > 0.")
     parser.add_argument("--copy-penalty", type=float, default=0.35, help="Subtract this value per existing copy.")
     parser.add_argument(
@@ -250,6 +294,7 @@ def read_deck_candidates(path: Path) -> list[DeckRecord]:
                 DeckRecord(
                     deck=[int(card_id) for card_id in deck],
                     win_rate=float(raw.get("win_rate", 0.5)),
+                    adjusted_win_rate=float(raw.get("hierarchical_adjusted_win_rate", raw.get("win_rate", 0.5))),
                     games=int(raw.get("games", 1)),
                     wins=int(raw.get("wins", 0)),
                     cluster_wins=int(raw.get("cluster_wins", raw.get("wins", 0))),
@@ -266,6 +311,23 @@ def build_card_id_set(decks: list[list[int]]) -> list[int]:
     for deck in decks:
         card_ids.update(deck)
     return sorted(card_ids)
+
+
+def split_context_and_remaining_distribution(
+    deck: list[int],
+    context_positions: set[int],
+    vocab_size: int,
+) -> tuple[list[int], torch.Tensor]:
+    """文脈カードと、文脈で消費されていないカードの枚数分布を返す。"""
+    context_cards: list[int] = []
+    remaining_counts = torch.zeros(vocab_size, dtype=torch.float32)
+    for position, card_id in enumerate(deck):
+        if position in context_positions:
+            context_cards.append(card_id)
+        elif 0 <= card_id < vocab_size:
+            remaining_counts[card_id] += 1.0
+    remaining_probs = remaining_counts / remaining_counts.sum().clamp_min(1.0)
+    return context_cards, remaining_probs
 
 
 def deck_sampling_weight(record: DeckRecord, sampling: str) -> float:
@@ -317,13 +379,27 @@ def split_records(
     return [records[index] for index in train_indices], [records[index] for index in valid_indices]
 
 
-def weights_to_tensor(records: list[DeckRecord], win_rate_weight: float) -> torch.Tensor:
+def adjusted_win_rate_weight(
+    record: DeckRecord,
+    beta: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    """補正勝率を指数変換し、指定範囲へ制限した品質loss重みを返す。"""
+    raw_weight = math.exp(beta * (max(0.0, min(1.0, record.adjusted_win_rate)) - 0.5))
+    return max(minimum, min(maximum, raw_weight))
+
+
+def weights_to_tensor(
+    records: list[DeckRecord],
+    win_rate_beta: float,
+    minimum: float,
+    maximum: float,
+) -> torch.Tensor:
+    """各デッキの補正勝率からloss重みTensorを作る。"""
     weights = torch.ones(len(records), dtype=torch.float32)
     for index, record in enumerate(records):
-        weight = 1.0
-        if win_rate_weight > 0:
-            weight *= 1.0 + win_rate_weight * math.log1p(max(0.0, min(1.0, record.win_rate)))
-        weights[index] = weight
+        weights[index] = adjusted_win_rate_weight(record, win_rate_beta, minimum, maximum)
     return weights
 
 
@@ -421,6 +497,106 @@ def validate_train_args(args: argparse.Namespace) -> None:
         raise ValueError("--layers must be positive")
     if args.embedding_dim < 0:
         raise ValueError("--embedding-dim must be non-negative")
+    if args.win_rate_beta < 0:
+        raise ValueError("--win-rate-beta must be non-negative")
+    if args.win_rate_weight_min <= 0:
+        raise ValueError("--win-rate-weight-min must be positive")
+    if args.win_rate_weight_max < args.win_rate_weight_min:
+        raise ValueError("--win-rate-weight-max must be greater than or equal to --win-rate-weight-min")
+
+
+def clone_model_state(model: torch.nn.Module) -> dict[str, torch.Tensor]:
+    """モデル重みをdeviceから切り離したCPU上の複製として返す。"""
+    return {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+
+
+def validate_resume_config(checkpoint_config: dict[str, Any], expected_config: dict[str, Any]) -> None:
+    """再開checkpointと現在指定されたモデル構造が一致することを検証する。"""
+    architecture_keys = (
+        "vocab_size",
+        "pad_id",
+        "bos_id",
+        "embedding_dim",
+        "heads",
+        "layers",
+        "ff_dim",
+        "dropout",
+        "max_context",
+        "target_mode",
+    )
+    mismatches: list[str] = []
+    for key in architecture_keys:
+        if checkpoint_config.get(key) != expected_config.get(key):
+            mismatches.append(
+                f"{key}: checkpoint={checkpoint_config.get(key)!r}, current={expected_config.get(key)!r}"
+            )
+    if mismatches:
+        raise ValueError("resume checkpoint configuration does not match:\n" + "\n".join(mismatches))
+
+
+def restore_rng_state(training_state: dict[str, Any]) -> None:
+    """checkpointに保存されたPython・PyTorchの乱数状態を可能な範囲で復元する。"""
+    python_rng_state = training_state.get("python_rng_state")
+    if python_rng_state is not None:
+        random.setstate(python_rng_state)
+
+    torch_rng_state = training_state.get("torch_rng_state")
+    if torch_rng_state is not None:
+        torch.set_rng_state(torch_rng_state.cpu())
+
+    cuda_rng_state = training_state.get("cuda_rng_state_all")
+    if cuda_rng_state is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all([state.cpu() for state in cuda_rng_state])
+
+
+def load_resume_checkpoint(
+    path: Path,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    expected_config: dict[str, Any],
+    device: torch.device,
+) -> ResumeState:
+    """新旧checkpointを読み、モデルと利用可能な学習状態を復元する。"""
+    checkpoint = torch.load(path, map_location=device)
+    if not isinstance(checkpoint, dict) or "model_state" not in checkpoint:
+        raise ValueError(f"{path} does not contain model_state")
+
+    checkpoint_config = checkpoint.get("config", {})
+    validate_resume_config(checkpoint_config, expected_config)
+    metrics = checkpoint.get("metrics", {})
+    training_state = checkpoint.get("training_state")
+
+    if not isinstance(training_state, dict):
+        model.load_state_dict(checkpoint["model_state"])
+        return ResumeState(
+            completed_epochs=0,
+            best_valid_loss=float(metrics.get("best_valid_loss", float("inf"))),
+            best_valid_top1=float(metrics.get("best_valid_top1", 0.0)),
+            best_valid_top5=float(metrics.get("best_valid_top5", 0.0)),
+            best_model_state=clone_model_state(model),
+            optimizer_restored=False,
+        )
+
+    latest_model_state = training_state.get("latest_model_state")
+    if latest_model_state is None:
+        latest_model_state = checkpoint["model_state"]
+    model.load_state_dict(latest_model_state)
+
+    optimizer_state = training_state.get("optimizer_state")
+    optimizer_restored = optimizer_state is not None
+    if optimizer_restored:
+        optimizer.load_state_dict(optimizer_state)
+
+    best_model_state = training_state.get("best_model_state", checkpoint["model_state"])
+    restore_rng_state(training_state)
+    return ResumeState(
+        completed_epochs=int(training_state.get("completed_epochs", 0)),
+        best_valid_loss=float(training_state.get("best_valid_loss", metrics.get("best_valid_loss", float("inf")))),
+        best_valid_top1=float(training_state.get("best_valid_top1", metrics.get("best_valid_top1", 0.0))),
+        best_valid_top5=float(training_state.get("best_valid_top5", metrics.get("best_valid_top5", 0.0))),
+        best_model_state={key: value.detach().cpu().clone() for key, value in best_model_state.items()},
+        optimizer_restored=optimizer_restored,
+    )
 
 
 def train_model(args: argparse.Namespace) -> int:
@@ -455,8 +631,18 @@ def train_model(args: argparse.Namespace) -> int:
     pad_id = vocab_size
     bos_id = vocab_size + 1
 
-    train_weights = weights_to_tensor(train_records, args.win_rate_weight)
-    valid_weights = weights_to_tensor(valid_records, args.win_rate_weight)
+    train_weights = weights_to_tensor(
+        train_records,
+        args.win_rate_beta,
+        args.win_rate_weight_min,
+        args.win_rate_weight_max,
+    )
+    valid_weights = weights_to_tensor(
+        valid_records,
+        args.win_rate_beta,
+        args.win_rate_weight_min,
+        args.win_rate_weight_max,
+    )
     train_dataset = DeckTransformerDataset(
         train_records,
         max_context=args.max_context,
@@ -498,11 +684,38 @@ def train_model(args: argparse.Namespace) -> int:
     initialize_card_embeddings(model, pretrained, device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
+    model_config: dict[str, Any] = {
+        "vocab_size": vocab_size,
+        "pad_id": pad_id,
+        "bos_id": bos_id,
+        "embedding_dim": embedding_dim,
+        "heads": args.heads,
+        "layers": args.layers,
+        "ff_dim": args.ff_dim,
+        "dropout": args.dropout,
+        "max_context": args.max_context,
+        "target_mode": "remaining-count-distribution",
+    }
+    completed_epochs = 0
     best_valid = float("inf")
     best_state: dict[str, torch.Tensor] | None = None
     best_top1 = 0.0
     best_top5 = 0.0
-    for epoch in range(1, args.epochs + 1):
+    if args.resume is not None:
+        resume_state = load_resume_checkpoint(args.resume, model, optimizer, model_config, device)
+        completed_epochs = resume_state.completed_epochs
+        best_valid = resume_state.best_valid_loss
+        best_top1 = resume_state.best_valid_top1
+        best_top5 = resume_state.best_valid_top5
+        best_state = resume_state.best_model_state
+        resume_mode = "full" if resume_state.optimizer_restored else "weights-only"
+        print(
+            f"resumed checkpoint {args.resume} mode={resume_mode} "
+            f"completed_epochs={completed_epochs} best_valid_loss={best_valid:.6f}"
+        )
+
+    for additional_epoch in range(1, args.epochs + 1):
+        epoch = completed_epochs + additional_epoch
         model.train()
         train_loss = 0.0
         train_batches = 0
@@ -532,32 +745,29 @@ def train_model(args: argparse.Namespace) -> int:
             best_valid = valid_loss
             best_top1 = valid_top1
             best_top5 = valid_top5
-            best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+            best_state = clone_model_state(model)
 
+    completed_epochs += args.epochs
+    latest_model_state = clone_model_state(model)
+    optimizer_state = optimizer.state_dict()
     if best_state is not None:
         model.load_state_dict(best_state)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
-            "model_state": model.state_dict(),
+            "model_state": clone_model_state(model),
             "config": {
-                "vocab_size": vocab_size,
-                "pad_id": pad_id,
-                "bos_id": bos_id,
-                "embedding_dim": embedding_dim,
-                "heads": args.heads,
-                "layers": args.layers,
-                "ff_dim": args.ff_dim,
-                "dropout": args.dropout,
-                "max_context": args.max_context,
-                "target_mode": "remaining-count-distribution",
+                **model_config,
                 "known_card_ids": known_card_ids,
                 "word2vec_checkpoint": str(args.word2vec_checkpoint),
                 "word2vec_embedding_dim": int(pretrained.size(1)) if pretrained is not None else None,
                 "word2vec_vocab_size": int(word2vec_config.get("vocab_size", 0)),
                 "random_init": bool(args.random_init),
-                "win_rate_weight": args.win_rate_weight,
+                "win_rate_beta": args.win_rate_beta,
+                "win_rate_weight_min": args.win_rate_weight_min,
+                "win_rate_weight_max": args.win_rate_weight_max,
+                "win_rate_score_field": "hierarchical_adjusted_win_rate",
                 "deck_sampling": args.deck_sampling,
                 "device_option": args.device,
                 "card_meta": {
@@ -569,6 +779,18 @@ def train_model(args: argparse.Namespace) -> int:
                     for card_id, meta in card_meta.items()
                 },
             },
+            "training_state": {
+                "latest_model_state": latest_model_state,
+                "optimizer_state": optimizer_state,
+                "completed_epochs": completed_epochs,
+                "best_valid_loss": best_valid,
+                "best_valid_top1": best_top1,
+                "best_valid_top5": best_top5,
+                "best_model_state": best_state,
+                "python_rng_state": random.getstate(),
+                "torch_rng_state": torch.get_rng_state(),
+                "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            },
             "metrics": {
                 "best_valid_loss": best_valid,
                 "best_valid_top1": best_top1,
@@ -578,6 +800,7 @@ def train_model(args: argparse.Namespace) -> int:
                 "train_decks": len(train_records),
                 "valid_decks": len(valid_records),
                 "mean_win_rate": sum(record.win_rate for record in records) / len(records),
+                "mean_adjusted_win_rate": sum(record.adjusted_win_rate for record in records) / len(records),
                 "mean_cluster_weight": sum(record.cluster_weight for record in records) / len(records),
                 "mean_cluster_wins": sum(record.cluster_wins for record in records) / len(records),
                 "mean_loss_weight": float(train_weights.mean().item()),
@@ -628,19 +851,43 @@ def allowed_to_add(card_id: int, deck: list[int], card_meta: dict[int, CardMeta]
     return sum(1 for existing in deck if (card_meta.get(existing).name if card_meta.get(existing) else str(existing)) == name) < 4
 
 
-def fallback_card_id(known_card_ids: list[int], card_meta: dict[int, CardMeta], deck: list[int]) -> int:
-    for card_id in known_card_ids:
-        meta = card_meta.get(card_id)
-        if meta and meta.is_basic_energy:
-            return card_id
-    for card_id in known_card_ids:
-        if allowed_to_add(card_id, deck, card_meta):
-            return card_id
-    return 3
-
-
 def basic_energy_count(deck: list[int], card_meta: dict[int, CardMeta]) -> int:
     return sum(1 for card_id in deck if card_meta.get(card_id) and card_meta[card_id].is_basic_energy)
+
+
+def generation_candidate_allowed(
+    card_id: int,
+    deck: list[int],
+    card_meta: dict[int, CardMeta],
+    max_basic_energy: int,
+) -> bool:
+    """同名、ACE SPEC、基本エネルギー上限をすべて満たす場合だけTrueを返す。"""
+    if not allowed_to_add(card_id, deck, card_meta):
+        return False
+    meta = card_meta.get(card_id)
+    return not (
+        max_basic_energy >= 0
+        and meta is not None
+        and meta.is_basic_energy
+        and basic_energy_count(deck, card_meta) >= max_basic_energy
+    )
+
+
+def fallback_card_id(
+    known_card_ids: list[int],
+    card_meta: dict[int, CardMeta],
+    deck: list[int],
+    max_basic_energy: int,
+) -> int:
+    """通常選択に候補がない場合も、同じ生成制約を満たすカードだけを返す。"""
+    candidates = [
+        card_id
+        for card_id in known_card_ids
+        if generation_candidate_allowed(card_id, deck, card_meta, max_basic_energy)
+    ]
+    if not candidates:
+        raise RuntimeError("no legal card remains to complete the deck")
+    return candidates[0]
 
 
 def tokens_from_deck(deck: list[int], pad_id: int, bos_id: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
@@ -655,6 +902,7 @@ def choose_next_card(
     known_card_ids: list[int],
     deck: list[int],
     card_meta: dict[int, CardMeta],
+    strategy: str,
     temperature: float,
     top_k: int,
     copy_penalty: float,
@@ -662,18 +910,13 @@ def choose_next_card(
     max_basic_energy: int,
     rng: random.Random,
 ) -> int | None:
+    """制約・penalty適用後の候補から指定戦略で次の1枚を選ぶ。"""
     current_basic_energy = basic_energy_count(deck, card_meta)
     candidates = [
         card_id
         for card_id in known_card_ids
         if card_id < logits.numel()
-        and allowed_to_add(card_id, deck, card_meta)
-        and not (
-            max_basic_energy >= 0
-            and card_meta.get(card_id) is not None
-            and card_meta[card_id].is_basic_energy
-            and current_basic_energy >= max_basic_energy
-        )
+        and generation_candidate_allowed(card_id, deck, card_meta, max_basic_energy)
     ]
     if not candidates:
         return None
@@ -695,8 +938,12 @@ def choose_next_card(
         ],
         dtype=torch.float32,
     )
-    if temperature <= 0:
+    if strategy == "greedy":
         return candidates[int(torch.argmax(candidate_logits).item())]
+    if strategy != "sample":
+        raise ValueError(f"unknown generation strategy: {strategy}")
+    if temperature <= 0:
+        raise ValueError("--temperature must be positive for --strategy sample")
 
     k = min(max(1, top_k), len(candidates))
     values, indices = torch.topk(candidate_logits, k=k)
@@ -711,6 +958,7 @@ def generate_deck(
     known_card_ids: list[int],
     card_meta: dict[int, CardMeta],
     device: torch.device,
+    strategy: str,
     temperature: float,
     top_k: int,
     copy_penalty: float,
@@ -718,6 +966,7 @@ def generate_deck(
     max_basic_energy: int,
     seed: int,
 ) -> list[int]:
+    """部分デッキを保持し、制約付きで1枚ずつ追加して60枚へ補完する。"""
     rng = random.Random(seed)
     deck = list(observed_cards[:DECK_SIZE])
     model.eval()
@@ -730,6 +979,7 @@ def generate_deck(
                 known_card_ids,
                 deck,
                 card_meta,
+                strategy,
                 temperature,
                 top_k,
                 copy_penalty,
@@ -738,9 +988,28 @@ def generate_deck(
                 rng,
             )
             if next_card is None:
-                next_card = fallback_card_id(known_card_ids, card_meta, deck)
+                next_card = fallback_card_id(known_card_ids, card_meta, deck, max_basic_energy)
             deck.append(next_card)
     return deck
+
+
+def validate_observed_cards(
+    observed_cards: list[int],
+    known_card_ids: list[int],
+    card_meta: dict[int, CardMeta],
+    max_basic_energy: int,
+) -> None:
+    """部分デッキが1〜59枚で、既知カードと生成制約だけから成ることを検証する。"""
+    if not 1 <= len(observed_cards) < DECK_SIZE:
+        raise ValueError("observed cards must contain between 1 and 59 cards")
+    known = set(known_card_ids)
+    partial_deck: list[int] = []
+    for card_id in observed_cards:
+        if card_id not in known:
+            raise ValueError(f"unknown observed card ID: {card_id}")
+        if not generation_candidate_allowed(card_id, partial_deck, card_meta, max_basic_energy):
+            raise ValueError(f"observed cards violate deck constraints at card ID {card_id}")
+        partial_deck.append(card_id)
 
 
 def generate(args: argparse.Namespace) -> int:
@@ -762,12 +1031,14 @@ def generate(args: argparse.Namespace) -> int:
     observed_cards = parse_observed(args)
     card_meta = meta_from_checkpoint(config)
     known_card_ids = [int(card_id) for card_id in config["known_card_ids"]]
+    validate_observed_cards(observed_cards, known_card_ids, card_meta, args.max_basic_energy)
     deck = generate_deck(
         model=model,
         observed_cards=observed_cards,
         known_card_ids=known_card_ids,
         card_meta=card_meta,
         device=device,
+        strategy=args.strategy,
         temperature=args.temperature,
         top_k=args.top_k,
         copy_penalty=max(0.0, args.copy_penalty),
@@ -780,6 +1051,9 @@ def generate(args: argparse.Namespace) -> int:
         "deck": deck,
         "deck_counts": {str(card_id): count for card_id, count in sorted(Counter(deck).items())},
         "settings": {
+            "strategy": args.strategy,
+            "temperature": args.temperature,
+            "top_k": args.top_k,
             "copy_penalty": max(0.0, args.copy_penalty),
             "energy_penalty": max(0.0, args.energy_penalty),
             "max_basic_energy": args.max_basic_energy,

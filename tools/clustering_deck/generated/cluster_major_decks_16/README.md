@@ -2,6 +2,11 @@
 
 各CSVは観測済みの実在60枚デッキで、カードIDを1行1枚で記載しています。
 
+代表16デッキのエネルギータイプを中心としたカード構成比は
+[`representative_deck_type_summary.md`](representative_deck_type_summary.md) を参照してください。
+競技向け16デッキのエネルギータイプ、構成比、補正勝率は
+[`competitive_deck_type_summary.md`](competitive_deck_type_summary.md) を参照してください。
+
 ## 選出方法
 
 - 代表デッキ: 対戦数加重のクラスタ内平均類似度（中心性）が最大付近の候補から、使用試合数を優先して選出。
