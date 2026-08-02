@@ -1,6 +1,0 @@
-{
-  "schedule_start_episodes": 0,
-  "total_episodes": 46800,
-  "episodes_per_update": 3600,
-  "training_updates": 13
-}

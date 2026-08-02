@@ -2321,11 +2321,7 @@ def _select_leaf(
             return None, True
 
 
-<<<<<<< HEAD
 # SELFPLAY_ACTION_TEMPERATURE_PATCH_V3
-=======
-# SELFPLAY_ACTION_TEMPERATURE_PATCH_V1
->>>>>>> 259fb82 (学習率の変化，温度の変化の追加)
 def _selfplay_action_temperature(context: _SearchContext) -> float | None:
     """自己対戦学習時だけ、累計学習episode数とturn数から行動選択温度を返す。"""
     if os.environ.get("SELFPLAY_ACTION_TEMPERATURE_ENABLED") != "1":
@@ -2339,7 +2335,6 @@ def _selfplay_action_temperature(context: _SearchContext) -> float | None:
         int(os.environ["SELFPLAY_TEMPERATURE_TRAINED_EPISODES"]),
         0,
     )
-<<<<<<< HEAD
     schedule_start_episodes = max(
         int(os.environ["SELFPLAY_TEMPERATURE_START_EPISODES"]),
         0,
@@ -2347,28 +2342,18 @@ def _selfplay_action_temperature(context: _SearchContext) -> float | None:
     total_episodes = max(
         int(os.environ["SELFPLAY_TEMPERATURE_TOTAL_EPISODES"]),
         schedule_start_episodes + 1,
-=======
-    total_episodes = max(
-        int(os.environ["SELFPLAY_TEMPERATURE_TOTAL_EPISODES"]),
-        1,
->>>>>>> 259fb82 (学習率の変化，温度の変化の追加)
     )
     max_turns = max(
         int(os.environ["SELFPLAY_TEMPERATURE_MAX_TURNS"]),
         1,
     )
 
-<<<<<<< HEAD
     episode_span = max(total_episodes - schedule_start_episodes, 1)
     episode_progress = min(
         max(
             (trained_episodes - schedule_start_episodes) / episode_span,
             0.0,
         ),
-=======
-    episode_progress = min(
-        max(trained_episodes / total_episodes, 0.0),
->>>>>>> 259fb82 (学習率の変化，温度の変化の追加)
         1.0,
     )
     turn_progress = min(
@@ -2381,7 +2366,6 @@ def _selfplay_action_temperature(context: _SearchContext) -> float | None:
     )
 
 
-<<<<<<< HEAD
 def _sample_child_by_visit_prior_temperature(
     children: list[_Child],
     temperature: float,
@@ -2411,49 +2395,15 @@ def _sample_child_by_visit_prior_temperature(
             zip(children, effective_counts, strict=True),
             key=lambda pair: pair[1],
         )[0]
-=======
-def _sample_child_by_visit_temperature(
-    children: list[_Child],
-    temperature: float,
-) -> _Child | None:
-    """visit countを N^(1/tau) に変換して子ノードをサンプリングする。"""
-    visited_children = [
-        child
-        for child in children
-        if child.node is not None
-    ]
-    if not visited_children:
-        return None
-
-    if temperature <= 1e-8:
-        return max(
-            visited_children,
-            key=lambda child: child.node.visit,
-        )
-
-    visits = [
-        max(int(child.node.visit), 0)
-        for child in visited_children
-    ]
-    if max(visits, default=0) <= 0:
-        return None
->>>>>>> 259fb82 (学習率の変化，温度の変化の追加)
 
     inverse_temperature = 1.0 / temperature
     log_weights = [
         (
             -math.inf
-<<<<<<< HEAD
             if count <= 0.0
             else inverse_temperature * math.log(count)
         )
         for count in effective_counts
-=======
-            if visit <= 0
-            else inverse_temperature * math.log(visit)
-        )
-        for visit in visits
->>>>>>> 259fb82 (学習率の変化，温度の変化の追加)
     ]
     max_log_weight = max(log_weights)
     weights = [
@@ -2465,11 +2415,7 @@ def _sample_child_by_visit_temperature(
         for log_weight in log_weights
     ]
     return random.choices(
-<<<<<<< HEAD
         children,
-=======
-        visited_children,
->>>>>>> 259fb82 (学習率の変化，温度の変化の追加)
         weights=weights,
         k=1,
     )[0]
@@ -2502,7 +2448,6 @@ def _finish_search(context: _SearchContext) -> list[int]:
 
     temperature = _selfplay_action_temperature(context)
     if temperature is not None:
-<<<<<<< HEAD
         prior_pseudocount = float(
             os.environ.get(
                 "SELFPLAY_TEMPERATURE_PRIOR_PSEUDOCOUNT",
@@ -2513,11 +2458,6 @@ def _finish_search(context: _SearchContext) -> list[int]:
             root.children,
             temperature,
             prior_pseudocount,
-=======
-        sampled_child = _sample_child_by_visit_temperature(
-            root.children,
-            temperature,
->>>>>>> 259fb82 (学習率の変化，温度の変化の追加)
         )
         if sampled_child is not None:
             max_child = sampled_child
