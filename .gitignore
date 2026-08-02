@@ -16,3 +16,6 @@ shards/
 
 pipeline/gen_*/
 !pipeline/gen_000/
+
+tools/deck_generator/daily_dataset/
+tools/deck_generator/generated/deck_candidates.jsonl
