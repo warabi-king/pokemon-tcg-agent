@@ -166,6 +166,19 @@ python agents/rl_mcts_sample/train/train.py
 python agents/rl_mcts/train/train.py --plot
 ```
 
+`rl_mcts` の相手手札予測モデルを学習する場合（PowerShell）:
+
+```powershell
+.\.venv\Scripts\python.exe agents\rl_mcts\train\train_hand_model.py `
+  --max-episodes 1300 `
+  --max-samples 30000 `
+  --epochs 5 `
+  --batch-size 128 `
+  --hidden-size 64
+```
+
+詳細は `agents/rl_mcts/README.md` の「手札予測モデルの学習」を参照してください。
+
 PyTorchなど特定の学習・推論依存があるagentは、必要な依存関係を `requirements.txt` と
 各agentの `README.md` に明記します。
 

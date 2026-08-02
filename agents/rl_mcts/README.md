@@ -19,10 +19,16 @@ agents/rl_mcts/
     rl_mcts/
       agent.py
       deck.py
+      deck_candidates_by_wins.jsonl
+      deck_reconstructor.py
       features.py
+      hand_model.pth
       mcts.py
       model.py
+      opponent_hand.py
   train/
+    train_hand_model.py
+    test_opponent_hand.py
     train.py
     plot_metrics.py
     checkpoints/
@@ -35,7 +41,7 @@ agents/rl_mcts/
 
 MCTS開始時の非公開カードは、固定カードIDではなく次の手順で具体化します。
 
-1. 公開された相手カードを `deck_generator_dbrecon` 由来の633候補と照合する。
+1. 公開された相手カードを `deck_generator_dbrecon` 由来の738候補と照合する。
 2. ログのcard ID/serialから、公開サーチ後も手札に残っているカードを追跡する。
 3. 候補60枚から公開領域と確定手札を引き、学習済み保持スコアで未知手札を抽出する。
 4. 残余カードをサイドと山札へ無作為配置し、カード枚数の整合性を保つ。
@@ -44,19 +50,63 @@ MCTS開始時の非公開カードは、固定カードIDではなく次の手�
 手札モデルはカードを直接生成せず、残存カードの抽出確率だけを補正します。そのため、
 候補デッキにないカードや残存枚数を超えるカードは生成されません。
 
-学習データは `daily_dataset` の各プレイヤー自身の手札を教師にし、相関の強い重複を
-減らすため、各プレイヤー・各ターンの最初と最後のMAIN局面だけを使います。指定した
-episode上限は日付ZIPへ均等配分し、特定の日のデッキ分布に偏らないようにします。
+## 手札予測モデルの学習
+
+学習データは `tools/deck_generator/daily_dataset/*/*.zip` の各プレイヤー自身の手札を
+教師にします。相関の強い重複を減らすため、各プレイヤー・各ターンの最初と最後の
+MAIN局面だけを使います。episode上限とsample上限は日付ZIPへ均等配分し、特定の日の
+デッキ分布に偏らないようにします。ZIPは展開せずに直接読みます。
+
+リポジトリ直下で次を実行します。これは現在同梱しているモデルの学習条件です。
 
 ```powershell
 .\.venv\Scripts\python.exe agents\rl_mcts\train\train_hand_model.py `
-  --max-episodes 2000 `
+  --max-episodes 1300 `
   --max-samples 30000 `
-  --epochs 5
+  --epochs 5 `
+  --batch-size 128 `
+  --hidden-size 64 `
+  --seed 20260801 `
+  --device cpu
 ```
 
-出力される `src/rl_mcts/hand_model.pth` は提出アーカイブに含まれます。モデルがない場合は
-保持スコアを0として、残存カード枚数だけに比例する制約付きサンプリングへフォールバックします。
+既定の入力と出力:
+
+```text
+入力: tools/deck_generator/daily_dataset/*/*.zip
+出力: agents/rl_mcts/src/rl_mcts/hand_model.pth
+```
+
+出力先に既存モデルがある場合、学習完了時に上書きします。必要なら実行前に退避してください。
+`hand_model.pth` は提出アーカイブに含まれます。モデルがない場合は保持スコアを0として、
+残存カード枚数だけに比例する制約付きサンプリングへフォールバックします。
+
+主なオプション:
+
+- `--dataset-dir PATH`: daily datasetのディレクトリ。
+- `--output PATH`: 学習済みモデルの出力先。
+- `--max-episodes N`: 読み込む最大試合数。既定値は2000。
+- `--max-samples N`: 学習・検証を合わせた最大局面数。既定値は50000。
+- `--epochs N`: 学習epoch数。既定値は5。
+- `--batch-size N`: batch size。既定値は128。
+- `--hidden-size N`: 手札保持モデルの隠れ層サイズ。既定値は96。
+- `--lr N`: learning rate。既定値は`3e-4`。
+- `--seed N`: 乱数seed。既定値は`20260801`。
+- `--device cpu|gpu`: 学習デバイス。既定値はCPU。CUDAが使える場合だけGPUを指定する。
+
+全オプションの確認:
+
+```powershell
+.\.venv\Scripts\python.exe agents\rl_mcts\train\train_hand_model.py --help
+```
+
+学習中はtrain/validation loss、モデルあり・なしの手札multiset一致率を標準出力へ表示します。
+
+手札予測の単体テスト:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest agents\rl_mcts\train\test_opponent_hand.py
+```
 
 ## 学習の流れ
 
