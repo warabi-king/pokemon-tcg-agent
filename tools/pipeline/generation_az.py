@@ -45,22 +45,33 @@ def _load_model(path: Path, device: torch.device):
     return model.to(device)
 
 
+_METRICS_HEADER = "epoch,batches,loss,loss_value,loss_policy\n"
+
+
 def _train_side(model, samples, out_path: Path, device: torch.device,
-                epochs: int, batch_size: int, lr: float, metrics_file: Path) -> bool:
+                epochs: int, batch_size: int, lr: float, metrics_file: Path,
+                label: str = "") -> bool:
     """1モデルを AlphaZero 損失で epochs 回学習して保存。成功時 True。
 
     サンプルが batch_size 未満なら学習せず False（呼び出し側で前世代を引き継ぐ）。
     model は既に前世代の重みなので、そのまま学習＝warm-start 継続学習になる。
+    label はログ表示用の識別子（例: "gen_az 0 cl00/self"）。
     """
     if len(samples) < batch_size:
         return False
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     metrics_file.parent.mkdir(parents=True, exist_ok=True)
-    for ep in range(epochs):
-        stats = train_one_iteration_local(
-            model, optimizer, samples, batch_size, device, _API_MOD,
-        )
-        with open(metrics_file, "a", encoding="utf-8") as f:
+    is_new = not metrics_file.exists()
+    with open(metrics_file, "a", encoding="utf-8") as f:
+        if is_new:
+            f.write(_METRICS_HEADER)
+        for ep in range(epochs):
+            stats = train_one_iteration_local(
+                model, optimizer, samples, batch_size, device, _API_MOD,
+            )
+            print(f"  [{label}] epoch={ep} loss={stats.loss:.4f} "
+                  f"loss_value={stats.loss_value:.4f} loss_policy={stats.loss_policy:.4f} "
+                  f"batches={stats.batches}", flush=True)
             f.write(f"{ep},{stats.batches},{stats.loss:.6f},"
                     f"{stats.loss_value:.6f},{stats.loss_policy:.6f}\n")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,6 +143,7 @@ def run_generation_az(g: int, root: Path | None = None) -> Path:
                 model, sample_list, out_pth, device,
                 epochs=config.EPOCHS_PER_GEN, batch_size=config.BATCH_SIZE,
                 lr=config.LR, metrics_file=logs_dir / f"{name}_{side}.csv",
+                label=f"gen_az {g} {name}/{side}",
             )
             if trained:
                 print(f"[gen_az {g}] {name}/{side}: 学習 samples={len(sample_list)}")
