@@ -1,0 +1,1371 @@
+PIPE_GEN_BACKEND=az PIPE_GENERATIONS=5 PIPE_LEAGUE_GAMES=5 \
+PIPE_LEAGUE_SEARCH_COUNT=10 PIPE_AZ_COLLECT_WORKERS=2 PIPE_EPOCHS_PER_GEN=3 \
+  python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
+  --no-keep-intermediate
+=== pipeline config ===
+  GENERATIONS=5 EPOCHS_PER_GEN=3 PHASE0_EPOCHS=5
+  LR=0.0003 BATCH_SIZE=128 SEARCH_COUNT=50
+  SIM_THRESHOLD=0.75 WARM_START=1 SHARD_SIZE=20000 WORKERS=8
+  ROOT=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline
+  OFFICIAL_EPISODES=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/episodes/official
+  DECKGEN_JSONL=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/tools/deck_generator/generated/deck_candidates_by_wins.jsonl
+  LEAGUE_CMD=(stub)
+
+[orchestrate] 世代バックエンド=az（batched gpu-tree + AlphaZero, self/opp二重）
+
+========== generation 0 / 5 ==========
+[gen_az 0] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 0] 対戦完了=673/680 self合計=105722 opp合計=105722
+  [gen_az 0 cl00/self] epoch=0 loss=0.2932 loss_value=0.0528 loss_policy=0.2404 batches=58
+  [gen_az 0 cl00/self] epoch=1 loss=0.1367 loss_value=0.0476 loss_policy=0.0891 batches=58
+  [gen_az 0 cl00/self] epoch=2 loss=0.1271 loss_value=0.0408 loss_policy=0.0863 batches=58
+[gen_az 0] cl00/self: 学習 samples=7425
+  [gen_az 0 cl00/opp] epoch=0 loss=0.3375 loss_value=0.0631 loss_policy=0.2744 batches=43
+  [gen_az 0 cl00/opp] epoch=1 loss=0.1250 loss_value=0.0576 loss_policy=0.0674 batches=43
+  [gen_az 0 cl00/opp] epoch=2 loss=0.1134 loss_value=0.0537 loss_policy=0.0597 batches=43
+[gen_az 0] cl00/opp: 学習 samples=5626
+  [gen_az 0 cl01/self] epoch=0 loss=0.1904 loss_value=0.0504 loss_policy=0.1400 batches=61
+  [gen_az 0 cl01/self] epoch=1 loss=0.1003 loss_value=0.0468 loss_policy=0.0536 batches=61
+  [gen_az 0 cl01/self] epoch=2 loss=0.0972 loss_value=0.0448 loss_policy=0.0524 batches=61
+[gen_az 0] cl01/self: 学習 samples=7911
+  [gen_az 0 cl01/opp] epoch=0 loss=0.3191 loss_value=0.0842 loss_policy=0.2349 batches=56
+  [gen_az 0 cl01/opp] epoch=1 loss=0.1344 loss_value=0.0680 loss_policy=0.0663 batches=56
+  [gen_az 0 cl01/opp] epoch=2 loss=0.1238 loss_value=0.0607 loss_policy=0.0632 batches=56
+[gen_az 0] cl01/opp: 学習 samples=7216
+  [gen_az 0 cl02/self] epoch=0 loss=0.2623 loss_value=0.0479 loss_policy=0.2144 batches=41
+  [gen_az 0 cl02/self] epoch=1 loss=0.1086 loss_value=0.0397 loss_policy=0.0689 batches=41
+  [gen_az 0 cl02/self] epoch=2 loss=0.1009 loss_value=0.0341 loss_policy=0.0668 batches=41
+[gen_az 0] cl02/self: 学習 samples=5337
+  [gen_az 0 cl02/opp] epoch=0 loss=0.3160 loss_value=0.0816 loss_policy=0.2343 batches=55
+  [gen_az 0 cl02/opp] epoch=1 loss=0.1245 loss_value=0.0590 loss_policy=0.0655 batches=55
+  [gen_az 0 cl02/opp] epoch=2 loss=0.1146 loss_value=0.0519 loss_policy=0.0627 batches=55
+[gen_az 0] cl02/opp: 学習 samples=7047
+  [gen_az 0 cl03/self] epoch=0 loss=0.3214 loss_value=0.0454 loss_policy=0.2760 batches=35
+  [gen_az 0 cl03/self] epoch=1 loss=0.0987 loss_value=0.0386 loss_policy=0.0601 batches=35
+  [gen_az 0 cl03/self] epoch=2 loss=0.0808 loss_value=0.0313 loss_policy=0.0495 batches=35
+[gen_az 0] cl03/self: 学習 samples=4582
+  [gen_az 0 cl03/opp] epoch=0 loss=0.3009 loss_value=0.0783 loss_policy=0.2226 batches=45
+  [gen_az 0 cl03/opp] epoch=1 loss=0.1158 loss_value=0.0556 loss_policy=0.0602 batches=45
+  [gen_az 0 cl03/opp] epoch=2 loss=0.1055 loss_value=0.0476 loss_policy=0.0578 batches=45
+[gen_az 0] cl03/opp: 学習 samples=5872
+  [gen_az 0 cl04/self] epoch=0 loss=0.3500 loss_value=0.0418 loss_policy=0.3082 batches=52
+  [gen_az 0 cl04/self] epoch=1 loss=0.1067 loss_value=0.0378 loss_policy=0.0689 batches=52
+  [gen_az 0 cl04/self] epoch=2 loss=0.1032 loss_value=0.0373 loss_policy=0.0659 batches=52
+[gen_az 0] cl04/self: 学習 samples=6778
+  [gen_az 0 cl04/opp] epoch=0 loss=0.3045 loss_value=0.0716 loss_policy=0.2328 batches=56
+  [gen_az 0 cl04/opp] epoch=1 loss=0.1265 loss_value=0.0598 loss_policy=0.0667 batches=56
+  [gen_az 0 cl04/opp] epoch=2 loss=0.1198 loss_value=0.0557 loss_policy=0.0641 batches=56
+[gen_az 0] cl04/opp: 学習 samples=7174
+  [gen_az 0 cl05/self] epoch=0 loss=0.3162 loss_value=0.0484 loss_policy=0.2678 batches=58
+  [gen_az 0 cl05/self] epoch=1 loss=0.1269 loss_value=0.0450 loss_policy=0.0819 batches=58
+  [gen_az 0 cl05/self] epoch=2 loss=0.1199 loss_value=0.0407 loss_policy=0.0791 batches=58
+[gen_az 0] cl05/self: 学習 samples=7540
+  [gen_az 0 cl05/opp] epoch=0 loss=0.3051 loss_value=0.0724 loss_policy=0.2327 batches=51
+  [gen_az 0 cl05/opp] epoch=1 loss=0.1138 loss_value=0.0512 loss_policy=0.0625 batches=51
+  [gen_az 0 cl05/opp] epoch=2 loss=0.1052 loss_value=0.0448 loss_policy=0.0604 batches=51
+[gen_az 0] cl05/opp: 学習 samples=6627
+  [gen_az 0 cl06/self] epoch=0 loss=0.3701 loss_value=0.0392 loss_policy=0.3310 batches=46
+  [gen_az 0 cl06/self] epoch=1 loss=0.0947 loss_value=0.0345 loss_policy=0.0602 batches=46
+  [gen_az 0 cl06/self] epoch=2 loss=0.0872 loss_value=0.0312 loss_policy=0.0560 batches=46
+[gen_az 0] cl06/self: 学習 samples=5947
+  [gen_az 0 cl06/opp] epoch=0 loss=0.3444 loss_value=0.0786 loss_policy=0.2659 batches=47
+  [gen_az 0 cl06/opp] epoch=1 loss=0.1338 loss_value=0.0602 loss_policy=0.0736 batches=47
+  [gen_az 0 cl06/opp] epoch=2 loss=0.1233 loss_value=0.0541 loss_policy=0.0693 batches=47
+[gen_az 0] cl06/opp: 学習 samples=6078
+  [gen_az 0 cl07/self] epoch=0 loss=0.2292 loss_value=0.0429 loss_policy=0.1863 batches=68
+  [gen_az 0 cl07/self] epoch=1 loss=0.1006 loss_value=0.0386 loss_policy=0.0621 batches=68
+  [gen_az 0 cl07/self] epoch=2 loss=0.0953 loss_value=0.0349 loss_policy=0.0604 batches=68
+[gen_az 0] cl07/self: 学習 samples=8826
+  [gen_az 0 cl07/opp] epoch=0 loss=0.3174 loss_value=0.0742 loss_policy=0.2432 batches=50
+  [gen_az 0 cl07/opp] epoch=1 loss=0.1325 loss_value=0.0632 loss_policy=0.0693 batches=50
+  [gen_az 0 cl07/opp] epoch=2 loss=0.1244 loss_value=0.0587 loss_policy=0.0657 batches=50
+[gen_az 0] cl07/opp: 学習 samples=6477
+  [gen_az 0 cl08/self] epoch=0 loss=0.3029 loss_value=0.0464 loss_policy=0.2565 batches=40
+  [gen_az 0 cl08/self] epoch=1 loss=0.0932 loss_value=0.0393 loss_policy=0.0539 batches=40
+  [gen_az 0 cl08/self] epoch=2 loss=0.0814 loss_value=0.0334 loss_policy=0.0480 batches=40
+[gen_az 0] cl08/self: 学習 samples=5122
+  [gen_az 0 cl08/opp] epoch=0 loss=0.3393 loss_value=0.0842 loss_policy=0.2551 batches=46
+  [gen_az 0 cl08/opp] epoch=1 loss=0.1522 loss_value=0.0711 loss_policy=0.0811 batches=46
+  [gen_az 0 cl08/opp] epoch=2 loss=0.1396 loss_value=0.0624 loss_policy=0.0772 batches=46
+[gen_az 0] cl08/opp: 学習 samples=5930
+  [gen_az 0 cl09/self] epoch=0 loss=0.3394 loss_value=0.0497 loss_policy=0.2897 batches=57
+  [gen_az 0 cl09/self] epoch=1 loss=0.1106 loss_value=0.0405 loss_policy=0.0701 batches=57
+  [gen_az 0 cl09/self] epoch=2 loss=0.1002 loss_value=0.0331 loss_policy=0.0671 batches=57
+[gen_az 0] cl09/self: 学習 samples=7334
+  [gen_az 0 cl09/opp] epoch=0 loss=0.3560 loss_value=0.0943 loss_policy=0.2617 batches=51
+  [gen_az 0 cl09/opp] epoch=1 loss=0.1548 loss_value=0.0759 loss_policy=0.0789 batches=51
+  [gen_az 0 cl09/opp] epoch=2 loss=0.1438 loss_value=0.0696 loss_policy=0.0742 batches=51
+[gen_az 0] cl09/opp: 学習 samples=6620
+  [gen_az 0 cl10/self] epoch=0 loss=0.3508 loss_value=0.0523 loss_policy=0.2985 batches=52
+  [gen_az 0 cl10/self] epoch=1 loss=0.1184 loss_value=0.0490 loss_policy=0.0695 batches=52
+  [gen_az 0 cl10/self] epoch=2 loss=0.1115 loss_value=0.0458 loss_policy=0.0657 batches=52
+[gen_az 0] cl10/self: 学習 samples=6751
+  [gen_az 0 cl10/opp] epoch=0 loss=0.3404 loss_value=0.0811 loss_policy=0.2593 batches=55
+  [gen_az 0 cl10/opp] epoch=1 loss=0.1314 loss_value=0.0660 loss_policy=0.0654 batches=55
+  [gen_az 0 cl10/opp] epoch=2 loss=0.1242 loss_value=0.0616 loss_policy=0.0626 batches=55
+[gen_az 0] cl10/opp: 学習 samples=7047
+  [gen_az 0 cl11/self] epoch=0 loss=0.2688 loss_value=0.0487 loss_policy=0.2200 batches=41
+  [gen_az 0 cl11/self] epoch=1 loss=0.1129 loss_value=0.0399 loss_policy=0.0731 batches=41
+  [gen_az 0 cl11/self] epoch=2 loss=0.1073 loss_value=0.0349 loss_policy=0.0723 batches=41
+[gen_az 0] cl11/self: 学習 samples=5368
+  [gen_az 0 cl11/opp] epoch=0 loss=0.3703 loss_value=0.0847 loss_policy=0.2856 batches=50
+  [gen_az 0 cl11/opp] epoch=1 loss=0.1417 loss_value=0.0660 loss_policy=0.0757 batches=50
+  [gen_az 0 cl11/opp] epoch=2 loss=0.1313 loss_value=0.0597 loss_policy=0.0716 batches=50
+[gen_az 0] cl11/opp: 学習 samples=6454
+  [gen_az 0 cl12/self] epoch=0 loss=0.2631 loss_value=0.0606 loss_policy=0.2025 batches=48
+  [gen_az 0 cl12/self] epoch=1 loss=0.1223 loss_value=0.0558 loss_policy=0.0665 batches=48
+  [gen_az 0 cl12/self] epoch=2 loss=0.1141 loss_value=0.0499 loss_policy=0.0642 batches=48
+[gen_az 0] cl12/self: 学習 samples=6168
+  [gen_az 0 cl12/opp] epoch=0 loss=0.4099 loss_value=0.0819 loss_policy=0.3280 batches=54
+  [gen_az 0 cl12/opp] epoch=1 loss=0.1447 loss_value=0.0654 loss_policy=0.0793 batches=54
+  [gen_az 0 cl12/opp] epoch=2 loss=0.1284 loss_value=0.0589 loss_policy=0.0695 batches=54
+[gen_az 0] cl12/opp: 学習 samples=6938
+  [gen_az 0 cl13/self] epoch=0 loss=0.2484 loss_value=0.0859 loss_policy=0.1625 batches=44
+  [gen_az 0 cl13/self] epoch=1 loss=0.1757 loss_value=0.0789 loss_policy=0.0968 batches=44
+  [gen_az 0 cl13/self] epoch=2 loss=0.1723 loss_value=0.0780 loss_policy=0.0943 batches=44
+[gen_az 0] cl13/self: 学習 samples=5709
+  [gen_az 0 cl13/opp] epoch=0 loss=0.4624 loss_value=0.0984 loss_policy=0.3640 batches=57
+  [gen_az 0 cl13/opp] epoch=1 loss=0.1627 loss_value=0.0742 loss_policy=0.0885 batches=57
+  [gen_az 0 cl13/opp] epoch=2 loss=0.1409 loss_value=0.0674 loss_policy=0.0735 batches=57
+[gen_az 0] cl13/opp: 学習 samples=7393
+  [gen_az 0 cl14/self] epoch=0 loss=0.2139 loss_value=0.0539 loss_policy=0.1600 batches=72
+  [gen_az 0 cl14/self] epoch=1 loss=0.1222 loss_value=0.0505 loss_policy=0.0716 batches=72
+  [gen_az 0 cl14/self] epoch=2 loss=0.1176 loss_value=0.0477 loss_policy=0.0699 batches=72
+[gen_az 0] cl14/self: 学習 samples=9340
+  [gen_az 0 cl14/opp] epoch=0 loss=0.4098 loss_value=0.1054 loss_policy=0.3043 batches=52
+  [gen_az 0 cl14/opp] epoch=1 loss=0.1599 loss_value=0.0767 loss_policy=0.0832 batches=52
+  [gen_az 0 cl14/opp] epoch=2 loss=0.1443 loss_value=0.0644 loss_policy=0.0799 batches=52
+[gen_az 0] cl14/opp: 学習 samples=6757
+  [gen_az 0 cl15/self] epoch=0 loss=0.1709 loss_value=0.0656 loss_policy=0.1053 batches=43
+  [gen_az 0 cl15/self] epoch=1 loss=0.1227 loss_value=0.0624 loss_policy=0.0603 batches=43
+  [gen_az 0 cl15/self] epoch=2 loss=0.1179 loss_value=0.0588 loss_policy=0.0591 batches=43
+[gen_az 0] cl15/self: 学習 samples=5584
+  [gen_az 0 cl15/opp] epoch=0 loss=0.3627 loss_value=0.0973 loss_policy=0.2654 batches=50
+  [gen_az 0 cl15/opp] epoch=1 loss=0.1639 loss_value=0.0839 loss_policy=0.0800 batches=50
+  [gen_az 0 cl15/opp] epoch=2 loss=0.1531 loss_value=0.0771 loss_policy=0.0760 batches=50
+[gen_az 0] cl15/opp: 学習 samples=6466
+[gen_az 0] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_001
+
+========== generation 1 / 5 ==========
+[gen_az 1] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 1] 対戦完了=668/680 self合計=112361 opp合計=112361
+  [gen_az 1 cl00/self] epoch=0 loss=0.0850 loss_value=0.0341 loss_policy=0.0509 batches=59
+  [gen_az 1 cl00/self] epoch=1 loss=0.0775 loss_value=0.0278 loss_policy=0.0498 batches=59
+  [gen_az 1 cl00/self] epoch=2 loss=0.0721 loss_value=0.0233 loss_policy=0.0488 batches=59
+[gen_az 1] cl00/self: 学習 samples=7675
+  [gen_az 1 cl00/opp] epoch=0 loss=0.1228 loss_value=0.0689 loss_policy=0.0539 batches=44
+  [gen_az 1 cl00/opp] epoch=1 loss=0.1049 loss_value=0.0524 loss_policy=0.0525 batches=44
+  [gen_az 1 cl00/opp] epoch=2 loss=0.0975 loss_value=0.0460 loss_policy=0.0515 batches=44
+[gen_az 1] cl00/opp: 学習 samples=5746
+  [gen_az 1 cl01/self] epoch=0 loss=0.0891 loss_value=0.0443 loss_policy=0.0448 batches=61
+  [gen_az 1 cl01/self] epoch=1 loss=0.0828 loss_value=0.0385 loss_policy=0.0443 batches=61
+  [gen_az 1 cl01/self] epoch=2 loss=0.0770 loss_value=0.0329 loss_policy=0.0441 batches=61
+[gen_az 1] cl01/self: 学習 samples=7901
+  [gen_az 1 cl01/opp] epoch=0 loss=0.1196 loss_value=0.0634 loss_policy=0.0562 batches=56
+  [gen_az 1 cl01/opp] epoch=1 loss=0.1037 loss_value=0.0484 loss_policy=0.0553 batches=56
+  [gen_az 1 cl01/opp] epoch=2 loss=0.0957 loss_value=0.0407 loss_policy=0.0551 batches=56
+[gen_az 1] cl01/opp: 学習 samples=7183
+  [gen_az 1 cl02/self] epoch=0 loss=0.0920 loss_value=0.0353 loss_policy=0.0567 batches=44
+  [gen_az 1 cl02/self] epoch=1 loss=0.0779 loss_value=0.0227 loss_policy=0.0553 batches=44
+  [gen_az 1 cl02/self] epoch=2 loss=0.0724 loss_value=0.0176 loss_policy=0.0548 batches=44
+[gen_az 1] cl02/self: 学習 samples=5681
+  [gen_az 1 cl02/opp] epoch=0 loss=0.1161 loss_value=0.0622 loss_policy=0.0539 batches=57
+  [gen_az 1 cl02/opp] epoch=1 loss=0.0987 loss_value=0.0465 loss_policy=0.0521 batches=57
+  [gen_az 1 cl02/opp] epoch=2 loss=0.0880 loss_value=0.0363 loss_policy=0.0517 batches=57
+[gen_az 1] cl02/opp: 学習 samples=7350
+  [gen_az 1 cl03/self] epoch=0 loss=0.0886 loss_value=0.0375 loss_policy=0.0511 batches=40
+  [gen_az 1 cl03/self] epoch=1 loss=0.0766 loss_value=0.0268 loss_policy=0.0499 batches=40
+  [gen_az 1 cl03/self] epoch=2 loss=0.0698 loss_value=0.0204 loss_policy=0.0494 batches=40
+[gen_az 1] cl03/self: 学習 samples=5231
+  [gen_az 1 cl03/opp] epoch=0 loss=0.1169 loss_value=0.0670 loss_policy=0.0499 batches=50
+  [gen_az 1 cl03/opp] epoch=1 loss=0.1035 loss_value=0.0543 loss_policy=0.0492 batches=50
+  [gen_az 1 cl03/opp] epoch=2 loss=0.0930 loss_value=0.0446 loss_policy=0.0484 batches=50
+[gen_az 1] cl03/opp: 学習 samples=6454
+  [gen_az 1 cl04/self] epoch=0 loss=0.0891 loss_value=0.0358 loss_policy=0.0533 batches=58
+  [gen_az 1 cl04/self] epoch=1 loss=0.0842 loss_value=0.0317 loss_policy=0.0525 batches=58
+  [gen_az 1 cl04/self] epoch=2 loss=0.0811 loss_value=0.0290 loss_policy=0.0521 batches=58
+[gen_az 1] cl04/self: 学習 samples=7505
+  [gen_az 1 cl04/opp] epoch=0 loss=0.1125 loss_value=0.0594 loss_policy=0.0531 batches=57
+  [gen_az 1 cl04/opp] epoch=1 loss=0.0985 loss_value=0.0504 loss_policy=0.0481 batches=57
+  [gen_az 1 cl04/opp] epoch=2 loss=0.0933 loss_value=0.0474 loss_policy=0.0459 batches=57
+[gen_az 1] cl04/opp: 学習 samples=7378
+  [gen_az 1 cl05/self] epoch=0 loss=0.0822 loss_value=0.0337 loss_policy=0.0485 batches=67
+  [gen_az 1 cl05/self] epoch=1 loss=0.0738 loss_value=0.0260 loss_policy=0.0479 batches=67
+  [gen_az 1 cl05/self] epoch=2 loss=0.0674 loss_value=0.0200 loss_policy=0.0473 batches=67
+[gen_az 1] cl05/self: 学習 samples=8618
+  [gen_az 1 cl05/opp] epoch=0 loss=0.1109 loss_value=0.0617 loss_policy=0.0493 batches=58
+  [gen_az 1 cl05/opp] epoch=1 loss=0.0952 loss_value=0.0466 loss_policy=0.0487 batches=58
+  [gen_az 1 cl05/opp] epoch=2 loss=0.0864 loss_value=0.0384 loss_policy=0.0480 batches=58
+[gen_az 1] cl05/opp: 学習 samples=7525
+  [gen_az 1 cl06/self] epoch=0 loss=0.0885 loss_value=0.0335 loss_policy=0.0550 batches=48
+  [gen_az 1 cl06/self] epoch=1 loss=0.0804 loss_value=0.0256 loss_policy=0.0548 batches=48
+  [gen_az 1 cl06/self] epoch=2 loss=0.0754 loss_value=0.0216 loss_policy=0.0538 batches=48
+[gen_az 1] cl06/self: 学習 samples=6255
+  [gen_az 1 cl06/opp] epoch=0 loss=0.1118 loss_value=0.0640 loss_policy=0.0478 batches=51
+  [gen_az 1 cl06/opp] epoch=1 loss=0.0913 loss_value=0.0442 loss_policy=0.0471 batches=51
+  [gen_az 1 cl06/opp] epoch=2 loss=0.0842 loss_value=0.0376 loss_policy=0.0466 batches=51
+[gen_az 1] cl06/opp: 学習 samples=6623
+  [gen_az 1 cl07/self] epoch=0 loss=0.0901 loss_value=0.0399 loss_policy=0.0502 batches=69
+  [gen_az 1 cl07/self] epoch=1 loss=0.0823 loss_value=0.0330 loss_policy=0.0493 batches=69
+  [gen_az 1 cl07/self] epoch=2 loss=0.0745 loss_value=0.0257 loss_policy=0.0488 batches=69
+[gen_az 1] cl07/self: 学習 samples=8947
+  [gen_az 1 cl07/opp] epoch=0 loss=0.1113 loss_value=0.0639 loss_policy=0.0474 batches=55
+  [gen_az 1 cl07/opp] epoch=1 loss=0.0949 loss_value=0.0481 loss_policy=0.0469 batches=55
+  [gen_az 1 cl07/opp] epoch=2 loss=0.0923 loss_value=0.0456 loss_policy=0.0467 batches=55
+[gen_az 1] cl07/opp: 学習 samples=7106
+  [gen_az 1 cl08/self] epoch=0 loss=0.0852 loss_value=0.0432 loss_policy=0.0419 batches=43
+  [gen_az 1 cl08/self] epoch=1 loss=0.0728 loss_value=0.0321 loss_policy=0.0407 batches=43
+  [gen_az 1 cl08/self] epoch=2 loss=0.0667 loss_value=0.0261 loss_policy=0.0406 batches=43
+[gen_az 1] cl08/self: 学習 samples=5603
+  [gen_az 1 cl08/opp] epoch=0 loss=0.1317 loss_value=0.0736 loss_policy=0.0581 batches=50
+  [gen_az 1 cl08/opp] epoch=1 loss=0.1178 loss_value=0.0612 loss_policy=0.0566 batches=50
+  [gen_az 1 cl08/opp] epoch=2 loss=0.1113 loss_value=0.0552 loss_policy=0.0561 batches=50
+[gen_az 1] cl08/opp: 学習 samples=6506
+  [gen_az 1 cl09/self] epoch=0 loss=0.0930 loss_value=0.0376 loss_policy=0.0554 batches=58
+  [gen_az 1 cl09/self] epoch=1 loss=0.0809 loss_value=0.0267 loss_policy=0.0542 batches=58
+  [gen_az 1 cl09/self] epoch=2 loss=0.0763 loss_value=0.0226 loss_policy=0.0537 batches=58
+[gen_az 1] cl09/self: 学習 samples=7475
+  [gen_az 1 cl09/opp] epoch=0 loss=0.1379 loss_value=0.0784 loss_policy=0.0594 batches=52
+  [gen_az 1 cl09/opp] epoch=1 loss=0.1251 loss_value=0.0671 loss_policy=0.0580 batches=52
+  [gen_az 1 cl09/opp] epoch=2 loss=0.1171 loss_value=0.0605 loss_policy=0.0566 batches=52
+[gen_az 1] cl09/opp: 学習 samples=6734
+  [gen_az 1 cl10/self] epoch=0 loss=0.0909 loss_value=0.0377 loss_policy=0.0532 batches=55
+  [gen_az 1 cl10/self] epoch=1 loss=0.0844 loss_value=0.0322 loss_policy=0.0522 batches=55
+  [gen_az 1 cl10/self] epoch=2 loss=0.0797 loss_value=0.0280 loss_policy=0.0516 batches=55
+[gen_az 1] cl10/self: 学習 samples=7084
+  [gen_az 1 cl10/opp] epoch=0 loss=0.1018 loss_value=0.0570 loss_policy=0.0448 batches=55
+  [gen_az 1 cl10/opp] epoch=1 loss=0.0919 loss_value=0.0479 loss_policy=0.0440 batches=55
+  [gen_az 1 cl10/opp] epoch=2 loss=0.0866 loss_value=0.0432 loss_policy=0.0434 batches=55
+[gen_az 1] cl10/opp: 学習 samples=7050
+  [gen_az 1 cl11/self] epoch=0 loss=0.1051 loss_value=0.0359 loss_policy=0.0691 batches=47
+  [gen_az 1 cl11/self] epoch=1 loss=0.0935 loss_value=0.0256 loss_policy=0.0679 batches=47
+  [gen_az 1 cl11/self] epoch=2 loss=0.0895 loss_value=0.0222 loss_policy=0.0674 batches=47
+[gen_az 1] cl11/self: 学習 samples=6036
+  [gen_az 1 cl11/opp] epoch=0 loss=0.1240 loss_value=0.0684 loss_policy=0.0555 batches=57
+  [gen_az 1 cl11/opp] epoch=1 loss=0.1137 loss_value=0.0590 loss_policy=0.0547 batches=57
+  [gen_az 1 cl11/opp] epoch=2 loss=0.1091 loss_value=0.0550 loss_policy=0.0541 batches=57
+[gen_az 1] cl11/opp: 学習 samples=7324
+  [gen_az 1 cl12/self] epoch=0 loss=0.1032 loss_value=0.0449 loss_policy=0.0583 batches=50
+  [gen_az 1 cl12/self] epoch=1 loss=0.0956 loss_value=0.0399 loss_policy=0.0556 batches=50
+  [gen_az 1 cl12/self] epoch=2 loss=0.0856 loss_value=0.0315 loss_policy=0.0541 batches=50
+[gen_az 1] cl12/self: 学習 samples=6523
+  [gen_az 1 cl12/opp] epoch=0 loss=0.1374 loss_value=0.0803 loss_policy=0.0571 batches=57
+  [gen_az 1 cl12/opp] epoch=1 loss=0.1140 loss_value=0.0586 loss_policy=0.0553 batches=57
+  [gen_az 1 cl12/opp] epoch=2 loss=0.1045 loss_value=0.0501 loss_policy=0.0545 batches=57
+[gen_az 1] cl12/opp: 学習 samples=7404
+  [gen_az 1 cl13/self] epoch=0 loss=0.1136 loss_value=0.0531 loss_policy=0.0605 batches=48
+  [gen_az 1 cl13/self] epoch=1 loss=0.1058 loss_value=0.0469 loss_policy=0.0589 batches=48
+  [gen_az 1 cl13/self] epoch=2 loss=0.1011 loss_value=0.0431 loss_policy=0.0580 batches=48
+[gen_az 1] cl13/self: 学習 samples=6181
+  [gen_az 1 cl13/opp] epoch=0 loss=0.1350 loss_value=0.0751 loss_policy=0.0599 batches=62
+  [gen_az 1 cl13/opp] epoch=1 loss=0.1171 loss_value=0.0588 loss_policy=0.0583 batches=62
+  [gen_az 1 cl13/opp] epoch=2 loss=0.1081 loss_value=0.0510 loss_policy=0.0571 batches=62
+[gen_az 1] cl13/opp: 学習 samples=7977
+  [gen_az 1 cl14/self] epoch=0 loss=0.1185 loss_value=0.0556 loss_policy=0.0629 batches=74
+  [gen_az 1 cl14/self] epoch=1 loss=0.1044 loss_value=0.0440 loss_policy=0.0604 batches=74
+  [gen_az 1 cl14/self] epoch=2 loss=0.0964 loss_value=0.0378 loss_policy=0.0586 batches=74
+[gen_az 1] cl14/self: 学習 samples=9493
+  [gen_az 1 cl14/opp] epoch=0 loss=0.1580 loss_value=0.0871 loss_policy=0.0709 batches=56
+  [gen_az 1 cl14/opp] epoch=1 loss=0.1452 loss_value=0.0756 loss_policy=0.0695 batches=56
+  [gen_az 1 cl14/opp] epoch=2 loss=0.1401 loss_value=0.0716 loss_policy=0.0685 batches=56
+[gen_az 1] cl14/opp: 学習 samples=7197
+  [gen_az 1 cl15/self] epoch=0 loss=0.1178 loss_value=0.0635 loss_policy=0.0543 batches=48
+  [gen_az 1 cl15/self] epoch=1 loss=0.1123 loss_value=0.0589 loss_policy=0.0534 batches=48
+  [gen_az 1 cl15/self] epoch=2 loss=0.1081 loss_value=0.0553 loss_policy=0.0528 batches=48
+[gen_az 1] cl15/self: 学習 samples=6153
+  [gen_az 1 cl15/opp] epoch=0 loss=0.1370 loss_value=0.0767 loss_policy=0.0604 batches=53
+  [gen_az 1 cl15/opp] epoch=1 loss=0.1236 loss_value=0.0643 loss_policy=0.0593 batches=53
+  [gen_az 1 cl15/opp] epoch=2 loss=0.1195 loss_value=0.0610 loss_policy=0.0586 batches=53
+[gen_az 1] cl15/opp: 学習 samples=6804
+[gen_az 1] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_002
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_001
+
+========== generation 2 / 5 ==========
+[gen_az 2] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 2] 対戦完了=667/680 self合計=110948 opp合計=110948
+  [gen_az 2 cl00/self] epoch=0 loss=0.0777 loss_value=0.0274 loss_policy=0.0503 batches=53
+  [gen_az 2 cl00/self] epoch=1 loss=0.0689 loss_value=0.0196 loss_policy=0.0493 batches=53
+  [gen_az 2 cl00/self] epoch=2 loss=0.0641 loss_value=0.0156 loss_policy=0.0485 batches=53
+[gen_az 2] cl00/self: 学習 samples=6801
+  [gen_az 2 cl00/opp] epoch=0 loss=0.1061 loss_value=0.0539 loss_policy=0.0522 batches=43
+  [gen_az 2 cl00/opp] epoch=1 loss=0.0906 loss_value=0.0398 loss_policy=0.0508 batches=43
+  [gen_az 2 cl00/opp] epoch=2 loss=0.0823 loss_value=0.0326 loss_policy=0.0498 batches=43
+[gen_az 2] cl00/opp: 学習 samples=5528
+  [gen_az 2 cl01/self] epoch=0 loss=0.0749 loss_value=0.0344 loss_policy=0.0405 batches=58
+  [gen_az 2 cl01/self] epoch=1 loss=0.0654 loss_value=0.0256 loss_policy=0.0398 batches=58
+  [gen_az 2 cl01/self] epoch=2 loss=0.0606 loss_value=0.0212 loss_policy=0.0394 batches=58
+[gen_az 2] cl01/self: 学習 samples=7529
+  [gen_az 2 cl01/opp] epoch=0 loss=0.1012 loss_value=0.0523 loss_policy=0.0488 batches=52
+  [gen_az 2 cl01/opp] epoch=1 loss=0.0844 loss_value=0.0363 loss_policy=0.0481 batches=52
+  [gen_az 2 cl01/opp] epoch=2 loss=0.0752 loss_value=0.0279 loss_policy=0.0473 batches=52
+[gen_az 2] cl01/opp: 学習 samples=6658
+  [gen_az 2 cl02/self] epoch=0 loss=0.0789 loss_value=0.0278 loss_policy=0.0511 batches=46
+  [gen_az 2 cl02/self] epoch=1 loss=0.0664 loss_value=0.0163 loss_policy=0.0501 batches=46
+  [gen_az 2 cl02/self] epoch=2 loss=0.0619 loss_value=0.0126 loss_policy=0.0493 batches=46
+[gen_az 2] cl02/self: 学習 samples=5921
+  [gen_az 2 cl02/opp] epoch=0 loss=0.1013 loss_value=0.0479 loss_policy=0.0533 batches=58
+  [gen_az 2 cl02/opp] epoch=1 loss=0.0840 loss_value=0.0322 loss_policy=0.0519 batches=58
+  [gen_az 2 cl02/opp] epoch=2 loss=0.0752 loss_value=0.0241 loss_policy=0.0511 batches=58
+[gen_az 2] cl02/opp: 学習 samples=7526
+  [gen_az 2 cl03/self] epoch=0 loss=0.0681 loss_value=0.0297 loss_policy=0.0384 batches=35
+  [gen_az 2 cl03/self] epoch=1 loss=0.0562 loss_value=0.0184 loss_policy=0.0378 batches=35
+  [gen_az 2 cl03/self] epoch=2 loss=0.0520 loss_value=0.0145 loss_policy=0.0375 batches=35
+[gen_az 2] cl03/self: 学習 samples=4540
+  [gen_az 2 cl03/opp] epoch=0 loss=0.0891 loss_value=0.0456 loss_policy=0.0435 batches=42
+  [gen_az 2 cl03/opp] epoch=1 loss=0.0731 loss_value=0.0306 loss_policy=0.0425 batches=42
+  [gen_az 2 cl03/opp] epoch=2 loss=0.0650 loss_value=0.0233 loss_policy=0.0417 batches=42
+[gen_az 2] cl03/opp: 学習 samples=5414
+  [gen_az 2 cl04/self] epoch=0 loss=0.0960 loss_value=0.0373 loss_policy=0.0587 batches=58
+  [gen_az 2 cl04/self] epoch=1 loss=0.0872 loss_value=0.0300 loss_policy=0.0572 batches=58
+  [gen_az 2 cl04/self] epoch=2 loss=0.0808 loss_value=0.0241 loss_policy=0.0567 batches=58
+[gen_az 2] cl04/self: 学習 samples=7507
+  [gen_az 2 cl04/opp] epoch=0 loss=0.1104 loss_value=0.0598 loss_policy=0.0505 batches=59
+  [gen_az 2 cl04/opp] epoch=1 loss=0.0915 loss_value=0.0426 loss_policy=0.0490 batches=59
+  [gen_az 2 cl04/opp] epoch=2 loss=0.0803 loss_value=0.0328 loss_policy=0.0474 batches=59
+[gen_az 2] cl04/opp: 学習 samples=7575
+  [gen_az 2 cl05/self] epoch=0 loss=0.0712 loss_value=0.0228 loss_policy=0.0484 batches=63
+  [gen_az 2 cl05/self] epoch=1 loss=0.0628 loss_value=0.0153 loss_policy=0.0476 batches=63
+  [gen_az 2 cl05/self] epoch=2 loss=0.0598 loss_value=0.0127 loss_policy=0.0471 batches=63
+[gen_az 2] cl05/self: 学習 samples=8164
+  [gen_az 2 cl05/opp] epoch=0 loss=0.0986 loss_value=0.0508 loss_policy=0.0478 batches=56
+  [gen_az 2 cl05/opp] epoch=1 loss=0.0852 loss_value=0.0383 loss_policy=0.0469 batches=56
+  [gen_az 2 cl05/opp] epoch=2 loss=0.0760 loss_value=0.0299 loss_policy=0.0461 batches=56
+[gen_az 2] cl05/opp: 学習 samples=7208
+  [gen_az 2 cl06/self] epoch=0 loss=0.0749 loss_value=0.0255 loss_policy=0.0494 batches=43
+  [gen_az 2 cl06/self] epoch=1 loss=0.0656 loss_value=0.0172 loss_policy=0.0484 batches=43
+  [gen_az 2 cl06/self] epoch=2 loss=0.0638 loss_value=0.0155 loss_policy=0.0483 batches=43
+[gen_az 2] cl06/self: 学習 samples=5539
+  [gen_az 2 cl06/opp] epoch=0 loss=0.0927 loss_value=0.0517 loss_policy=0.0410 batches=44
+  [gen_az 2 cl06/opp] epoch=1 loss=0.0781 loss_value=0.0379 loss_policy=0.0403 batches=44
+  [gen_az 2 cl06/opp] epoch=2 loss=0.0677 loss_value=0.0283 loss_policy=0.0394 batches=44
+[gen_az 2] cl06/opp: 学習 samples=5667
+  [gen_az 2 cl07/self] epoch=0 loss=0.0611 loss_value=0.0230 loss_policy=0.0381 batches=66
+  [gen_az 2 cl07/self] epoch=1 loss=0.0526 loss_value=0.0151 loss_policy=0.0375 batches=66
+  [gen_az 2 cl07/self] epoch=2 loss=0.0495 loss_value=0.0125 loss_policy=0.0370 batches=66
+[gen_az 2] cl07/self: 学習 samples=8473
+  [gen_az 2 cl07/opp] epoch=0 loss=0.1079 loss_value=0.0605 loss_policy=0.0474 batches=51
+  [gen_az 2 cl07/opp] epoch=1 loss=0.0981 loss_value=0.0516 loss_policy=0.0466 batches=51
+  [gen_az 2 cl07/opp] epoch=2 loss=0.0907 loss_value=0.0449 loss_policy=0.0458 batches=51
+[gen_az 2] cl07/opp: 学習 samples=6579
+  [gen_az 2 cl08/self] epoch=0 loss=0.0606 loss_value=0.0267 loss_policy=0.0339 batches=44
+  [gen_az 2 cl08/self] epoch=1 loss=0.0501 loss_value=0.0170 loss_policy=0.0331 batches=44
+  [gen_az 2 cl08/self] epoch=2 loss=0.0463 loss_value=0.0133 loss_policy=0.0330 batches=44
+[gen_az 2] cl08/self: 学習 samples=5669
+  [gen_az 2 cl08/opp] epoch=0 loss=0.0885 loss_value=0.0474 loss_policy=0.0411 batches=51
+  [gen_az 2 cl08/opp] epoch=1 loss=0.0774 loss_value=0.0370 loss_policy=0.0404 batches=51
+  [gen_az 2 cl08/opp] epoch=2 loss=0.0712 loss_value=0.0316 loss_policy=0.0396 batches=51
+[gen_az 2] cl08/opp: 学習 samples=6587
+  [gen_az 2 cl09/self] epoch=0 loss=0.0743 loss_value=0.0266 loss_policy=0.0477 batches=61
+  [gen_az 2 cl09/self] epoch=1 loss=0.0626 loss_value=0.0159 loss_policy=0.0467 batches=61
+  [gen_az 2 cl09/self] epoch=2 loss=0.0606 loss_value=0.0142 loss_policy=0.0463 batches=61
+[gen_az 2] cl09/self: 学習 samples=7917
+  [gen_az 2 cl09/opp] epoch=0 loss=0.1406 loss_value=0.0800 loss_policy=0.0606 batches=56
+  [gen_az 2 cl09/opp] epoch=1 loss=0.1153 loss_value=0.0568 loss_policy=0.0585 batches=56
+  [gen_az 2 cl09/opp] epoch=2 loss=0.1008 loss_value=0.0435 loss_policy=0.0573 batches=56
+[gen_az 2] cl09/opp: 学習 samples=7245
+  [gen_az 2 cl10/self] epoch=0 loss=0.0818 loss_value=0.0326 loss_policy=0.0492 batches=56
+  [gen_az 2 cl10/self] epoch=1 loss=0.0736 loss_value=0.0252 loss_policy=0.0484 batches=56
+  [gen_az 2 cl10/self] epoch=2 loss=0.0700 loss_value=0.0218 loss_policy=0.0482 batches=56
+[gen_az 2] cl10/self: 学習 samples=7211
+  [gen_az 2 cl10/opp] epoch=0 loss=0.1058 loss_value=0.0608 loss_policy=0.0450 batches=56
+  [gen_az 2 cl10/opp] epoch=1 loss=0.0945 loss_value=0.0506 loss_policy=0.0439 batches=56
+  [gen_az 2 cl10/opp] epoch=2 loss=0.0896 loss_value=0.0465 loss_policy=0.0431 batches=56
+[gen_az 2] cl10/opp: 学習 samples=7289
+  [gen_az 2 cl11/self] epoch=0 loss=0.0891 loss_value=0.0264 loss_policy=0.0627 batches=47
+  [gen_az 2 cl11/self] epoch=1 loss=0.0776 loss_value=0.0161 loss_policy=0.0616 batches=47
+  [gen_az 2 cl11/self] epoch=2 loss=0.0745 loss_value=0.0134 loss_policy=0.0610 batches=47
+[gen_az 2] cl11/self: 学習 samples=6030
+  [gen_az 2 cl11/opp] epoch=0 loss=0.1172 loss_value=0.0690 loss_policy=0.0483 batches=59
+  [gen_az 2 cl11/opp] epoch=1 loss=0.1046 loss_value=0.0575 loss_policy=0.0471 batches=59
+  [gen_az 2 cl11/opp] epoch=2 loss=0.0959 loss_value=0.0494 loss_policy=0.0465 batches=59
+[gen_az 2] cl11/opp: 学習 samples=7610
+  [gen_az 2 cl12/self] epoch=0 loss=0.1052 loss_value=0.0471 loss_policy=0.0581 batches=54
+  [gen_az 2 cl12/self] epoch=1 loss=0.0832 loss_value=0.0279 loss_policy=0.0552 batches=54
+  [gen_az 2 cl12/self] epoch=2 loss=0.0760 loss_value=0.0232 loss_policy=0.0528 batches=54
+[gen_az 2] cl12/self: 学習 samples=6933
+  [gen_az 2 cl12/opp] epoch=0 loss=0.1349 loss_value=0.0735 loss_policy=0.0614 batches=57
+  [gen_az 2 cl12/opp] epoch=1 loss=0.1122 loss_value=0.0529 loss_policy=0.0593 batches=57
+  [gen_az 2 cl12/opp] epoch=2 loss=0.0945 loss_value=0.0380 loss_policy=0.0565 batches=57
+[gen_az 2] cl12/opp: 学習 samples=7334
+  [gen_az 2 cl13/self] epoch=0 loss=0.1035 loss_value=0.0479 loss_policy=0.0555 batches=47
+  [gen_az 2 cl13/self] epoch=1 loss=0.0969 loss_value=0.0425 loss_policy=0.0544 batches=47
+  [gen_az 2 cl13/self] epoch=2 loss=0.0896 loss_value=0.0360 loss_policy=0.0536 batches=47
+[gen_az 2] cl13/self: 学習 samples=6039
+  [gen_az 2 cl13/opp] epoch=0 loss=0.1090 loss_value=0.0582 loss_policy=0.0508 batches=61
+  [gen_az 2 cl13/opp] epoch=1 loss=0.0917 loss_value=0.0422 loss_policy=0.0495 batches=61
+  [gen_az 2 cl13/opp] epoch=2 loss=0.0829 loss_value=0.0346 loss_policy=0.0483 batches=61
+[gen_az 2] cl13/opp: 学習 samples=7826
+  [gen_az 2 cl14/self] epoch=0 loss=0.0876 loss_value=0.0318 loss_policy=0.0558 batches=73
+  [gen_az 2 cl14/self] epoch=1 loss=0.0775 loss_value=0.0235 loss_policy=0.0540 batches=73
+  [gen_az 2 cl14/self] epoch=2 loss=0.0713 loss_value=0.0193 loss_policy=0.0521 batches=73
+[gen_az 2] cl14/self: 学習 samples=9429
+  [gen_az 2 cl14/opp] epoch=0 loss=0.1385 loss_value=0.0769 loss_policy=0.0616 batches=55
+  [gen_az 2 cl14/opp] epoch=1 loss=0.1264 loss_value=0.0671 loss_policy=0.0593 batches=55
+  [gen_az 2 cl14/opp] epoch=2 loss=0.1141 loss_value=0.0556 loss_policy=0.0585 batches=55
+[gen_az 2] cl14/opp: 学習 samples=7151
+  [gen_az 2 cl15/self] epoch=0 loss=0.1310 loss_value=0.0694 loss_policy=0.0616 batches=56
+  [gen_az 2 cl15/self] epoch=1 loss=0.1123 loss_value=0.0533 loss_policy=0.0590 batches=56
+  [gen_az 2 cl15/self] epoch=2 loss=0.0991 loss_value=0.0418 loss_policy=0.0573 batches=56
+[gen_az 2] cl15/self: 学習 samples=7246
+  [gen_az 2 cl15/opp] epoch=0 loss=0.1395 loss_value=0.0789 loss_policy=0.0606 batches=60
+  [gen_az 2 cl15/opp] epoch=1 loss=0.1210 loss_value=0.0617 loss_policy=0.0593 batches=60
+  [gen_az 2 cl15/opp] epoch=2 loss=0.1089 loss_value=0.0507 loss_policy=0.0583 batches=60
+[gen_az 2] cl15/opp: 学習 samples=7751
+[gen_az 2] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_003
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_002
+
+========== generation 3 / 5 ==========
+[gen_az 3] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 3] 対戦完了=666/680 self合計=105344 opp合計=105344
+  [gen_az 3 cl00/self] epoch=0 loss=0.0683 loss_value=0.0229 loss_policy=0.0454 batches=55
+  [gen_az 3 cl00/self] epoch=1 loss=0.0601 loss_value=0.0157 loss_policy=0.0444 batches=55
+  [gen_az 3 cl00/self] epoch=2 loss=0.0557 loss_value=0.0122 loss_policy=0.0435 batches=55
+[gen_az 3] cl00/self: 学習 samples=7126
+  [gen_az 3 cl00/opp] epoch=0 loss=0.0814 loss_value=0.0393 loss_policy=0.0420 batches=45
+  [gen_az 3 cl00/opp] epoch=1 loss=0.0678 loss_value=0.0270 loss_policy=0.0409 batches=45
+  [gen_az 3 cl00/opp] epoch=2 loss=0.0594 loss_value=0.0198 loss_policy=0.0395 batches=45
+[gen_az 3] cl00/opp: 学習 samples=5875
+  [gen_az 3 cl01/self] epoch=0 loss=0.0700 loss_value=0.0273 loss_policy=0.0427 batches=57
+  [gen_az 3 cl01/self] epoch=1 loss=0.0588 loss_value=0.0168 loss_policy=0.0421 batches=57
+  [gen_az 3 cl01/self] epoch=2 loss=0.0550 loss_value=0.0134 loss_policy=0.0416 batches=57
+[gen_az 3] cl01/self: 学習 samples=7369
+  [gen_az 3 cl01/opp] epoch=0 loss=0.0955 loss_value=0.0476 loss_policy=0.0479 batches=53
+  [gen_az 3 cl01/opp] epoch=1 loss=0.0766 loss_value=0.0301 loss_policy=0.0466 batches=53
+  [gen_az 3 cl01/opp] epoch=2 loss=0.0686 loss_value=0.0228 loss_policy=0.0459 batches=53
+[gen_az 3] cl01/opp: 学習 samples=6867
+  [gen_az 3 cl02/self] epoch=0 loss=0.0605 loss_value=0.0227 loss_policy=0.0378 batches=43
+  [gen_az 3 cl02/self] epoch=1 loss=0.0480 loss_value=0.0111 loss_policy=0.0369 batches=43
+  [gen_az 3 cl02/self] epoch=2 loss=0.0455 loss_value=0.0091 loss_policy=0.0364 batches=43
+[gen_az 3] cl02/self: 学習 samples=5540
+  [gen_az 3 cl02/opp] epoch=0 loss=0.0748 loss_value=0.0352 loss_policy=0.0396 batches=58
+  [gen_az 3 cl02/opp] epoch=1 loss=0.0582 loss_value=0.0197 loss_policy=0.0385 batches=58
+  [gen_az 3 cl02/opp] epoch=2 loss=0.0531 loss_value=0.0152 loss_policy=0.0379 batches=58
+[gen_az 3] cl02/opp: 学習 samples=7424
+  [gen_az 3 cl03/self] epoch=0 loss=0.0650 loss_value=0.0269 loss_policy=0.0381 batches=35
+  [gen_az 3 cl03/self] epoch=1 loss=0.0530 loss_value=0.0159 loss_policy=0.0372 batches=35
+  [gen_az 3 cl03/self] epoch=2 loss=0.0493 loss_value=0.0125 loss_policy=0.0368 batches=35
+[gen_az 3] cl03/self: 学習 samples=4543
+  [gen_az 3 cl03/opp] epoch=0 loss=0.0864 loss_value=0.0400 loss_policy=0.0463 batches=42
+  [gen_az 3 cl03/opp] epoch=1 loss=0.0695 loss_value=0.0239 loss_policy=0.0457 batches=42
+  [gen_az 3 cl03/opp] epoch=2 loss=0.0622 loss_value=0.0175 loss_policy=0.0447 batches=42
+[gen_az 3] cl03/opp: 学習 samples=5462
+  [gen_az 3 cl04/self] epoch=0 loss=0.0737 loss_value=0.0258 loss_policy=0.0479 batches=55
+  [gen_az 3 cl04/self] epoch=1 loss=0.0653 loss_value=0.0182 loss_policy=0.0472 batches=55
+  [gen_az 3 cl04/self] epoch=2 loss=0.0619 loss_value=0.0154 loss_policy=0.0466 batches=55
+[gen_az 3] cl04/self: 学習 samples=7084
+  [gen_az 3 cl04/opp] epoch=0 loss=0.0912 loss_value=0.0483 loss_policy=0.0429 batches=52
+  [gen_az 3 cl04/opp] epoch=1 loss=0.0756 loss_value=0.0338 loss_policy=0.0418 batches=52
+  [gen_az 3 cl04/opp] epoch=2 loss=0.0681 loss_value=0.0270 loss_policy=0.0411 batches=52
+[gen_az 3] cl04/opp: 学習 samples=6746
+  [gen_az 3 cl05/self] epoch=0 loss=0.0639 loss_value=0.0210 loss_policy=0.0429 batches=62
+  [gen_az 3 cl05/self] epoch=1 loss=0.0551 loss_value=0.0131 loss_policy=0.0420 batches=62
+  [gen_az 3 cl05/self] epoch=2 loss=0.0520 loss_value=0.0106 loss_policy=0.0414 batches=62
+[gen_az 3] cl05/self: 学習 samples=8044
+  [gen_az 3 cl05/opp] epoch=0 loss=0.0893 loss_value=0.0427 loss_policy=0.0466 batches=56
+  [gen_az 3 cl05/opp] epoch=1 loss=0.0697 loss_value=0.0243 loss_policy=0.0454 batches=56
+  [gen_az 3 cl05/opp] epoch=2 loss=0.0642 loss_value=0.0199 loss_policy=0.0443 batches=56
+[gen_az 3] cl05/opp: 学習 samples=7171
+  [gen_az 3 cl06/self] epoch=0 loss=0.0792 loss_value=0.0270 loss_policy=0.0522 batches=40
+  [gen_az 3 cl06/self] epoch=1 loss=0.0680 loss_value=0.0171 loss_policy=0.0510 batches=40
+  [gen_az 3 cl06/self] epoch=2 loss=0.0639 loss_value=0.0137 loss_policy=0.0502 batches=40
+[gen_az 3] cl06/self: 学習 samples=5139
+  [gen_az 3 cl06/opp] epoch=0 loss=0.0793 loss_value=0.0399 loss_policy=0.0394 batches=44
+  [gen_az 3 cl06/opp] epoch=1 loss=0.0641 loss_value=0.0258 loss_policy=0.0383 batches=44
+  [gen_az 3 cl06/opp] epoch=2 loss=0.0572 loss_value=0.0196 loss_policy=0.0376 batches=44
+[gen_az 3] cl06/opp: 学習 samples=5640
+  [gen_az 3 cl07/self] epoch=0 loss=0.0593 loss_value=0.0198 loss_policy=0.0395 batches=65
+  [gen_az 3 cl07/self] epoch=1 loss=0.0503 loss_value=0.0116 loss_policy=0.0388 batches=65
+  [gen_az 3 cl07/self] epoch=2 loss=0.0478 loss_value=0.0095 loss_policy=0.0383 batches=65
+[gen_az 3] cl07/self: 学習 samples=8377
+  [gen_az 3 cl07/opp] epoch=0 loss=0.1054 loss_value=0.0606 loss_policy=0.0448 batches=53
+  [gen_az 3 cl07/opp] epoch=1 loss=0.0873 loss_value=0.0439 loss_policy=0.0434 batches=53
+  [gen_az 3 cl07/opp] epoch=2 loss=0.0757 loss_value=0.0330 loss_policy=0.0427 batches=53
+[gen_az 3] cl07/opp: 学習 samples=6902
+  [gen_az 3 cl08/self] epoch=0 loss=0.0565 loss_value=0.0220 loss_policy=0.0345 batches=41
+  [gen_az 3 cl08/self] epoch=1 loss=0.0505 loss_value=0.0167 loss_policy=0.0338 batches=41
+  [gen_az 3 cl08/self] epoch=2 loss=0.0450 loss_value=0.0119 loss_policy=0.0330 batches=41
+[gen_az 3] cl08/self: 学習 samples=5319
+  [gen_az 3 cl08/opp] epoch=0 loss=0.0832 loss_value=0.0466 loss_policy=0.0366 batches=52
+  [gen_az 3 cl08/opp] epoch=1 loss=0.0654 loss_value=0.0299 loss_policy=0.0354 batches=52
+  [gen_az 3 cl08/opp] epoch=2 loss=0.0543 loss_value=0.0194 loss_policy=0.0349 batches=52
+[gen_az 3] cl08/opp: 学習 samples=6690
+  [gen_az 3 cl09/self] epoch=0 loss=0.0608 loss_value=0.0216 loss_policy=0.0393 batches=58
+  [gen_az 3 cl09/self] epoch=1 loss=0.0491 loss_value=0.0112 loss_policy=0.0379 batches=58
+  [gen_az 3 cl09/self] epoch=2 loss=0.0475 loss_value=0.0102 loss_policy=0.0373 batches=58
+[gen_az 3] cl09/self: 学習 samples=7490
+  [gen_az 3 cl09/opp] epoch=0 loss=0.1102 loss_value=0.0579 loss_policy=0.0523 batches=50
+  [gen_az 3 cl09/opp] epoch=1 loss=0.0834 loss_value=0.0332 loss_policy=0.0503 batches=50
+  [gen_az 3 cl09/opp] epoch=2 loss=0.0732 loss_value=0.0233 loss_policy=0.0499 batches=50
+[gen_az 3] cl09/opp: 学習 samples=6484
+  [gen_az 3 cl10/self] epoch=0 loss=0.0705 loss_value=0.0286 loss_policy=0.0419 batches=52
+  [gen_az 3 cl10/self] epoch=1 loss=0.0583 loss_value=0.0173 loss_policy=0.0410 batches=52
+  [gen_az 3 cl10/self] epoch=2 loss=0.0542 loss_value=0.0141 loss_policy=0.0401 batches=52
+[gen_az 3] cl10/self: 学習 samples=6743
+  [gen_az 3 cl10/opp] epoch=0 loss=0.0935 loss_value=0.0556 loss_policy=0.0379 batches=48
+  [gen_az 3 cl10/opp] epoch=1 loss=0.0803 loss_value=0.0435 loss_policy=0.0368 batches=48
+  [gen_az 3 cl10/opp] epoch=2 loss=0.0708 loss_value=0.0346 loss_policy=0.0362 batches=48
+[gen_az 3] cl10/opp: 学習 samples=6207
+  [gen_az 3 cl11/self] epoch=0 loss=0.0934 loss_value=0.0304 loss_policy=0.0631 batches=43
+  [gen_az 3 cl11/self] epoch=1 loss=0.0768 loss_value=0.0151 loss_policy=0.0616 batches=43
+  [gen_az 3 cl11/self] epoch=2 loss=0.0722 loss_value=0.0113 loss_policy=0.0609 batches=43
+[gen_az 3] cl11/self: 学習 samples=5630
+  [gen_az 3 cl11/opp] epoch=0 loss=0.1038 loss_value=0.0589 loss_policy=0.0450 batches=53
+  [gen_az 3 cl11/opp] epoch=1 loss=0.0848 loss_value=0.0407 loss_policy=0.0441 batches=53
+  [gen_az 3 cl11/opp] epoch=2 loss=0.0773 loss_value=0.0346 loss_policy=0.0426 batches=53
+[gen_az 3] cl11/opp: 学習 samples=6897
+  [gen_az 3 cl12/self] epoch=0 loss=0.0693 loss_value=0.0275 loss_policy=0.0418 batches=43
+  [gen_az 3 cl12/self] epoch=1 loss=0.0573 loss_value=0.0166 loss_policy=0.0408 batches=43
+  [gen_az 3 cl12/self] epoch=2 loss=0.0530 loss_value=0.0130 loss_policy=0.0400 batches=43
+[gen_az 3] cl12/self: 学習 samples=5573
+  [gen_az 3 cl12/opp] epoch=0 loss=0.1051 loss_value=0.0479 loss_policy=0.0572 batches=45
+  [gen_az 3 cl12/opp] epoch=1 loss=0.0834 loss_value=0.0289 loss_policy=0.0544 batches=45
+  [gen_az 3 cl12/opp] epoch=2 loss=0.0732 loss_value=0.0204 loss_policy=0.0528 batches=45
+[gen_az 3] cl12/opp: 学習 samples=5881
+  [gen_az 3 cl13/self] epoch=0 loss=0.1013 loss_value=0.0420 loss_policy=0.0594 batches=45
+  [gen_az 3 cl13/self] epoch=1 loss=0.0908 loss_value=0.0321 loss_policy=0.0587 batches=45
+  [gen_az 3 cl13/self] epoch=2 loss=0.0842 loss_value=0.0263 loss_policy=0.0579 batches=45
+[gen_az 3] cl13/self: 学習 samples=5811
+  [gen_az 3 cl13/opp] epoch=0 loss=0.1053 loss_value=0.0579 loss_policy=0.0474 batches=59
+  [gen_az 3 cl13/opp] epoch=1 loss=0.0817 loss_value=0.0352 loss_policy=0.0464 batches=59
+  [gen_az 3 cl13/opp] epoch=2 loss=0.0714 loss_value=0.0256 loss_policy=0.0458 batches=59
+[gen_az 3] cl13/opp: 学習 samples=7597
+  [gen_az 3 cl14/self] epoch=0 loss=0.0675 loss_value=0.0246 loss_policy=0.0429 batches=68
+  [gen_az 3 cl14/self] epoch=1 loss=0.0544 loss_value=0.0132 loss_policy=0.0412 batches=68
+  [gen_az 3 cl14/self] epoch=2 loss=0.0510 loss_value=0.0108 loss_policy=0.0401 batches=68
+[gen_az 3] cl14/self: 学習 samples=8737
+  [gen_az 3 cl14/opp] epoch=0 loss=0.1368 loss_value=0.0749 loss_policy=0.0619 batches=51
+  [gen_az 3 cl14/opp] epoch=1 loss=0.1139 loss_value=0.0540 loss_policy=0.0600 batches=51
+  [gen_az 3 cl14/opp] epoch=2 loss=0.0991 loss_value=0.0410 loss_policy=0.0581 batches=51
+[gen_az 3] cl14/opp: 学習 samples=6549
+  [gen_az 3 cl15/self] epoch=0 loss=0.0957 loss_value=0.0472 loss_policy=0.0485 batches=53
+  [gen_az 3 cl15/self] epoch=1 loss=0.0727 loss_value=0.0253 loss_policy=0.0474 batches=53
+  [gen_az 3 cl15/self] epoch=2 loss=0.0674 loss_value=0.0209 loss_policy=0.0465 batches=53
+[gen_az 3] cl15/self: 学習 samples=6819
+  [gen_az 3 cl15/opp] epoch=0 loss=0.1053 loss_value=0.0618 loss_policy=0.0434 batches=54
+  [gen_az 3 cl15/opp] epoch=1 loss=0.0842 loss_value=0.0421 loss_policy=0.0421 batches=54
+  [gen_az 3 cl15/opp] epoch=2 loss=0.0703 loss_value=0.0290 loss_policy=0.0413 batches=54
+[gen_az 3] cl15/opp: 学習 samples=6952
+[gen_az 3] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_004
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_003
+
+========== generation 4 / 5 ==========
+[gen_az 4] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 4] 対戦完了=670/680 self合計=103061 opp合計=103061
+  [gen_az 4 cl00/self] epoch=0 loss=0.0630 loss_value=0.0189 loss_policy=0.0441 batches=55
+  [gen_az 4 cl00/self] epoch=1 loss=0.0535 loss_value=0.0104 loss_policy=0.0432 batches=55
+  [gen_az 4 cl00/self] epoch=2 loss=0.0507 loss_value=0.0083 loss_policy=0.0424 batches=55
+[gen_az 4] cl00/self: 学習 samples=7074
+  [gen_az 4 cl00/opp] epoch=0 loss=0.0710 loss_value=0.0336 loss_policy=0.0374 batches=45
+  [gen_az 4 cl00/opp] epoch=1 loss=0.0551 loss_value=0.0188 loss_policy=0.0362 batches=45
+  [gen_az 4 cl00/opp] epoch=2 loss=0.0496 loss_value=0.0142 loss_policy=0.0354 batches=45
+[gen_az 4] cl00/opp: 学習 samples=5874
+  [gen_az 4 cl01/self] epoch=0 loss=0.0456 loss_value=0.0170 loss_policy=0.0286 batches=55
+  [gen_az 4 cl01/self] epoch=1 loss=0.0380 loss_value=0.0098 loss_policy=0.0281 batches=55
+  [gen_az 4 cl01/self] epoch=2 loss=0.0360 loss_value=0.0083 loss_policy=0.0278 batches=55
+[gen_az 4] cl01/self: 学習 samples=7052
+  [gen_az 4 cl01/opp] epoch=0 loss=0.0701 loss_value=0.0347 loss_policy=0.0354 batches=46
+  [gen_az 4 cl01/opp] epoch=1 loss=0.0548 loss_value=0.0201 loss_policy=0.0347 batches=46
+  [gen_az 4 cl01/opp] epoch=2 loss=0.0477 loss_value=0.0138 loss_policy=0.0339 batches=46
+[gen_az 4] cl01/opp: 学習 samples=5965
+  [gen_az 4 cl02/self] epoch=0 loss=0.0458 loss_value=0.0168 loss_policy=0.0290 batches=44
+  [gen_az 4 cl02/self] epoch=1 loss=0.0365 loss_value=0.0086 loss_policy=0.0280 batches=44
+  [gen_az 4 cl02/self] epoch=2 loss=0.0342 loss_value=0.0067 loss_policy=0.0276 batches=44
+[gen_az 4] cl02/self: 学習 samples=5666
+  [gen_az 4 cl02/opp] epoch=0 loss=0.0508 loss_value=0.0217 loss_policy=0.0291 batches=58
+  [gen_az 4 cl02/opp] epoch=1 loss=0.0399 loss_value=0.0120 loss_policy=0.0279 batches=58
+  [gen_az 4 cl02/opp] epoch=2 loss=0.0361 loss_value=0.0090 loss_policy=0.0271 batches=58
+[gen_az 4] cl02/opp: 学習 samples=7449
+  [gen_az 4 cl03/self] epoch=0 loss=0.0501 loss_value=0.0206 loss_policy=0.0294 batches=32
+  [gen_az 4 cl03/self] epoch=1 loss=0.0409 loss_value=0.0124 loss_policy=0.0285 batches=32
+  [gen_az 4 cl03/self] epoch=2 loss=0.0369 loss_value=0.0086 loss_policy=0.0283 batches=32
+[gen_az 4] cl03/self: 学習 samples=4147
+  [gen_az 4 cl03/opp] epoch=0 loss=0.0639 loss_value=0.0298 loss_policy=0.0341 batches=40
+  [gen_az 4 cl03/opp] epoch=1 loss=0.0503 loss_value=0.0168 loss_policy=0.0335 batches=40
+  [gen_az 4 cl03/opp] epoch=2 loss=0.0449 loss_value=0.0119 loss_policy=0.0329 batches=40
+[gen_az 4] cl03/opp: 学習 samples=5195
+  [gen_az 4 cl04/self] epoch=0 loss=0.0649 loss_value=0.0191 loss_policy=0.0459 batches=55
+  [gen_az 4 cl04/self] epoch=1 loss=0.0574 loss_value=0.0123 loss_policy=0.0452 batches=55
+  [gen_az 4 cl04/self] epoch=2 loss=0.0546 loss_value=0.0099 loss_policy=0.0448 batches=55
+[gen_az 4] cl04/self: 学習 samples=7076
+  [gen_az 4 cl04/opp] epoch=0 loss=0.0753 loss_value=0.0370 loss_policy=0.0383 batches=53
+  [gen_az 4 cl04/opp] epoch=1 loss=0.0596 loss_value=0.0223 loss_policy=0.0373 batches=53
+  [gen_az 4 cl04/opp] epoch=2 loss=0.0498 loss_value=0.0133 loss_policy=0.0365 batches=53
+[gen_az 4] cl04/opp: 学習 samples=6819
+  [gen_az 4 cl05/self] epoch=0 loss=0.0470 loss_value=0.0139 loss_policy=0.0331 batches=60
+  [gen_az 4 cl05/self] epoch=1 loss=0.0401 loss_value=0.0077 loss_policy=0.0323 batches=60
+  [gen_az 4 cl05/self] epoch=2 loss=0.0378 loss_value=0.0061 loss_policy=0.0317 batches=60
+[gen_az 4] cl05/self: 学習 samples=7682
+  [gen_az 4 cl05/opp] epoch=0 loss=0.0654 loss_value=0.0289 loss_policy=0.0365 batches=54
+  [gen_az 4 cl05/opp] epoch=1 loss=0.0523 loss_value=0.0164 loss_policy=0.0359 batches=54
+  [gen_az 4 cl05/opp] epoch=2 loss=0.0466 loss_value=0.0113 loss_policy=0.0353 batches=54
+[gen_az 4] cl05/opp: 学習 samples=7008
+  [gen_az 4 cl06/self] epoch=0 loss=0.0527 loss_value=0.0189 loss_policy=0.0338 batches=46
+  [gen_az 4 cl06/self] epoch=1 loss=0.0440 loss_value=0.0112 loss_policy=0.0329 batches=46
+  [gen_az 4 cl06/self] epoch=2 loss=0.0408 loss_value=0.0083 loss_policy=0.0325 batches=46
+[gen_az 4] cl06/self: 学習 samples=5990
+  [gen_az 4 cl06/opp] epoch=0 loss=0.0687 loss_value=0.0302 loss_policy=0.0384 batches=49
+  [gen_az 4 cl06/opp] epoch=1 loss=0.0554 loss_value=0.0180 loss_policy=0.0374 batches=49
+  [gen_az 4 cl06/opp] epoch=2 loss=0.0501 loss_value=0.0133 loss_policy=0.0368 batches=49
+[gen_az 4] cl06/opp: 学習 samples=6287
+  [gen_az 4 cl07/self] epoch=0 loss=0.0590 loss_value=0.0186 loss_policy=0.0404 batches=62
+  [gen_az 4 cl07/self] epoch=1 loss=0.0502 loss_value=0.0103 loss_policy=0.0399 batches=62
+  [gen_az 4 cl07/self] epoch=2 loss=0.0479 loss_value=0.0084 loss_policy=0.0395 batches=62
+[gen_az 4] cl07/self: 学習 samples=7989
+  [gen_az 4 cl07/opp] epoch=0 loss=0.0873 loss_value=0.0489 loss_policy=0.0383 batches=53
+  [gen_az 4 cl07/opp] epoch=1 loss=0.0661 loss_value=0.0287 loss_policy=0.0374 batches=53
+  [gen_az 4 cl07/opp] epoch=2 loss=0.0570 loss_value=0.0202 loss_policy=0.0368 batches=53
+[gen_az 4] cl07/opp: 学習 samples=6792
+  [gen_az 4 cl08/self] epoch=0 loss=0.0486 loss_value=0.0223 loss_policy=0.0263 batches=38
+  [gen_az 4 cl08/self] epoch=1 loss=0.0381 loss_value=0.0127 loss_policy=0.0254 batches=38
+  [gen_az 4 cl08/self] epoch=2 loss=0.0347 loss_value=0.0095 loss_policy=0.0252 batches=38
+[gen_az 4] cl08/self: 学習 samples=4929
+  [gen_az 4 cl08/opp] epoch=0 loss=0.0620 loss_value=0.0294 loss_policy=0.0326 batches=47
+  [gen_az 4 cl08/opp] epoch=1 loss=0.0482 loss_value=0.0166 loss_policy=0.0315 batches=47
+  [gen_az 4 cl08/opp] epoch=2 loss=0.0430 loss_value=0.0122 loss_policy=0.0308 batches=47
+[gen_az 4] cl08/opp: 学習 samples=6064
+  [gen_az 4 cl09/self] epoch=0 loss=0.0451 loss_value=0.0148 loss_policy=0.0303 batches=55
+  [gen_az 4 cl09/self] epoch=1 loss=0.0378 loss_value=0.0084 loss_policy=0.0294 batches=55
+  [gen_az 4 cl09/self] epoch=2 loss=0.0358 loss_value=0.0065 loss_policy=0.0293 batches=55
+[gen_az 4] cl09/self: 学習 samples=7120
+  [gen_az 4 cl09/opp] epoch=0 loss=0.0822 loss_value=0.0389 loss_policy=0.0432 batches=45
+  [gen_az 4 cl09/opp] epoch=1 loss=0.0639 loss_value=0.0214 loss_policy=0.0425 batches=45
+  [gen_az 4 cl09/opp] epoch=2 loss=0.0563 loss_value=0.0145 loss_policy=0.0418 batches=45
+[gen_az 4] cl09/opp: 学習 samples=5824
+  [gen_az 4 cl10/self] epoch=0 loss=0.0540 loss_value=0.0215 loss_policy=0.0326 batches=49
+  [gen_az 4 cl10/self] epoch=1 loss=0.0455 loss_value=0.0137 loss_policy=0.0318 batches=49
+  [gen_az 4 cl10/self] epoch=2 loss=0.0425 loss_value=0.0110 loss_policy=0.0316 batches=49
+[gen_az 4] cl10/self: 学習 samples=6288
+  [gen_az 4 cl10/opp] epoch=0 loss=0.0782 loss_value=0.0423 loss_policy=0.0359 batches=48
+  [gen_az 4 cl10/opp] epoch=1 loss=0.0619 loss_value=0.0269 loss_policy=0.0350 batches=48
+  [gen_az 4 cl10/opp] epoch=2 loss=0.0548 loss_value=0.0205 loss_policy=0.0343 batches=48
+[gen_az 4] cl10/opp: 学習 samples=6184
+  [gen_az 4 cl11/self] epoch=0 loss=0.0740 loss_value=0.0236 loss_policy=0.0504 batches=41
+  [gen_az 4 cl11/self] epoch=1 loss=0.0606 loss_value=0.0113 loss_policy=0.0493 batches=41
+  [gen_az 4 cl11/self] epoch=2 loss=0.0574 loss_value=0.0086 loss_policy=0.0487 batches=41
+[gen_az 4] cl11/self: 学習 samples=5274
+  [gen_az 4 cl11/opp] epoch=0 loss=0.0904 loss_value=0.0505 loss_policy=0.0399 batches=51
+  [gen_az 4 cl11/opp] epoch=1 loss=0.0680 loss_value=0.0295 loss_policy=0.0386 batches=51
+  [gen_az 4 cl11/opp] epoch=2 loss=0.0567 loss_value=0.0186 loss_policy=0.0381 batches=51
+[gen_az 4] cl11/opp: 学習 samples=6544
+  [gen_az 4 cl12/self] epoch=0 loss=0.0543 loss_value=0.0235 loss_policy=0.0308 batches=43
+  [gen_az 4 cl12/self] epoch=1 loss=0.0409 loss_value=0.0109 loss_policy=0.0300 batches=43
+  [gen_az 4 cl12/self] epoch=2 loss=0.0379 loss_value=0.0084 loss_policy=0.0295 batches=43
+[gen_az 4] cl12/self: 学習 samples=5568
+  [gen_az 4 cl12/opp] epoch=0 loss=0.0755 loss_value=0.0337 loss_policy=0.0418 batches=48
+  [gen_az 4 cl12/opp] epoch=1 loss=0.0577 loss_value=0.0175 loss_policy=0.0402 batches=48
+  [gen_az 4 cl12/opp] epoch=2 loss=0.0504 loss_value=0.0113 loss_policy=0.0391 batches=48
+[gen_az 4] cl12/opp: 学習 samples=6163
+  [gen_az 4 cl13/self] epoch=0 loss=0.0827 loss_value=0.0367 loss_policy=0.0461 batches=46
+  [gen_az 4 cl13/self] epoch=1 loss=0.0666 loss_value=0.0213 loss_policy=0.0453 batches=46
+  [gen_az 4 cl13/self] epoch=2 loss=0.0611 loss_value=0.0160 loss_policy=0.0451 batches=46
+[gen_az 4] cl13/self: 学習 samples=5923
+  [gen_az 4 cl13/opp] epoch=0 loss=0.0832 loss_value=0.0415 loss_policy=0.0417 batches=57
+  [gen_az 4 cl13/opp] epoch=1 loss=0.0624 loss_value=0.0217 loss_policy=0.0407 batches=57
+  [gen_az 4 cl13/opp] epoch=2 loss=0.0559 loss_value=0.0158 loss_policy=0.0401 batches=57
+[gen_az 4] cl13/opp: 学習 samples=7413
+  [gen_az 4 cl14/self] epoch=0 loss=0.0563 loss_value=0.0183 loss_policy=0.0381 batches=66
+  [gen_az 4 cl14/self] epoch=1 loss=0.0471 loss_value=0.0104 loss_policy=0.0367 batches=66
+  [gen_az 4 cl14/self] epoch=2 loss=0.0437 loss_value=0.0078 loss_policy=0.0359 batches=66
+[gen_az 4] cl14/self: 学習 samples=8477
+  [gen_az 4 cl14/opp] epoch=0 loss=0.0912 loss_value=0.0491 loss_policy=0.0422 batches=49
+  [gen_az 4 cl14/opp] epoch=1 loss=0.0714 loss_value=0.0308 loss_policy=0.0406 batches=49
+  [gen_az 4 cl14/opp] epoch=2 loss=0.0609 loss_value=0.0214 loss_policy=0.0395 batches=49
+[gen_az 4] cl14/opp: 学習 samples=6296
+  [gen_az 4 cl15/self] epoch=0 loss=0.0689 loss_value=0.0292 loss_policy=0.0397 batches=53
+  [gen_az 4 cl15/self] epoch=1 loss=0.0536 loss_value=0.0150 loss_policy=0.0387 batches=53
+  [gen_az 4 cl15/self] epoch=2 loss=0.0514 loss_value=0.0132 loss_policy=0.0382 batches=53
+[gen_az 4] cl15/self: 学習 samples=6806
+  [gen_az 4 cl15/opp] epoch=0 loss=0.0791 loss_value=0.0424 loss_policy=0.0367 batches=56
+  [gen_az 4 cl15/opp] epoch=1 loss=0.0591 loss_value=0.0233 loss_policy=0.0358 batches=56
+  [gen_az 4 cl15/opp] epoch=2 loss=0.0516 loss_value=0.0165 loss_policy=0.0351 batches=56
+[gen_az 4] cl15/opp: 学習 samples=7184
+[gen_az 4] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_005
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_004
+
+完了: 最終世代 = gen_005（/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline）
+
+PIPE_GEN_BACKEND=az PIPE_GENERATIONS=5 PIPE_LEAGUE_GAMES=5 \
+PIPE_LEAGUE_SEARCH_COUNT=10 PIPE_AZ_COLLECT_WORKERS=2 PIPE_EPOCHS_PER_GEN=3 \
+  python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
+  --start-gen 5 --no-keep-intermediate
+=== pipeline config ===
+  GENERATIONS=5 EPOCHS_PER_GEN=3 PHASE0_EPOCHS=5
+  LR=0.0003 BATCH_SIZE=128 SEARCH_COUNT=50
+  SIM_THRESHOLD=0.75 WARM_START=1 SHARD_SIZE=20000 WORKERS=8
+  ROOT=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline
+  OFFICIAL_EPISODES=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/episodes/official
+  DECKGEN_JSONL=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/tools/deck_generator/generated/deck_candidates_by_wins.jsonl
+  LEAGUE_CMD=(stub)
+
+[orchestrate] 世代バックエンド=az（batched gpu-tree + AlphaZero, self/opp二重）
+
+========== generation 5 / 10 ==========
+[gen_az 5] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 5] 対戦完了=677/680 self合計=99447 opp合計=99447
+  [gen_az 5 cl00/self] epoch=0 loss=0.0465 loss_value=0.0157 loss_policy=0.0308 batches=54
+  [gen_az 5 cl00/self] epoch=1 loss=0.0381 loss_value=0.0080 loss_policy=0.0301 batches=54
+  [gen_az 5 cl00/self] epoch=2 loss=0.0353 loss_value=0.0060 loss_policy=0.0293 batches=54
+[gen_az 5] cl00/self: 学習 samples=6986
+  [gen_az 5 cl00/opp] epoch=0 loss=0.0585 loss_value=0.0273 loss_policy=0.0312 batches=44
+  [gen_az 5 cl00/opp] epoch=1 loss=0.0457 loss_value=0.0155 loss_policy=0.0302 batches=44
+  [gen_az 5 cl00/opp] epoch=2 loss=0.0409 loss_value=0.0114 loss_policy=0.0295 batches=44
+[gen_az 5] cl00/opp: 学習 samples=5691
+  [gen_az 5 cl01/self] epoch=0 loss=0.0364 loss_value=0.0141 loss_policy=0.0223 batches=56
+  [gen_az 5 cl01/self] epoch=1 loss=0.0305 loss_value=0.0087 loss_policy=0.0219 batches=56
+  [gen_az 5 cl01/self] epoch=2 loss=0.0284 loss_value=0.0067 loss_policy=0.0217 batches=56
+[gen_az 5] cl01/self: 学習 samples=7174
+  [gen_az 5 cl01/opp] epoch=0 loss=0.0611 loss_value=0.0301 loss_policy=0.0310 batches=46
+  [gen_az 5 cl01/opp] epoch=1 loss=0.0459 loss_value=0.0157 loss_policy=0.0302 batches=46
+  [gen_az 5 cl01/opp] epoch=2 loss=0.0408 loss_value=0.0111 loss_policy=0.0297 batches=46
+[gen_az 5] cl01/opp: 学習 samples=5943
+  [gen_az 5 cl02/self] epoch=0 loss=0.0335 loss_value=0.0117 loss_policy=0.0218 batches=44
+  [gen_az 5 cl02/self] epoch=1 loss=0.0277 loss_value=0.0066 loss_policy=0.0211 batches=44
+  [gen_az 5 cl02/self] epoch=2 loss=0.0259 loss_value=0.0050 loss_policy=0.0208 batches=44
+[gen_az 5] cl02/self: 学習 samples=5757
+  [gen_az 5 cl02/opp] epoch=0 loss=0.0473 loss_value=0.0220 loss_policy=0.0253 batches=55
+  [gen_az 5 cl02/opp] epoch=1 loss=0.0360 loss_value=0.0114 loss_policy=0.0246 batches=55
+  [gen_az 5 cl02/opp] epoch=2 loss=0.0328 loss_value=0.0086 loss_policy=0.0242 batches=55
+[gen_az 5] cl02/opp: 学習 samples=7126
+  [gen_az 5 cl03/self] epoch=0 loss=0.0458 loss_value=0.0209 loss_policy=0.0249 batches=31
+  [gen_az 5 cl03/self] epoch=1 loss=0.0342 loss_value=0.0099 loss_policy=0.0243 batches=31
+  [gen_az 5 cl03/self] epoch=2 loss=0.0316 loss_value=0.0076 loss_policy=0.0240 batches=31
+[gen_az 5] cl03/self: 学習 samples=4043
+  [gen_az 5 cl03/opp] epoch=0 loss=0.0560 loss_value=0.0271 loss_policy=0.0290 batches=38
+  [gen_az 5 cl03/opp] epoch=1 loss=0.0429 loss_value=0.0148 loss_policy=0.0282 batches=38
+  [gen_az 5 cl03/opp] epoch=2 loss=0.0380 loss_value=0.0103 loss_policy=0.0276 batches=38
+[gen_az 5] cl03/opp: 学習 samples=4873
+  [gen_az 5 cl04/self] epoch=0 loss=0.0496 loss_value=0.0152 loss_policy=0.0344 batches=50
+  [gen_az 5 cl04/self] epoch=1 loss=0.0422 loss_value=0.0086 loss_policy=0.0336 batches=50
+  [gen_az 5 cl04/self] epoch=2 loss=0.0400 loss_value=0.0067 loss_policy=0.0332 batches=50
+[gen_az 5] cl04/self: 学習 samples=6521
+  [gen_az 5 cl04/opp] epoch=0 loss=0.0583 loss_value=0.0271 loss_policy=0.0312 batches=51
+  [gen_az 5 cl04/opp] epoch=1 loss=0.0440 loss_value=0.0137 loss_policy=0.0303 batches=51
+  [gen_az 5 cl04/opp] epoch=2 loss=0.0392 loss_value=0.0096 loss_policy=0.0296 batches=51
+[gen_az 5] cl04/opp: 学習 samples=6543
+  [gen_az 5 cl05/self] epoch=0 loss=0.0435 loss_value=0.0138 loss_policy=0.0296 batches=51
+  [gen_az 5 cl05/self] epoch=1 loss=0.0358 loss_value=0.0070 loss_policy=0.0287 batches=51
+  [gen_az 5 cl05/self] epoch=2 loss=0.0339 loss_value=0.0056 loss_policy=0.0284 batches=51
+[gen_az 5] cl05/self: 学習 samples=6571
+  [gen_az 5 cl05/opp] epoch=0 loss=0.0536 loss_value=0.0254 loss_policy=0.0282 batches=48
+  [gen_az 5 cl05/opp] epoch=1 loss=0.0405 loss_value=0.0127 loss_policy=0.0278 batches=48
+  [gen_az 5 cl05/opp] epoch=2 loss=0.0360 loss_value=0.0087 loss_policy=0.0272 batches=48
+[gen_az 5] cl05/opp: 学習 samples=6196
+  [gen_az 5 cl06/self] epoch=0 loss=0.0624 loss_value=0.0223 loss_policy=0.0400 batches=37
+  [gen_az 5 cl06/self] epoch=1 loss=0.0500 loss_value=0.0109 loss_policy=0.0391 batches=37
+  [gen_az 5 cl06/self] epoch=2 loss=0.0464 loss_value=0.0076 loss_policy=0.0388 batches=37
+[gen_az 5] cl06/self: 学習 samples=4778
+  [gen_az 5 cl06/opp] epoch=0 loss=0.0613 loss_value=0.0272 loss_policy=0.0342 batches=43
+  [gen_az 5 cl06/opp] epoch=1 loss=0.0480 loss_value=0.0149 loss_policy=0.0332 batches=43
+  [gen_az 5 cl06/opp] epoch=2 loss=0.0435 loss_value=0.0109 loss_policy=0.0326 batches=43
+[gen_az 5] cl06/opp: 学習 samples=5583
+  [gen_az 5 cl07/self] epoch=0 loss=0.0393 loss_value=0.0121 loss_policy=0.0272 batches=62
+  [gen_az 5 cl07/self] epoch=1 loss=0.0331 loss_value=0.0064 loss_policy=0.0267 batches=62
+  [gen_az 5 cl07/self] epoch=2 loss=0.0322 loss_value=0.0057 loss_policy=0.0265 batches=62
+[gen_az 5] cl07/self: 学習 samples=8060
+  [gen_az 5 cl07/opp] epoch=0 loss=0.0631 loss_value=0.0315 loss_policy=0.0316 batches=49
+  [gen_az 5 cl07/opp] epoch=1 loss=0.0476 loss_value=0.0169 loss_policy=0.0307 batches=49
+  [gen_az 5 cl07/opp] epoch=2 loss=0.0413 loss_value=0.0110 loss_policy=0.0303 batches=49
+[gen_az 5] cl07/opp: 学習 samples=6352
+  [gen_az 5 cl08/self] epoch=0 loss=0.0401 loss_value=0.0180 loss_policy=0.0221 batches=38
+  [gen_az 5 cl08/self] epoch=1 loss=0.0320 loss_value=0.0105 loss_policy=0.0215 batches=38
+  [gen_az 5 cl08/self] epoch=2 loss=0.0295 loss_value=0.0079 loss_policy=0.0216 batches=38
+[gen_az 5] cl08/self: 学習 samples=4950
+  [gen_az 5 cl08/opp] epoch=0 loss=0.0523 loss_value=0.0258 loss_policy=0.0265 batches=47
+  [gen_az 5 cl08/opp] epoch=1 loss=0.0381 loss_value=0.0124 loss_policy=0.0256 batches=47
+  [gen_az 5 cl08/opp] epoch=2 loss=0.0343 loss_value=0.0094 loss_policy=0.0249 batches=47
+[gen_az 5] cl08/opp: 学習 samples=6055
+  [gen_az 5 cl09/self] epoch=0 loss=0.0486 loss_value=0.0193 loss_policy=0.0293 batches=52
+  [gen_az 5 cl09/self] epoch=1 loss=0.0355 loss_value=0.0077 loss_policy=0.0278 batches=52
+  [gen_az 5 cl09/self] epoch=2 loss=0.0334 loss_value=0.0058 loss_policy=0.0276 batches=52
+[gen_az 5] cl09/self: 学習 samples=6779
+  [gen_az 5 cl09/opp] epoch=0 loss=0.0661 loss_value=0.0272 loss_policy=0.0389 batches=44
+  [gen_az 5 cl09/opp] epoch=1 loss=0.0514 loss_value=0.0138 loss_policy=0.0376 batches=44
+  [gen_az 5 cl09/opp] epoch=2 loss=0.0479 loss_value=0.0111 loss_policy=0.0367 batches=44
+[gen_az 5] cl09/opp: 学習 samples=5695
+  [gen_az 5 cl10/self] epoch=0 loss=0.0447 loss_value=0.0157 loss_policy=0.0290 batches=43
+  [gen_az 5 cl10/self] epoch=1 loss=0.0371 loss_value=0.0087 loss_policy=0.0284 batches=43
+  [gen_az 5 cl10/self] epoch=2 loss=0.0349 loss_value=0.0071 loss_policy=0.0278 batches=43
+[gen_az 5] cl10/self: 学習 samples=5622
+  [gen_az 5 cl10/opp] epoch=0 loss=0.0536 loss_value=0.0272 loss_policy=0.0264 batches=44
+  [gen_az 5 cl10/opp] epoch=1 loss=0.0405 loss_value=0.0150 loss_policy=0.0255 batches=44
+  [gen_az 5 cl10/opp] epoch=2 loss=0.0359 loss_value=0.0111 loss_policy=0.0248 batches=44
+[gen_az 5] cl10/opp: 学習 samples=5681
+  [gen_az 5 cl11/self] epoch=0 loss=0.0568 loss_value=0.0184 loss_policy=0.0384 batches=39
+  [gen_az 5 cl11/self] epoch=1 loss=0.0460 loss_value=0.0087 loss_policy=0.0373 batches=39
+  [gen_az 5 cl11/self] epoch=2 loss=0.0452 loss_value=0.0082 loss_policy=0.0370 batches=39
+[gen_az 5] cl11/self: 学習 samples=5096
+  [gen_az 5 cl11/opp] epoch=0 loss=0.0707 loss_value=0.0358 loss_policy=0.0349 batches=51
+  [gen_az 5 cl11/opp] epoch=1 loss=0.0520 loss_value=0.0180 loss_policy=0.0340 batches=51
+  [gen_az 5 cl11/opp] epoch=2 loss=0.0467 loss_value=0.0135 loss_policy=0.0332 batches=51
+[gen_az 5] cl11/opp: 学習 samples=6621
+  [gen_az 5 cl12/self] epoch=0 loss=0.0540 loss_value=0.0240 loss_policy=0.0300 batches=49
+  [gen_az 5 cl12/self] epoch=1 loss=0.0397 loss_value=0.0109 loss_policy=0.0289 batches=49
+  [gen_az 5 cl12/self] epoch=2 loss=0.0377 loss_value=0.0093 loss_policy=0.0284 batches=49
+[gen_az 5] cl12/self: 学習 samples=6289
+  [gen_az 5 cl12/opp] epoch=0 loss=0.0607 loss_value=0.0269 loss_policy=0.0338 batches=55
+  [gen_az 5 cl12/opp] epoch=1 loss=0.0445 loss_value=0.0121 loss_policy=0.0324 batches=55
+  [gen_az 5 cl12/opp] epoch=2 loss=0.0403 loss_value=0.0088 loss_policy=0.0315 batches=55
+[gen_az 5] cl12/opp: 学習 samples=7103
+  [gen_az 5 cl13/self] epoch=0 loss=0.0713 loss_value=0.0259 loss_policy=0.0454 batches=40
+  [gen_az 5 cl13/self] epoch=1 loss=0.0617 loss_value=0.0170 loss_policy=0.0446 batches=40
+  [gen_az 5 cl13/self] epoch=2 loss=0.0556 loss_value=0.0115 loss_policy=0.0442 batches=40
+[gen_az 5] cl13/self: 学習 samples=5170
+  [gen_az 5 cl13/opp] epoch=0 loss=0.0674 loss_value=0.0332 loss_policy=0.0342 batches=53
+  [gen_az 5 cl13/opp] epoch=1 loss=0.0500 loss_value=0.0166 loss_policy=0.0334 batches=53
+  [gen_az 5 cl13/opp] epoch=2 loss=0.0442 loss_value=0.0116 loss_policy=0.0326 batches=53
+[gen_az 5] cl13/opp: 学習 samples=6897
+  [gen_az 5 cl14/self] epoch=0 loss=0.0500 loss_value=0.0202 loss_policy=0.0298 batches=70
+  [gen_az 5 cl14/self] epoch=1 loss=0.0369 loss_value=0.0081 loss_policy=0.0288 batches=70
+  [gen_az 5 cl14/self] epoch=2 loss=0.0348 loss_value=0.0065 loss_policy=0.0283 batches=70
+[gen_az 5] cl14/self: 学習 samples=9002
+  [gen_az 5 cl14/opp] epoch=0 loss=0.0713 loss_value=0.0325 loss_policy=0.0388 batches=49
+  [gen_az 5 cl14/opp] epoch=1 loss=0.0552 loss_value=0.0182 loss_policy=0.0370 batches=49
+  [gen_az 5 cl14/opp] epoch=2 loss=0.0492 loss_value=0.0135 loss_policy=0.0357 batches=49
+[gen_az 5] cl14/opp: 学習 samples=6347
+  [gen_az 5 cl15/self] epoch=0 loss=0.0631 loss_value=0.0267 loss_policy=0.0363 batches=51
+  [gen_az 5 cl15/self] epoch=1 loss=0.0485 loss_value=0.0125 loss_policy=0.0360 batches=51
+  [gen_az 5 cl15/self] epoch=2 loss=0.0460 loss_value=0.0101 loss_policy=0.0359 batches=51
+[gen_az 5] cl15/self: 学習 samples=6649
+  [gen_az 5 cl15/opp] epoch=0 loss=0.0672 loss_value=0.0352 loss_policy=0.0320 batches=52
+  [gen_az 5 cl15/opp] epoch=1 loss=0.0494 loss_value=0.0182 loss_policy=0.0312 batches=52
+  [gen_az 5 cl15/opp] epoch=2 loss=0.0436 loss_value=0.0129 loss_policy=0.0306 batches=52
+[gen_az 5] cl15/opp: 学習 samples=6741
+[gen_az 5] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_006
+
+========== generation 6 / 10 ==========
+[gen_az 6] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 6] 対戦完了=672/680 self合計=96704 opp合計=96704
+  [gen_az 6 cl00/self] epoch=0 loss=0.0433 loss_value=0.0149 loss_policy=0.0284 batches=50
+  [gen_az 6 cl00/self] epoch=1 loss=0.0350 loss_value=0.0073 loss_policy=0.0277 batches=50
+  [gen_az 6 cl00/self] epoch=2 loss=0.0330 loss_value=0.0058 loss_policy=0.0271 batches=50
+[gen_az 6] cl00/self: 学習 samples=6418
+  [gen_az 6 cl00/opp] epoch=0 loss=0.0486 loss_value=0.0224 loss_policy=0.0262 batches=40
+  [gen_az 6 cl00/opp] epoch=1 loss=0.0370 loss_value=0.0116 loss_policy=0.0254 batches=40
+  [gen_az 6 cl00/opp] epoch=2 loss=0.0336 loss_value=0.0088 loss_policy=0.0248 batches=40
+[gen_az 6] cl00/opp: 学習 samples=5181
+  [gen_az 6 cl01/self] epoch=0 loss=0.0269 loss_value=0.0102 loss_policy=0.0167 batches=57
+  [gen_az 6 cl01/self] epoch=1 loss=0.0221 loss_value=0.0057 loss_policy=0.0164 batches=57
+  [gen_az 6 cl01/self] epoch=2 loss=0.0210 loss_value=0.0047 loss_policy=0.0163 batches=57
+[gen_az 6] cl01/self: 学習 samples=7362
+  [gen_az 6 cl01/opp] epoch=0 loss=0.0503 loss_value=0.0231 loss_policy=0.0272 batches=49
+  [gen_az 6 cl01/opp] epoch=1 loss=0.0386 loss_value=0.0122 loss_policy=0.0264 batches=49
+  [gen_az 6 cl01/opp] epoch=2 loss=0.0341 loss_value=0.0081 loss_policy=0.0260 batches=49
+[gen_az 6] cl01/opp: 学習 samples=6331
+  [gen_az 6 cl02/self] epoch=0 loss=0.0360 loss_value=0.0120 loss_policy=0.0240 batches=47
+  [gen_az 6 cl02/self] epoch=1 loss=0.0296 loss_value=0.0063 loss_policy=0.0233 batches=47
+  [gen_az 6 cl02/self] epoch=2 loss=0.0275 loss_value=0.0044 loss_policy=0.0231 batches=47
+[gen_az 6] cl02/self: 学習 samples=6113
+  [gen_az 6 cl02/opp] epoch=0 loss=0.0422 loss_value=0.0192 loss_policy=0.0229 batches=57
+  [gen_az 6 cl02/opp] epoch=1 loss=0.0313 loss_value=0.0089 loss_policy=0.0224 batches=57
+  [gen_az 6 cl02/opp] epoch=2 loss=0.0282 loss_value=0.0063 loss_policy=0.0219 batches=57
+[gen_az 6] cl02/opp: 学習 samples=7379
+  [gen_az 6 cl03/self] epoch=0 loss=0.0397 loss_value=0.0191 loss_policy=0.0205 batches=32
+  [gen_az 6 cl03/self] epoch=1 loss=0.0282 loss_value=0.0081 loss_policy=0.0201 batches=32
+  [gen_az 6 cl03/self] epoch=2 loss=0.0258 loss_value=0.0061 loss_policy=0.0197 batches=32
+[gen_az 6] cl03/self: 学習 samples=4211
+  [gen_az 6 cl03/opp] epoch=0 loss=0.0481 loss_value=0.0228 loss_policy=0.0254 batches=40
+  [gen_az 6 cl03/opp] epoch=1 loss=0.0346 loss_value=0.0102 loss_policy=0.0244 batches=40
+  [gen_az 6 cl03/opp] epoch=2 loss=0.0309 loss_value=0.0073 loss_policy=0.0236 batches=40
+[gen_az 6] cl03/opp: 学習 samples=5226
+  [gen_az 6 cl04/self] epoch=0 loss=0.0494 loss_value=0.0159 loss_policy=0.0335 batches=52
+  [gen_az 6 cl04/self] epoch=1 loss=0.0401 loss_value=0.0071 loss_policy=0.0329 batches=52
+  [gen_az 6 cl04/self] epoch=2 loss=0.0379 loss_value=0.0055 loss_policy=0.0324 batches=52
+[gen_az 6] cl04/self: 学習 samples=6707
+  [gen_az 6 cl04/opp] epoch=0 loss=0.0475 loss_value=0.0198 loss_policy=0.0277 batches=48
+  [gen_az 6 cl04/opp] epoch=1 loss=0.0368 loss_value=0.0100 loss_policy=0.0269 batches=48
+  [gen_az 6 cl04/opp] epoch=2 loss=0.0329 loss_value=0.0068 loss_policy=0.0261 batches=48
+[gen_az 6] cl04/opp: 学習 samples=6215
+  [gen_az 6 cl05/self] epoch=0 loss=0.0445 loss_value=0.0144 loss_policy=0.0301 batches=54
+  [gen_az 6 cl05/self] epoch=1 loss=0.0359 loss_value=0.0066 loss_policy=0.0293 batches=54
+  [gen_az 6 cl05/self] epoch=2 loss=0.0336 loss_value=0.0051 loss_policy=0.0286 batches=54
+[gen_az 6] cl05/self: 学習 samples=7007
+  [gen_az 6 cl05/opp] epoch=0 loss=0.0547 loss_value=0.0199 loss_policy=0.0348 batches=48
+  [gen_az 6 cl05/opp] epoch=1 loss=0.0433 loss_value=0.0096 loss_policy=0.0337 batches=48
+  [gen_az 6 cl05/opp] epoch=2 loss=0.0397 loss_value=0.0069 loss_policy=0.0328 batches=48
+[gen_az 6] cl05/opp: 学習 samples=6259
+  [gen_az 6 cl06/self] epoch=0 loss=0.0467 loss_value=0.0160 loss_policy=0.0307 batches=37
+  [gen_az 6 cl06/self] epoch=1 loss=0.0383 loss_value=0.0083 loss_policy=0.0300 batches=37
+  [gen_az 6 cl06/self] epoch=2 loss=0.0359 loss_value=0.0063 loss_policy=0.0296 batches=37
+[gen_az 6] cl06/self: 学習 samples=4790
+  [gen_az 6 cl06/opp] epoch=0 loss=0.0454 loss_value=0.0221 loss_policy=0.0233 batches=44
+  [gen_az 6 cl06/opp] epoch=1 loss=0.0333 loss_value=0.0108 loss_policy=0.0225 batches=44
+  [gen_az 6 cl06/opp] epoch=2 loss=0.0300 loss_value=0.0079 loss_policy=0.0221 batches=44
+[gen_az 6] cl06/opp: 学習 samples=5634
+  [gen_az 6 cl07/self] epoch=0 loss=0.0343 loss_value=0.0105 loss_policy=0.0238 batches=58
+  [gen_az 6 cl07/self] epoch=1 loss=0.0282 loss_value=0.0051 loss_policy=0.0231 batches=58
+  [gen_az 6 cl07/self] epoch=2 loss=0.0270 loss_value=0.0042 loss_policy=0.0228 batches=58
+[gen_az 6] cl07/self: 学習 samples=7468
+  [gen_az 6 cl07/opp] epoch=0 loss=0.0513 loss_value=0.0233 loss_policy=0.0279 batches=52
+  [gen_az 6 cl07/opp] epoch=1 loss=0.0385 loss_value=0.0113 loss_policy=0.0272 batches=52
+  [gen_az 6 cl07/opp] epoch=2 loss=0.0350 loss_value=0.0083 loss_policy=0.0267 batches=52
+[gen_az 6] cl07/opp: 学習 samples=6718
+  [gen_az 6 cl08/self] epoch=0 loss=0.0353 loss_value=0.0166 loss_policy=0.0188 batches=37
+  [gen_az 6 cl08/self] epoch=1 loss=0.0271 loss_value=0.0088 loss_policy=0.0183 batches=37
+  [gen_az 6 cl08/self] epoch=2 loss=0.0247 loss_value=0.0067 loss_policy=0.0181 batches=37
+[gen_az 6] cl08/self: 学習 samples=4821
+  [gen_az 6 cl08/opp] epoch=0 loss=0.0483 loss_value=0.0237 loss_policy=0.0245 batches=42
+  [gen_az 6 cl08/opp] epoch=1 loss=0.0350 loss_value=0.0114 loss_policy=0.0236 batches=42
+  [gen_az 6 cl08/opp] epoch=2 loss=0.0318 loss_value=0.0087 loss_policy=0.0230 batches=42
+[gen_az 6] cl08/opp: 学習 samples=5398
+  [gen_az 6 cl09/self] epoch=0 loss=0.0400 loss_value=0.0130 loss_policy=0.0270 batches=48
+  [gen_az 6 cl09/self] epoch=1 loss=0.0325 loss_value=0.0064 loss_policy=0.0261 batches=48
+  [gen_az 6 cl09/self] epoch=2 loss=0.0306 loss_value=0.0049 loss_policy=0.0256 batches=48
+[gen_az 6] cl09/self: 学習 samples=6196
+  [gen_az 6 cl09/opp] epoch=0 loss=0.0586 loss_value=0.0297 loss_policy=0.0289 batches=43
+  [gen_az 6 cl09/opp] epoch=1 loss=0.0410 loss_value=0.0128 loss_policy=0.0282 batches=43
+  [gen_az 6 cl09/opp] epoch=2 loss=0.0363 loss_value=0.0084 loss_policy=0.0280 batches=43
+[gen_az 6] cl09/opp: 学習 samples=5534
+  [gen_az 6 cl10/self] epoch=0 loss=0.0378 loss_value=0.0150 loss_policy=0.0228 batches=44
+  [gen_az 6 cl10/self] epoch=1 loss=0.0294 loss_value=0.0072 loss_policy=0.0221 batches=44
+  [gen_az 6 cl10/self] epoch=2 loss=0.0273 loss_value=0.0054 loss_policy=0.0219 batches=44
+[gen_az 6] cl10/self: 学習 samples=5669
+  [gen_az 6 cl10/opp] epoch=0 loss=0.0445 loss_value=0.0221 loss_policy=0.0225 batches=46
+  [gen_az 6 cl10/opp] epoch=1 loss=0.0322 loss_value=0.0108 loss_policy=0.0214 batches=46
+  [gen_az 6 cl10/opp] epoch=2 loss=0.0284 loss_value=0.0074 loss_policy=0.0210 batches=46
+[gen_az 6] cl10/opp: 学習 samples=5921
+  [gen_az 6 cl11/self] epoch=0 loss=0.0481 loss_value=0.0157 loss_policy=0.0324 batches=42
+  [gen_az 6 cl11/self] epoch=1 loss=0.0389 loss_value=0.0075 loss_policy=0.0314 batches=42
+  [gen_az 6 cl11/self] epoch=2 loss=0.0381 loss_value=0.0072 loss_policy=0.0309 batches=42
+[gen_az 6] cl11/self: 学習 samples=5421
+  [gen_az 6 cl11/opp] epoch=0 loss=0.0550 loss_value=0.0268 loss_policy=0.0282 batches=50
+  [gen_az 6 cl11/opp] epoch=1 loss=0.0401 loss_value=0.0126 loss_policy=0.0275 batches=50
+  [gen_az 6 cl11/opp] epoch=2 loss=0.0359 loss_value=0.0090 loss_policy=0.0269 batches=50
+[gen_az 6] cl11/opp: 学習 samples=6506
+  [gen_az 6 cl12/self] epoch=0 loss=0.0498 loss_value=0.0218 loss_policy=0.0280 batches=42
+  [gen_az 6 cl12/self] epoch=1 loss=0.0360 loss_value=0.0087 loss_policy=0.0272 batches=42
+  [gen_az 6 cl12/self] epoch=2 loss=0.0335 loss_value=0.0068 loss_policy=0.0267 batches=42
+[gen_az 6] cl12/self: 学習 samples=5461
+  [gen_az 6 cl12/opp] epoch=0 loss=0.0517 loss_value=0.0204 loss_policy=0.0313 batches=49
+  [gen_az 6 cl12/opp] epoch=1 loss=0.0388 loss_value=0.0088 loss_policy=0.0300 batches=49
+  [gen_az 6 cl12/opp] epoch=2 loss=0.0356 loss_value=0.0065 loss_policy=0.0291 batches=49
+[gen_az 6] cl12/opp: 学習 samples=6329
+  [gen_az 6 cl13/self] epoch=0 loss=0.0572 loss_value=0.0240 loss_policy=0.0332 batches=37
+  [gen_az 6 cl13/self] epoch=1 loss=0.0431 loss_value=0.0106 loss_policy=0.0324 batches=37
+  [gen_az 6 cl13/self] epoch=2 loss=0.0402 loss_value=0.0080 loss_policy=0.0322 batches=37
+[gen_az 6] cl13/self: 学習 samples=4820
+  [gen_az 6 cl13/opp] epoch=0 loss=0.0503 loss_value=0.0227 loss_policy=0.0276 batches=48
+  [gen_az 6 cl13/opp] epoch=1 loss=0.0387 loss_value=0.0119 loss_policy=0.0268 batches=48
+  [gen_az 6 cl13/opp] epoch=2 loss=0.0342 loss_value=0.0078 loss_policy=0.0264 batches=48
+[gen_az 6] cl13/opp: 学習 samples=6238
+  [gen_az 6 cl14/self] epoch=0 loss=0.0383 loss_value=0.0183 loss_policy=0.0200 batches=63
+  [gen_az 6 cl14/self] epoch=1 loss=0.0256 loss_value=0.0061 loss_policy=0.0195 batches=63
+  [gen_az 6 cl14/self] epoch=2 loss=0.0245 loss_value=0.0053 loss_policy=0.0192 batches=63
+[gen_az 6] cl14/self: 学習 samples=8081
+  [gen_az 6 cl14/opp] epoch=0 loss=0.0551 loss_value=0.0286 loss_policy=0.0265 batches=44
+  [gen_az 6 cl14/opp] epoch=1 loss=0.0387 loss_value=0.0134 loss_policy=0.0254 batches=44
+  [gen_az 6 cl14/opp] epoch=2 loss=0.0338 loss_value=0.0090 loss_policy=0.0248 batches=44
+[gen_az 6] cl14/opp: 学習 samples=5691
+  [gen_az 6 cl15/self] epoch=0 loss=0.0512 loss_value=0.0236 loss_policy=0.0276 batches=48
+  [gen_az 6 cl15/self] epoch=1 loss=0.0371 loss_value=0.0100 loss_policy=0.0271 batches=48
+  [gen_az 6 cl15/self] epoch=2 loss=0.0347 loss_value=0.0078 loss_policy=0.0269 batches=48
+[gen_az 6] cl15/self: 学習 samples=6159
+  [gen_az 6 cl15/opp] epoch=0 loss=0.0516 loss_value=0.0245 loss_policy=0.0270 batches=48
+  [gen_az 6 cl15/opp] epoch=1 loss=0.0392 loss_value=0.0127 loss_policy=0.0265 batches=48
+  [gen_az 6 cl15/opp] epoch=2 loss=0.0354 loss_value=0.0094 loss_policy=0.0260 batches=48
+[gen_az 6] cl15/opp: 学習 samples=6144
+[gen_az 6] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_007
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_005
+
+========== generation 7 / 10 ==========
+[gen_az 7] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 7] 対戦完了=674/680 self合計=93079 opp合計=93079
+  [gen_az 7 cl00/self] epoch=0 loss=0.0415 loss_value=0.0132 loss_policy=0.0283 batches=48
+  [gen_az 7 cl00/self] epoch=1 loss=0.0335 loss_value=0.0060 loss_policy=0.0275 batches=48
+  [gen_az 7 cl00/self] epoch=2 loss=0.0318 loss_value=0.0047 loss_policy=0.0271 batches=48
+[gen_az 7] cl00/self: 学習 samples=6268
+  [gen_az 7 cl00/opp] epoch=0 loss=0.0430 loss_value=0.0191 loss_policy=0.0239 batches=40
+  [gen_az 7 cl00/opp] epoch=1 loss=0.0330 loss_value=0.0099 loss_policy=0.0231 batches=40
+  [gen_az 7 cl00/opp] epoch=2 loss=0.0295 loss_value=0.0068 loss_policy=0.0226 batches=40
+[gen_az 7] cl00/opp: 学習 samples=5155
+  [gen_az 7 cl01/self] epoch=0 loss=0.0277 loss_value=0.0131 loss_policy=0.0145 batches=54
+  [gen_az 7 cl01/self] epoch=1 loss=0.0203 loss_value=0.0062 loss_policy=0.0142 batches=54
+  [gen_az 7 cl01/self] epoch=2 loss=0.0187 loss_value=0.0049 loss_policy=0.0138 batches=54
+[gen_az 7] cl01/self: 学習 samples=6965
+  [gen_az 7 cl01/opp] epoch=0 loss=0.0476 loss_value=0.0230 loss_policy=0.0247 batches=48
+  [gen_az 7 cl01/opp] epoch=1 loss=0.0348 loss_value=0.0109 loss_policy=0.0239 batches=48
+  [gen_az 7 cl01/opp] epoch=2 loss=0.0307 loss_value=0.0074 loss_policy=0.0233 batches=48
+[gen_az 7] cl01/opp: 学習 samples=6199
+  [gen_az 7 cl02/self] epoch=0 loss=0.0305 loss_value=0.0120 loss_policy=0.0185 batches=42
+  [gen_az 7 cl02/self] epoch=1 loss=0.0230 loss_value=0.0049 loss_policy=0.0180 batches=42
+  [gen_az 7 cl02/self] epoch=2 loss=0.0219 loss_value=0.0041 loss_policy=0.0178 batches=42
+[gen_az 7] cl02/self: 学習 samples=5497
+  [gen_az 7 cl02/opp] epoch=0 loss=0.0359 loss_value=0.0166 loss_policy=0.0193 batches=52
+  [gen_az 7 cl02/opp] epoch=1 loss=0.0265 loss_value=0.0077 loss_policy=0.0188 batches=52
+  [gen_az 7 cl02/opp] epoch=2 loss=0.0239 loss_value=0.0055 loss_policy=0.0184 batches=52
+[gen_az 7] cl02/opp: 学習 samples=6778
+  [gen_az 7 cl03/self] epoch=0 loss=0.0350 loss_value=0.0166 loss_policy=0.0184 batches=32
+  [gen_az 7 cl03/self] epoch=1 loss=0.0259 loss_value=0.0081 loss_policy=0.0178 batches=32
+  [gen_az 7 cl03/self] epoch=2 loss=0.0237 loss_value=0.0061 loss_policy=0.0176 batches=32
+[gen_az 7] cl03/self: 学習 samples=4106
+  [gen_az 7 cl03/opp] epoch=0 loss=0.0421 loss_value=0.0203 loss_policy=0.0218 batches=37
+  [gen_az 7 cl03/opp] epoch=1 loss=0.0310 loss_value=0.0101 loss_policy=0.0208 batches=37
+  [gen_az 7 cl03/opp] epoch=2 loss=0.0277 loss_value=0.0075 loss_policy=0.0202 batches=37
+[gen_az 7] cl03/opp: 学習 samples=4785
+  [gen_az 7 cl04/self] epoch=0 loss=0.0371 loss_value=0.0116 loss_policy=0.0255 batches=52
+  [gen_az 7 cl04/self] epoch=1 loss=0.0300 loss_value=0.0050 loss_policy=0.0250 batches=52
+  [gen_az 7 cl04/self] epoch=2 loss=0.0283 loss_value=0.0039 loss_policy=0.0243 batches=52
+[gen_az 7] cl04/self: 学習 samples=6679
+  [gen_az 7 cl04/opp] epoch=0 loss=0.0455 loss_value=0.0223 loss_policy=0.0232 batches=45
+  [gen_az 7 cl04/opp] epoch=1 loss=0.0324 loss_value=0.0102 loss_policy=0.0223 batches=45
+  [gen_az 7 cl04/opp] epoch=2 loss=0.0293 loss_value=0.0074 loss_policy=0.0219 batches=45
+[gen_az 7] cl04/opp: 学習 samples=5857
+  [gen_az 7 cl05/self] epoch=0 loss=0.0343 loss_value=0.0106 loss_policy=0.0236 batches=49
+  [gen_az 7 cl05/self] epoch=1 loss=0.0286 loss_value=0.0055 loss_policy=0.0230 batches=49
+  [gen_az 7 cl05/self] epoch=2 loss=0.0277 loss_value=0.0049 loss_policy=0.0228 batches=49
+[gen_az 7] cl05/self: 学習 samples=6324
+  [gen_az 7 cl05/opp] epoch=0 loss=0.0438 loss_value=0.0189 loss_policy=0.0248 batches=47
+  [gen_az 7 cl05/opp] epoch=1 loss=0.0339 loss_value=0.0098 loss_policy=0.0241 batches=47
+  [gen_az 7 cl05/opp] epoch=2 loss=0.0304 loss_value=0.0067 loss_policy=0.0237 batches=47
+[gen_az 7] cl05/opp: 学習 samples=6096
+  [gen_az 7 cl06/self] epoch=0 loss=0.0494 loss_value=0.0171 loss_policy=0.0323 batches=37
+  [gen_az 7 cl06/self] epoch=1 loss=0.0393 loss_value=0.0078 loss_policy=0.0315 batches=37
+  [gen_az 7 cl06/self] epoch=2 loss=0.0368 loss_value=0.0058 loss_policy=0.0310 batches=37
+[gen_az 7] cl06/self: 学習 samples=4820
+  [gen_az 7 cl06/opp] epoch=0 loss=0.0413 loss_value=0.0182 loss_policy=0.0231 batches=42
+  [gen_az 7 cl06/opp] epoch=1 loss=0.0315 loss_value=0.0094 loss_policy=0.0221 batches=42
+  [gen_az 7 cl06/opp] epoch=2 loss=0.0277 loss_value=0.0063 loss_policy=0.0215 batches=42
+[gen_az 7] cl06/opp: 学習 samples=5383
+  [gen_az 7 cl07/self] epoch=0 loss=0.0359 loss_value=0.0116 loss_policy=0.0243 batches=52
+  [gen_az 7 cl07/self] epoch=1 loss=0.0287 loss_value=0.0049 loss_policy=0.0238 batches=52
+  [gen_az 7 cl07/self] epoch=2 loss=0.0274 loss_value=0.0039 loss_policy=0.0235 batches=52
+[gen_az 7] cl07/self: 学習 samples=6774
+  [gen_az 7 cl07/opp] epoch=0 loss=0.0450 loss_value=0.0209 loss_policy=0.0241 batches=47
+  [gen_az 7 cl07/opp] epoch=1 loss=0.0331 loss_value=0.0099 loss_policy=0.0233 batches=47
+  [gen_az 7 cl07/opp] epoch=2 loss=0.0301 loss_value=0.0074 loss_policy=0.0227 batches=47
+[gen_az 7] cl07/opp: 学習 samples=6064
+  [gen_az 7 cl08/self] epoch=0 loss=0.0344 loss_value=0.0150 loss_policy=0.0194 batches=39
+  [gen_az 7 cl08/self] epoch=1 loss=0.0257 loss_value=0.0069 loss_policy=0.0187 batches=39
+  [gen_az 7 cl08/self] epoch=2 loss=0.0243 loss_value=0.0058 loss_policy=0.0185 batches=39
+[gen_az 7] cl08/self: 学習 samples=5058
+  [gen_az 7 cl08/opp] epoch=0 loss=0.0390 loss_value=0.0193 loss_policy=0.0196 batches=42
+  [gen_az 7 cl08/opp] epoch=1 loss=0.0281 loss_value=0.0093 loss_policy=0.0188 batches=42
+  [gen_az 7 cl08/opp] epoch=2 loss=0.0248 loss_value=0.0065 loss_policy=0.0183 batches=42
+[gen_az 7] cl08/opp: 学習 samples=5393
+  [gen_az 7 cl09/self] epoch=0 loss=0.0395 loss_value=0.0138 loss_policy=0.0257 batches=45
+  [gen_az 7 cl09/self] epoch=1 loss=0.0312 loss_value=0.0061 loss_policy=0.0251 batches=45
+  [gen_az 7 cl09/self] epoch=2 loss=0.0289 loss_value=0.0044 loss_policy=0.0245 batches=45
+[gen_az 7] cl09/self: 学習 samples=5820
+  [gen_az 7 cl09/opp] epoch=0 loss=0.0476 loss_value=0.0212 loss_policy=0.0264 batches=41
+  [gen_az 7 cl09/opp] epoch=1 loss=0.0347 loss_value=0.0092 loss_policy=0.0255 batches=41
+  [gen_az 7 cl09/opp] epoch=2 loss=0.0311 loss_value=0.0062 loss_policy=0.0249 batches=41
+[gen_az 7] cl09/opp: 学習 samples=5302
+  [gen_az 7 cl10/self] epoch=0 loss=0.0394 loss_value=0.0161 loss_policy=0.0232 batches=41
+  [gen_az 7 cl10/self] epoch=1 loss=0.0303 loss_value=0.0077 loss_policy=0.0226 batches=41
+  [gen_az 7 cl10/self] epoch=2 loss=0.0279 loss_value=0.0057 loss_policy=0.0222 batches=41
+[gen_az 7] cl10/self: 学習 samples=5375
+  [gen_az 7 cl10/opp] epoch=0 loss=0.0430 loss_value=0.0217 loss_policy=0.0213 batches=43
+  [gen_az 7 cl10/opp] epoch=1 loss=0.0300 loss_value=0.0097 loss_policy=0.0203 batches=43
+  [gen_az 7 cl10/opp] epoch=2 loss=0.0268 loss_value=0.0067 loss_policy=0.0200 batches=43
+[gen_az 7] cl10/opp: 学習 samples=5537
+  [gen_az 7 cl11/self] epoch=0 loss=0.0440 loss_value=0.0188 loss_policy=0.0252 batches=41
+  [gen_az 7 cl11/self] epoch=1 loss=0.0314 loss_value=0.0072 loss_policy=0.0242 batches=41
+  [gen_az 7 cl11/self] epoch=2 loss=0.0291 loss_value=0.0052 loss_policy=0.0239 batches=41
+[gen_az 7] cl11/self: 学習 samples=5370
+  [gen_az 7 cl11/opp] epoch=0 loss=0.0447 loss_value=0.0225 loss_policy=0.0223 batches=51
+  [gen_az 7 cl11/opp] epoch=1 loss=0.0306 loss_value=0.0091 loss_policy=0.0215 batches=51
+  [gen_az 7 cl11/opp] epoch=2 loss=0.0273 loss_value=0.0065 loss_policy=0.0208 batches=51
+[gen_az 7] cl11/opp: 学習 samples=6583
+  [gen_az 7 cl12/self] epoch=0 loss=0.0428 loss_value=0.0222 loss_policy=0.0206 batches=39
+  [gen_az 7 cl12/self] epoch=1 loss=0.0275 loss_value=0.0074 loss_policy=0.0201 batches=39
+  [gen_az 7 cl12/self] epoch=2 loss=0.0256 loss_value=0.0056 loss_policy=0.0199 batches=39
+[gen_az 7] cl12/self: 学習 samples=5068
+  [gen_az 7 cl12/opp] epoch=0 loss=0.0419 loss_value=0.0170 loss_policy=0.0249 batches=44
+  [gen_az 7 cl12/opp] epoch=1 loss=0.0313 loss_value=0.0073 loss_policy=0.0240 batches=44
+  [gen_az 7 cl12/opp] epoch=2 loss=0.0289 loss_value=0.0054 loss_policy=0.0235 batches=44
+[gen_az 7] cl12/opp: 学習 samples=5714
+  [gen_az 7 cl13/self] epoch=0 loss=0.0487 loss_value=0.0213 loss_policy=0.0274 batches=37
+  [gen_az 7 cl13/self] epoch=1 loss=0.0363 loss_value=0.0090 loss_policy=0.0273 batches=37
+  [gen_az 7 cl13/self] epoch=2 loss=0.0332 loss_value=0.0063 loss_policy=0.0269 batches=37
+[gen_az 7] cl13/self: 学習 samples=4853
+  [gen_az 7 cl13/opp] epoch=0 loss=0.0472 loss_value=0.0232 loss_policy=0.0240 batches=48
+  [gen_az 7 cl13/opp] epoch=1 loss=0.0324 loss_value=0.0091 loss_policy=0.0233 batches=48
+  [gen_az 7 cl13/opp] epoch=2 loss=0.0289 loss_value=0.0061 loss_policy=0.0229 batches=48
+[gen_az 7] cl13/opp: 学習 samples=6207
+  [gen_az 7 cl14/self] epoch=0 loss=0.0362 loss_value=0.0170 loss_policy=0.0192 batches=66
+  [gen_az 7 cl14/self] epoch=1 loss=0.0245 loss_value=0.0059 loss_policy=0.0187 batches=66
+  [gen_az 7 cl14/self] epoch=2 loss=0.0227 loss_value=0.0044 loss_policy=0.0183 batches=66
+[gen_az 7] cl14/self: 学習 samples=8465
+  [gen_az 7 cl14/opp] epoch=0 loss=0.0531 loss_value=0.0246 loss_policy=0.0285 batches=48
+  [gen_az 7 cl14/opp] epoch=1 loss=0.0395 loss_value=0.0120 loss_policy=0.0275 batches=48
+  [gen_az 7 cl14/opp] epoch=2 loss=0.0349 loss_value=0.0082 loss_policy=0.0267 batches=48
+[gen_az 7] cl14/opp: 学習 samples=6250
+  [gen_az 7 cl15/self] epoch=0 loss=0.0334 loss_value=0.0178 loss_policy=0.0157 batches=44
+  [gen_az 7 cl15/self] epoch=1 loss=0.0224 loss_value=0.0071 loss_policy=0.0153 batches=44
+  [gen_az 7 cl15/self] epoch=2 loss=0.0207 loss_value=0.0056 loss_policy=0.0151 batches=44
+[gen_az 7] cl15/self: 学習 samples=5637
+  [gen_az 7 cl15/opp] epoch=0 loss=0.0438 loss_value=0.0197 loss_policy=0.0241 batches=45
+  [gen_az 7 cl15/opp] epoch=1 loss=0.0329 loss_value=0.0096 loss_policy=0.0233 batches=45
+  [gen_az 7 cl15/opp] epoch=2 loss=0.0296 loss_value=0.0070 loss_policy=0.0226 batches=45
+[gen_az 7] cl15/opp: 学習 samples=5776
+[gen_az 7] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_008
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_006
+
+========== generation 8 / 10 ==========
+[gen_az 8] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 8] 対戦完了=674/680 self合計=92237 opp合計=92237
+  [gen_az 8 cl00/self] epoch=0 loss=0.0358 loss_value=0.0113 loss_policy=0.0245 batches=46
+  [gen_az 8 cl00/self] epoch=1 loss=0.0289 loss_value=0.0054 loss_policy=0.0235 batches=46
+  [gen_az 8 cl00/self] epoch=2 loss=0.0275 loss_value=0.0046 loss_policy=0.0229 batches=46
+[gen_az 8] cl00/self: 学習 samples=5960
+  [gen_az 8 cl00/opp] epoch=0 loss=0.0370 loss_value=0.0161 loss_policy=0.0209 batches=40
+  [gen_az 8 cl00/opp] epoch=1 loss=0.0288 loss_value=0.0085 loss_policy=0.0203 batches=40
+  [gen_az 8 cl00/opp] epoch=2 loss=0.0257 loss_value=0.0059 loss_policy=0.0198 batches=40
+[gen_az 8] cl00/opp: 学習 samples=5195
+  [gen_az 8 cl01/self] epoch=0 loss=0.0201 loss_value=0.0086 loss_policy=0.0114 batches=53
+  [gen_az 8 cl01/self] epoch=1 loss=0.0157 loss_value=0.0045 loss_policy=0.0112 batches=53
+  [gen_az 8 cl01/self] epoch=2 loss=0.0145 loss_value=0.0036 loss_policy=0.0109 batches=53
+[gen_az 8] cl01/self: 学習 samples=6817
+  [gen_az 8 cl01/opp] epoch=0 loss=0.0359 loss_value=0.0156 loss_policy=0.0203 batches=43
+  [gen_az 8 cl01/opp] epoch=1 loss=0.0276 loss_value=0.0080 loss_policy=0.0196 batches=43
+  [gen_az 8 cl01/opp] epoch=2 loss=0.0257 loss_value=0.0064 loss_policy=0.0193 batches=43
+[gen_az 8] cl01/opp: 学習 samples=5613
+  [gen_az 8 cl02/self] epoch=0 loss=0.0266 loss_value=0.0130 loss_policy=0.0136 batches=44
+  [gen_az 8 cl02/self] epoch=1 loss=0.0187 loss_value=0.0056 loss_policy=0.0132 batches=44
+  [gen_az 8 cl02/self] epoch=2 loss=0.0170 loss_value=0.0040 loss_policy=0.0130 batches=44
+[gen_az 8] cl02/self: 学習 samples=5689
+  [gen_az 8 cl02/opp] epoch=0 loss=0.0313 loss_value=0.0130 loss_policy=0.0183 batches=53
+  [gen_az 8 cl02/opp] epoch=1 loss=0.0240 loss_value=0.0063 loss_policy=0.0178 batches=53
+  [gen_az 8 cl02/opp] epoch=2 loss=0.0222 loss_value=0.0050 loss_policy=0.0172 batches=53
+[gen_az 8] cl02/opp: 学習 samples=6850
+  [gen_az 8 cl03/self] epoch=0 loss=0.0311 loss_value=0.0145 loss_policy=0.0166 batches=30
+  [gen_az 8 cl03/self] epoch=1 loss=0.0225 loss_value=0.0067 loss_policy=0.0159 batches=30
+  [gen_az 8 cl03/self] epoch=2 loss=0.0202 loss_value=0.0048 loss_policy=0.0154 batches=30
+[gen_az 8] cl03/self: 学習 samples=3924
+  [gen_az 8 cl03/opp] epoch=0 loss=0.0367 loss_value=0.0188 loss_policy=0.0179 batches=34
+  [gen_az 8 cl03/opp] epoch=1 loss=0.0264 loss_value=0.0093 loss_policy=0.0171 batches=34
+  [gen_az 8 cl03/opp] epoch=2 loss=0.0234 loss_value=0.0067 loss_policy=0.0167 batches=34
+[gen_az 8] cl03/opp: 学習 samples=4476
+  [gen_az 8 cl04/self] epoch=0 loss=0.0356 loss_value=0.0119 loss_policy=0.0236 batches=50
+  [gen_az 8 cl04/self] epoch=1 loss=0.0286 loss_value=0.0056 loss_policy=0.0230 batches=50
+  [gen_az 8 cl04/self] epoch=2 loss=0.0267 loss_value=0.0041 loss_policy=0.0226 batches=50
+[gen_az 8] cl04/self: 学習 samples=6449
+  [gen_az 8 cl04/opp] epoch=0 loss=0.0373 loss_value=0.0180 loss_policy=0.0193 batches=46
+  [gen_az 8 cl04/opp] epoch=1 loss=0.0276 loss_value=0.0089 loss_policy=0.0187 batches=46
+  [gen_az 8 cl04/opp] epoch=2 loss=0.0242 loss_value=0.0062 loss_policy=0.0180 batches=46
+[gen_az 8] cl04/opp: 学習 samples=5984
+  [gen_az 8 cl05/self] epoch=0 loss=0.0304 loss_value=0.0086 loss_policy=0.0217 batches=54
+  [gen_az 8 cl05/self] epoch=1 loss=0.0255 loss_value=0.0044 loss_policy=0.0211 batches=54
+  [gen_az 8 cl05/self] epoch=2 loss=0.0243 loss_value=0.0036 loss_policy=0.0207 batches=54
+[gen_az 8] cl05/self: 学習 samples=6965
+  [gen_az 8 cl05/opp] epoch=0 loss=0.0377 loss_value=0.0174 loss_policy=0.0203 batches=47
+  [gen_az 8 cl05/opp] epoch=1 loss=0.0280 loss_value=0.0085 loss_policy=0.0195 batches=47
+  [gen_az 8 cl05/opp] epoch=2 loss=0.0250 loss_value=0.0058 loss_policy=0.0192 batches=47
+[gen_az 8] cl05/opp: 学習 samples=6080
+  [gen_az 8 cl06/self] epoch=0 loss=0.0383 loss_value=0.0143 loss_policy=0.0240 batches=36
+  [gen_az 8 cl06/self] epoch=1 loss=0.0304 loss_value=0.0070 loss_policy=0.0234 batches=36
+  [gen_az 8 cl06/self] epoch=2 loss=0.0281 loss_value=0.0051 loss_policy=0.0230 batches=36
+[gen_az 8] cl06/self: 学習 samples=4654
+  [gen_az 8 cl06/opp] epoch=0 loss=0.0369 loss_value=0.0167 loss_policy=0.0202 batches=41
+  [gen_az 8 cl06/opp] epoch=1 loss=0.0283 loss_value=0.0092 loss_policy=0.0191 batches=41
+  [gen_az 8 cl06/opp] epoch=2 loss=0.0251 loss_value=0.0063 loss_policy=0.0187 batches=41
+[gen_az 8] cl06/opp: 学習 samples=5325
+  [gen_az 8 cl07/self] epoch=0 loss=0.0329 loss_value=0.0136 loss_policy=0.0193 batches=49
+  [gen_az 8 cl07/self] epoch=1 loss=0.0240 loss_value=0.0052 loss_policy=0.0188 batches=49
+  [gen_az 8 cl07/self] epoch=2 loss=0.0231 loss_value=0.0046 loss_policy=0.0185 batches=49
+[gen_az 8] cl07/self: 学習 samples=6307
+  [gen_az 8 cl07/opp] epoch=0 loss=0.0372 loss_value=0.0175 loss_policy=0.0197 batches=47
+  [gen_az 8 cl07/opp] epoch=1 loss=0.0275 loss_value=0.0081 loss_policy=0.0193 batches=47
+  [gen_az 8 cl07/opp] epoch=2 loss=0.0252 loss_value=0.0064 loss_policy=0.0187 batches=47
+[gen_az 8] cl07/opp: 学習 samples=6104
+  [gen_az 8 cl08/self] epoch=0 loss=0.0300 loss_value=0.0126 loss_policy=0.0174 batches=41
+  [gen_az 8 cl08/self] epoch=1 loss=0.0226 loss_value=0.0057 loss_policy=0.0169 batches=41
+  [gen_az 8 cl08/self] epoch=2 loss=0.0212 loss_value=0.0046 loss_policy=0.0166 batches=41
+[gen_az 8] cl08/self: 学習 samples=5367
+  [gen_az 8 cl08/opp] epoch=0 loss=0.0356 loss_value=0.0157 loss_policy=0.0199 batches=45
+  [gen_az 8 cl08/opp] epoch=1 loss=0.0267 loss_value=0.0076 loss_policy=0.0191 batches=45
+  [gen_az 8 cl08/opp] epoch=2 loss=0.0239 loss_value=0.0054 loss_policy=0.0186 batches=45
+[gen_az 8] cl08/opp: 学習 samples=5883
+  [gen_az 8 cl09/self] epoch=0 loss=0.0310 loss_value=0.0122 loss_policy=0.0187 batches=43
+  [gen_az 8 cl09/self] epoch=1 loss=0.0239 loss_value=0.0056 loss_policy=0.0183 batches=43
+  [gen_az 8 cl09/self] epoch=2 loss=0.0219 loss_value=0.0040 loss_policy=0.0179 batches=43
+[gen_az 8] cl09/self: 学習 samples=5562
+  [gen_az 8 cl09/opp] epoch=0 loss=0.0397 loss_value=0.0173 loss_policy=0.0225 batches=39
+  [gen_az 8 cl09/opp] epoch=1 loss=0.0290 loss_value=0.0075 loss_policy=0.0215 batches=39
+  [gen_az 8 cl09/opp] epoch=2 loss=0.0261 loss_value=0.0052 loss_policy=0.0209 batches=39
+[gen_az 8] cl09/opp: 学習 samples=5066
+  [gen_az 8 cl10/self] epoch=0 loss=0.0340 loss_value=0.0156 loss_policy=0.0184 batches=39
+  [gen_az 8 cl10/self] epoch=1 loss=0.0247 loss_value=0.0069 loss_policy=0.0178 batches=39
+  [gen_az 8 cl10/self] epoch=2 loss=0.0226 loss_value=0.0053 loss_policy=0.0173 batches=39
+[gen_az 8] cl10/self: 学習 samples=5033
+  [gen_az 8 cl10/opp] epoch=0 loss=0.0332 loss_value=0.0163 loss_policy=0.0170 batches=38
+  [gen_az 8 cl10/opp] epoch=1 loss=0.0245 loss_value=0.0082 loss_policy=0.0163 batches=38
+  [gen_az 8 cl10/opp] epoch=2 loss=0.0216 loss_value=0.0058 loss_policy=0.0158 batches=38
+[gen_az 8] cl10/opp: 学習 samples=4954
+  [gen_az 8 cl11/self] epoch=0 loss=0.0337 loss_value=0.0128 loss_policy=0.0209 batches=41
+  [gen_az 8 cl11/self] epoch=1 loss=0.0267 loss_value=0.0065 loss_policy=0.0202 batches=41
+  [gen_az 8 cl11/self] epoch=2 loss=0.0249 loss_value=0.0050 loss_policy=0.0199 batches=41
+[gen_az 8] cl11/self: 学習 samples=5262
+  [gen_az 8 cl11/opp] epoch=0 loss=0.0313 loss_value=0.0146 loss_policy=0.0167 batches=49
+  [gen_az 8 cl11/opp] epoch=1 loss=0.0234 loss_value=0.0071 loss_policy=0.0163 batches=49
+  [gen_az 8 cl11/opp] epoch=2 loss=0.0215 loss_value=0.0055 loss_policy=0.0159 batches=49
+[gen_az 8] cl11/opp: 学習 samples=6273
+  [gen_az 8 cl12/self] epoch=0 loss=0.0287 loss_value=0.0135 loss_policy=0.0152 batches=38
+  [gen_az 8 cl12/self] epoch=1 loss=0.0204 loss_value=0.0055 loss_policy=0.0149 batches=38
+  [gen_az 8 cl12/self] epoch=2 loss=0.0190 loss_value=0.0041 loss_policy=0.0149 batches=38
+[gen_az 8] cl12/self: 学習 samples=4929
+  [gen_az 8 cl12/opp] epoch=0 loss=0.0379 loss_value=0.0159 loss_policy=0.0221 batches=45
+  [gen_az 8 cl12/opp] epoch=1 loss=0.0280 loss_value=0.0067 loss_policy=0.0213 batches=45
+  [gen_az 8 cl12/opp] epoch=2 loss=0.0258 loss_value=0.0049 loss_policy=0.0209 batches=45
+[gen_az 8] cl12/opp: 学習 samples=5855
+  [gen_az 8 cl13/self] epoch=0 loss=0.0496 loss_value=0.0217 loss_policy=0.0280 batches=40
+  [gen_az 8 cl13/self] epoch=1 loss=0.0362 loss_value=0.0087 loss_policy=0.0275 batches=40
+  [gen_az 8 cl13/self] epoch=2 loss=0.0336 loss_value=0.0065 loss_policy=0.0272 batches=40
+[gen_az 8] cl13/self: 学習 samples=5150
+  [gen_az 8 cl13/opp] epoch=0 loss=0.0440 loss_value=0.0184 loss_policy=0.0256 batches=50
+  [gen_az 8 cl13/opp] epoch=1 loss=0.0336 loss_value=0.0087 loss_policy=0.0249 batches=50
+  [gen_az 8 cl13/opp] epoch=2 loss=0.0303 loss_value=0.0058 loss_policy=0.0245 batches=50
+[gen_az 8] cl13/opp: 学習 samples=6410
+  [gen_az 8 cl14/self] epoch=0 loss=0.0221 loss_value=0.0083 loss_policy=0.0139 batches=60
+  [gen_az 8 cl14/self] epoch=1 loss=0.0176 loss_value=0.0042 loss_policy=0.0134 batches=60
+  [gen_az 8 cl14/self] epoch=2 loss=0.0168 loss_value=0.0037 loss_policy=0.0131 batches=60
+[gen_az 8] cl14/self: 学習 samples=7690
+  [gen_az 8 cl14/opp] epoch=0 loss=0.0408 loss_value=0.0212 loss_policy=0.0196 batches=47
+  [gen_az 8 cl14/opp] epoch=1 loss=0.0277 loss_value=0.0091 loss_policy=0.0186 batches=47
+  [gen_az 8 cl14/opp] epoch=2 loss=0.0248 loss_value=0.0065 loss_policy=0.0183 batches=47
+[gen_az 8] cl14/opp: 学習 samples=6095
+  [gen_az 8 cl15/self] epoch=0 loss=0.0357 loss_value=0.0185 loss_policy=0.0172 batches=50
+  [gen_az 8 cl15/self] epoch=1 loss=0.0239 loss_value=0.0070 loss_policy=0.0169 batches=50
+  [gen_az 8 cl15/self] epoch=2 loss=0.0226 loss_value=0.0058 loss_policy=0.0168 batches=50
+[gen_az 8] cl15/self: 学習 samples=6479
+  [gen_az 8 cl15/opp] epoch=0 loss=0.0403 loss_value=0.0241 loss_policy=0.0162 batches=47
+  [gen_az 8 cl15/opp] epoch=1 loss=0.0257 loss_value=0.0102 loss_policy=0.0156 batches=47
+  [gen_az 8 cl15/opp] epoch=2 loss=0.0221 loss_value=0.0066 loss_policy=0.0155 batches=47
+[gen_az 8] cl15/opp: 学習 samples=6074
+[gen_az 8] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_009
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_007
+
+========== generation 9 / 10 ==========
+[gen_az 9] collect: agents=16 pairings=136 games=5 workers=2 lanes=128 search=10 device=cuda
+[gen_az 9] 対戦完了=676/680 self合計=95608 opp合計=95608
+  [gen_az 9 cl00/self] epoch=0 loss=0.0291 loss_value=0.0094 loss_policy=0.0197 batches=53
+  [gen_az 9 cl00/self] epoch=1 loss=0.0240 loss_value=0.0049 loss_policy=0.0191 batches=53
+  [gen_az 9 cl00/self] epoch=2 loss=0.0221 loss_value=0.0035 loss_policy=0.0186 batches=53
+[gen_az 9] cl00/self: 学習 samples=6789
+  [gen_az 9 cl00/opp] epoch=0 loss=0.0337 loss_value=0.0151 loss_policy=0.0186 batches=43
+  [gen_az 9 cl00/opp] epoch=1 loss=0.0249 loss_value=0.0070 loss_policy=0.0179 batches=43
+  [gen_az 9 cl00/opp] epoch=2 loss=0.0223 loss_value=0.0050 loss_policy=0.0173 batches=43
+[gen_az 9] cl00/opp: 学習 samples=5517
+  [gen_az 9 cl01/self] epoch=0 loss=0.0200 loss_value=0.0090 loss_policy=0.0110 batches=56
+  [gen_az 9 cl01/self] epoch=1 loss=0.0151 loss_value=0.0044 loss_policy=0.0107 batches=56
+  [gen_az 9 cl01/self] epoch=2 loss=0.0142 loss_value=0.0038 loss_policy=0.0105 batches=56
+[gen_az 9] cl01/self: 学習 samples=7213
+  [gen_az 9 cl01/opp] epoch=0 loss=0.0306 loss_value=0.0143 loss_policy=0.0163 batches=47
+  [gen_az 9 cl01/opp] epoch=1 loss=0.0224 loss_value=0.0067 loss_policy=0.0157 batches=47
+  [gen_az 9 cl01/opp] epoch=2 loss=0.0205 loss_value=0.0050 loss_policy=0.0155 batches=47
+[gen_az 9] cl01/opp: 学習 samples=6118
+  [gen_az 9 cl02/self] epoch=0 loss=0.0238 loss_value=0.0098 loss_policy=0.0140 batches=41
+  [gen_az 9 cl02/self] epoch=1 loss=0.0174 loss_value=0.0039 loss_policy=0.0134 batches=41
+  [gen_az 9 cl02/self] epoch=2 loss=0.0165 loss_value=0.0032 loss_policy=0.0134 batches=41
+[gen_az 9] cl02/self: 学習 samples=5340
+  [gen_az 9 cl02/opp] epoch=0 loss=0.0267 loss_value=0.0117 loss_policy=0.0150 batches=51
+  [gen_az 9 cl02/opp] epoch=1 loss=0.0203 loss_value=0.0057 loss_policy=0.0146 batches=51
+  [gen_az 9 cl02/opp] epoch=2 loss=0.0186 loss_value=0.0044 loss_policy=0.0142 batches=51
+[gen_az 9] cl02/opp: 学習 samples=6597
+  [gen_az 9 cl03/self] epoch=0 loss=0.0358 loss_value=0.0204 loss_policy=0.0154 batches=30
+  [gen_az 9 cl03/self] epoch=1 loss=0.0250 loss_value=0.0099 loss_policy=0.0151 batches=30
+  [gen_az 9 cl03/self] epoch=2 loss=0.0207 loss_value=0.0059 loss_policy=0.0148 batches=30
+[gen_az 9] cl03/self: 学習 samples=3963
+  [gen_az 9 cl03/opp] epoch=0 loss=0.0333 loss_value=0.0163 loss_policy=0.0170 batches=39
+  [gen_az 9 cl03/opp] epoch=1 loss=0.0246 loss_value=0.0082 loss_policy=0.0164 batches=39
+  [gen_az 9 cl03/opp] epoch=2 loss=0.0222 loss_value=0.0061 loss_policy=0.0161 batches=39
+[gen_az 9] cl03/opp: 学習 samples=5007
+  [gen_az 9 cl04/self] epoch=0 loss=0.0268 loss_value=0.0087 loss_policy=0.0181 batches=50
+  [gen_az 9 cl04/self] epoch=1 loss=0.0216 loss_value=0.0038 loss_policy=0.0178 batches=50
+  [gen_az 9 cl04/self] epoch=2 loss=0.0202 loss_value=0.0029 loss_policy=0.0173 batches=50
+[gen_az 9] cl04/self: 学習 samples=6482
+  [gen_az 9 cl04/opp] epoch=0 loss=0.0314 loss_value=0.0145 loss_policy=0.0169 batches=48
+  [gen_az 9 cl04/opp] epoch=1 loss=0.0230 loss_value=0.0067 loss_policy=0.0164 batches=48
+  [gen_az 9 cl04/opp] epoch=2 loss=0.0208 loss_value=0.0050 loss_policy=0.0158 batches=48
+[gen_az 9] cl04/opp: 学習 samples=6171
+  [gen_az 9 cl05/self] epoch=0 loss=0.0262 loss_value=0.0092 loss_policy=0.0170 batches=58
+  [gen_az 9 cl05/self] epoch=1 loss=0.0202 loss_value=0.0045 loss_policy=0.0157 batches=58
+  [gen_az 9 cl05/self] epoch=2 loss=0.0189 loss_value=0.0035 loss_policy=0.0154 batches=58
+[gen_az 9] cl05/self: 学習 samples=7480
+  [gen_az 9 cl05/opp] epoch=0 loss=0.0328 loss_value=0.0149 loss_policy=0.0179 batches=51
+  [gen_az 9 cl05/opp] epoch=1 loss=0.0245 loss_value=0.0070 loss_policy=0.0175 batches=51
+  [gen_az 9 cl05/opp] epoch=2 loss=0.0221 loss_value=0.0051 loss_policy=0.0170 batches=51
+[gen_az 9] cl05/opp: 学習 samples=6582
+  [gen_az 9 cl06/self] epoch=0 loss=0.0379 loss_value=0.0162 loss_policy=0.0216 batches=36
+  [gen_az 9 cl06/self] epoch=1 loss=0.0283 loss_value=0.0072 loss_policy=0.0211 batches=36
+  [gen_az 9 cl06/self] epoch=2 loss=0.0263 loss_value=0.0053 loss_policy=0.0210 batches=36
+[gen_az 9] cl06/self: 学習 samples=4665
+  [gen_az 9 cl06/opp] epoch=0 loss=0.0339 loss_value=0.0161 loss_policy=0.0178 batches=38
+  [gen_az 9 cl06/opp] epoch=1 loss=0.0252 loss_value=0.0080 loss_policy=0.0172 batches=38
+  [gen_az 9 cl06/opp] epoch=2 loss=0.0227 loss_value=0.0060 loss_policy=0.0167 batches=38
+[gen_az 9] cl06/opp: 学習 samples=4909
+  [gen_az 9 cl07/self] epoch=0 loss=0.0257 loss_value=0.0088 loss_policy=0.0169 batches=49
+  [gen_az 9 cl07/self] epoch=1 loss=0.0209 loss_value=0.0044 loss_policy=0.0165 batches=49
+  [gen_az 9 cl07/self] epoch=2 loss=0.0197 loss_value=0.0036 loss_policy=0.0161 batches=49
+[gen_az 9] cl07/self: 学習 samples=6300
+  [gen_az 9 cl07/opp] epoch=0 loss=0.0334 loss_value=0.0168 loss_policy=0.0166 batches=50
+  [gen_az 9 cl07/opp] epoch=1 loss=0.0232 loss_value=0.0074 loss_policy=0.0158 batches=50
+  [gen_az 9 cl07/opp] epoch=2 loss=0.0204 loss_value=0.0050 loss_policy=0.0154 batches=50
+[gen_az 9] cl07/opp: 学習 samples=6485
+  [gen_az 9 cl08/self] epoch=0 loss=0.0250 loss_value=0.0110 loss_policy=0.0140 batches=38
+  [gen_az 9 cl08/self] epoch=1 loss=0.0193 loss_value=0.0058 loss_policy=0.0135 batches=38
+  [gen_az 9 cl08/self] epoch=2 loss=0.0180 loss_value=0.0046 loss_policy=0.0134 batches=38
+[gen_az 9] cl08/self: 学習 samples=4944
+  [gen_az 9 cl08/opp] epoch=0 loss=0.0291 loss_value=0.0134 loss_policy=0.0156 batches=44
+  [gen_az 9 cl08/opp] epoch=1 loss=0.0219 loss_value=0.0070 loss_policy=0.0149 batches=44
+  [gen_az 9 cl08/opp] epoch=2 loss=0.0197 loss_value=0.0053 loss_policy=0.0143 batches=44
+[gen_az 9] cl08/opp: 学習 samples=5652
+  [gen_az 9 cl09/self] epoch=0 loss=0.0316 loss_value=0.0129 loss_policy=0.0186 batches=46
+  [gen_az 9 cl09/self] epoch=1 loss=0.0224 loss_value=0.0045 loss_policy=0.0179 batches=46
+  [gen_az 9 cl09/self] epoch=2 loss=0.0211 loss_value=0.0035 loss_policy=0.0176 batches=46
+[gen_az 9] cl09/self: 学習 samples=5889
+  [gen_az 9 cl09/opp] epoch=0 loss=0.0363 loss_value=0.0186 loss_policy=0.0177 batches=41
+  [gen_az 9 cl09/opp] epoch=1 loss=0.0248 loss_value=0.0075 loss_policy=0.0173 batches=41
+  [gen_az 9 cl09/opp] epoch=2 loss=0.0217 loss_value=0.0049 loss_policy=0.0168 batches=41
+[gen_az 9] cl09/opp: 学習 samples=5338
+  [gen_az 9 cl10/self] epoch=0 loss=0.0298 loss_value=0.0133 loss_policy=0.0165 batches=38
+  [gen_az 9 cl10/self] epoch=1 loss=0.0222 loss_value=0.0061 loss_policy=0.0161 batches=38
+  [gen_az 9 cl10/self] epoch=2 loss=0.0209 loss_value=0.0050 loss_policy=0.0159 batches=38
+[gen_az 9] cl10/self: 学習 samples=4876
+  [gen_az 9 cl10/opp] epoch=0 loss=0.0312 loss_value=0.0174 loss_policy=0.0139 batches=40
+  [gen_az 9 cl10/opp] epoch=1 loss=0.0205 loss_value=0.0072 loss_policy=0.0133 batches=40
+  [gen_az 9 cl10/opp] epoch=2 loss=0.0179 loss_value=0.0049 loss_policy=0.0129 batches=40
+[gen_az 9] cl10/opp: 学習 samples=5130
+  [gen_az 9 cl11/self] epoch=0 loss=0.0311 loss_value=0.0122 loss_policy=0.0189 batches=42
+  [gen_az 9 cl11/self] epoch=1 loss=0.0237 loss_value=0.0054 loss_policy=0.0183 batches=42
+  [gen_az 9 cl11/self] epoch=2 loss=0.0221 loss_value=0.0041 loss_policy=0.0180 batches=42
+[gen_az 9] cl11/self: 学習 samples=5450
+  [gen_az 9 cl11/opp] epoch=0 loss=0.0323 loss_value=0.0158 loss_policy=0.0165 batches=51
+  [gen_az 9 cl11/opp] epoch=1 loss=0.0226 loss_value=0.0068 loss_policy=0.0159 batches=51
+  [gen_az 9 cl11/opp] epoch=2 loss=0.0202 loss_value=0.0048 loss_policy=0.0155 batches=51
+[gen_az 9] cl11/opp: 学習 samples=6614
+  [gen_az 9 cl12/self] epoch=0 loss=0.0266 loss_value=0.0129 loss_policy=0.0138 batches=47
+  [gen_az 9 cl12/self] epoch=1 loss=0.0180 loss_value=0.0046 loss_policy=0.0134 batches=47
+  [gen_az 9 cl12/self] epoch=2 loss=0.0167 loss_value=0.0035 loss_policy=0.0132 batches=47
+[gen_az 9] cl12/self: 学習 samples=6025
+  [gen_az 9 cl12/opp] epoch=0 loss=0.0359 loss_value=0.0148 loss_policy=0.0211 batches=49
+  [gen_az 9 cl12/opp] epoch=1 loss=0.0250 loss_value=0.0062 loss_policy=0.0188 batches=49
+  [gen_az 9 cl12/opp] epoch=2 loss=0.0212 loss_value=0.0041 loss_policy=0.0171 batches=49
+[gen_az 9] cl12/opp: 学習 samples=6304
+  [gen_az 9 cl13/self] epoch=0 loss=0.0398 loss_value=0.0190 loss_policy=0.0208 batches=44
+  [gen_az 9 cl13/self] epoch=1 loss=0.0283 loss_value=0.0078 loss_policy=0.0205 batches=44
+  [gen_az 9 cl13/self] epoch=2 loss=0.0259 loss_value=0.0056 loss_policy=0.0203 batches=44
+[gen_az 9] cl13/self: 学習 samples=5690
+  [gen_az 9 cl13/opp] epoch=0 loss=0.0389 loss_value=0.0182 loss_policy=0.0207 batches=53
+  [gen_az 9 cl13/opp] epoch=1 loss=0.0277 loss_value=0.0075 loss_policy=0.0201 batches=53
+  [gen_az 9 cl13/opp] epoch=2 loss=0.0252 loss_value=0.0054 loss_policy=0.0198 batches=53
+[gen_az 9] cl13/opp: 学習 samples=6805
+  [gen_az 9 cl14/self] epoch=0 loss=0.0233 loss_value=0.0085 loss_policy=0.0148 batches=63
+  [gen_az 9 cl14/self] epoch=1 loss=0.0180 loss_value=0.0037 loss_policy=0.0143 batches=63
+  [gen_az 9 cl14/self] epoch=2 loss=0.0171 loss_value=0.0031 loss_policy=0.0139 batches=63
+[gen_az 9] cl14/self: 学習 samples=8144
+  [gen_az 9 cl14/opp] epoch=0 loss=0.0328 loss_value=0.0165 loss_policy=0.0163 batches=46
+  [gen_az 9 cl14/opp] epoch=1 loss=0.0235 loss_value=0.0078 loss_policy=0.0157 batches=46
+  [gen_az 9 cl14/opp] epoch=2 loss=0.0209 loss_value=0.0055 loss_policy=0.0154 batches=46
+[gen_az 9] cl14/opp: 学習 samples=5938
+  [gen_az 9 cl15/self] epoch=0 loss=0.0326 loss_value=0.0181 loss_policy=0.0144 batches=49
+  [gen_az 9 cl15/self] epoch=1 loss=0.0207 loss_value=0.0064 loss_policy=0.0143 batches=49
+  [gen_az 9 cl15/self] epoch=2 loss=0.0192 loss_value=0.0052 loss_policy=0.0140 batches=49
+[gen_az 9] cl15/self: 学習 samples=6358
+  [gen_az 9 cl15/opp] epoch=0 loss=0.0345 loss_value=0.0170 loss_policy=0.0175 batches=50
+  [gen_az 9 cl15/opp] epoch=1 loss=0.0243 loss_value=0.0074 loss_policy=0.0169 batches=50
+  [gen_az 9 cl15/opp] epoch=2 loss=0.0220 loss_value=0.0054 loss_policy=0.0165 batches=50
+[gen_az 9] cl15/opp: 学習 samples=6441
+[gen_az 9] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_010
+[prune] 中間世代を削除: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_008
+
+完了: 最終世代 = gen_010（/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline）- 37m53s

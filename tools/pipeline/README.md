@@ -28,6 +28,34 @@ python tools/pipeline/orchestrate.py --dry-run
 python tools/pipeline/orchestrate.py
 ```
 
+## 世代同士の対戦（強さの比較）
+
+`gen_000` と `gen_005` のように、任意の世代同士を丸ごと総当たりで対戦させて
+強さを比較したい場合は `run_gen_tournament.py` を使う。世代（`gen_XXX`）を
+`--gen` で指定するだけで、内部で16クラスタ分を自動的に梱包し
+（`package_agent.py`）、`tools/run_matches_round_robin.py` に橋渡しして
+総当たり戦を実行する。既定でGPUバッチ化（`--backend batched --device auto`）
+が有効なので素の `run_matches_round_robin.py` を直接使うより高速。
+
+```bash
+# gen_000 / gen_005 / gen_010 を全16クラスタで総当たり（既定: batched backend）
+python tools/pipeline/run_gen_tournament.py --gen 0 --gen 5 --gen 10
+
+# gen_XXX の命名から外れたディレクトリ（手動コピー等）も直接指定できる
+python tools/pipeline/run_gen_tournament.py --gen 0 --gen gen_005-copy --gen 10
+
+# クラスタを絞って手早く確認（例: cl00とcl05だけ、各10試合）
+python tools/pipeline/run_gen_tournament.py --gen 0 --gen 5 --gen 10 \
+    --cluster cl00 --cluster cl05 --games 10
+```
+
+- `--gen` は数値（`gen_005` を指す）・`gen_XXX` 以外のディレクトリ名・任意パスのいずれでもよい。何回でも指定できる。
+- 個々のagent(main.py)は `results/tournament_cache/` に梱包される（Git管理対象外）。
+- `--backend legacy|batched|worker-batched|cuda-streams|cuda-ensemble|gpu-tree` と
+  `--device`/`--lanes`/`--batch-size` はそのまま `run_matches_round_robin.py` に渡る。
+- 結果は agent（`gen005_cl00` など）単位の勝率表に加えて、**世代単位に集約した勝率表・対戦成績**も出力する。
+- 内部で `--save-json` を付けて呼ぶため、詳細ログは `results/tournament_*.json` に残る。
+
 ## 設定（環境変数・既定値は config.py）
 
 | 変数 | 既定 | 意味 |
@@ -65,6 +93,7 @@ python tools/pipeline/orchestrate.py
 | `trainer.py` | `train_imitation.py` サブプロセス実行ラッパ |
 | `gen_agents.py` | 階層クラスタ代表(16)→エージェント（clusters.json + decks） |
 | `package_agent.py` | self+opp+deck を実行可能 src/ に梱包 |
+| `run_gen_tournament.py` | 任意の複数世代を丸ごと指定して総当たり戦（batched backend対応、世代単位の集計付き） |
 | `phase0.py` | 初期 self/opp をブートストラップ（前処理は preprocess_all で1パス。完全一致デッキは self コピー、それ以外も含め全クラスタで最寄り PRETRAINED を warm-start、シャード空はフォールバックコピー） |
 | `generation.py` | 世代1回（梱包→リーグ→模倣継続学習）。`PIPE_GEN_BACKEND=league` |
 | `generation_az.py` | 世代1回（batched gpu-tree 対戦→AlphaZero学習, self/opp二重, ②相手推定）。`PIPE_GEN_BACKEND=az` |

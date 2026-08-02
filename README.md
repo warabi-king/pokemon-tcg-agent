@@ -323,8 +323,9 @@ tools/live_loss_recorder.py              学習中のバッチlossを逐次CSV/J
 に積極活用。クラッシュしても同じコマンドで途中から再開できる（完了マーカー方式）。
 
 ```bash
+source .venv/bin/activate && \
 PIPE_WORKERS=3 PIPE_SHARD_SIZE=6000 \
-  nohup python tools/pipeline/orchestrate.py --skip-gen-agents --generations 0 > phase0.log 2>&1 &
+  python tools/pipeline/orchestrate.py --skip-gen-agents --generations 0 > phase0.log 2>&1
 ```
 
 - `--generations 0` = Phase0 のみ（世代ループを回さない）。
@@ -338,10 +339,11 @@ PIPE_WORKERS=3 PIPE_SHARD_SIZE=6000 \
 MCTS 訪問分布と value を蒸留。self/opp を二重学習。相手デッキ推定は候補DB復元（②方式）。
 
 ```bash
+source .venv/bin/activate && \
 PIPE_GEN_BACKEND=az PIPE_GENERATIONS=5 PIPE_LEAGUE_GAMES=5 \
 PIPE_LEAGUE_SEARCH_COUNT=10 PIPE_AZ_COLLECT_WORKERS=2 PIPE_EPOCHS_PER_GEN=3 \
-  nohup python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
-  --no-keep-intermediate > az.log 2>&1 &
+  python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
+  --start-gen 0 --no-keep-intermediate > az.log 2>&1
 ```
 
 - `PIPE_AZ_COLLECT_WORKERS` は対戦収集のプロセス並列数。RAM 7.5GB / GPU 8GB では
@@ -352,10 +354,11 @@ PIPE_LEAGUE_SEARCH_COUNT=10 PIPE_AZ_COLLECT_WORKERS=2 PIPE_EPOCHS_PER_GEN=3 \
 **B. 模倣リーグ（`generation.py`）** — full kaggle 棋譜を並列生成し、模倣学習で継続学習。
 
 ```bash
+source .venv/bin/activate && \
 PIPE_GEN_BACKEND=league PIPE_GENERATIONS=5 PIPE_LEAGUE_SEARCH_COUNT=10 \
 PIPE_LEAGUE_CMD="python tools/pipeline/league_parallel.py --agents {manifest} --out {out} --games 5 --workers 4 --threads-per-worker 5" \
-  nohup python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
-  --no-keep-intermediate > league.log 2>&1 &
+  python tools/pipeline/orchestrate.py --skip-gen-agents --skip-phase0 \
+  --no-keep-intermediate > league.log 2>&1
 ```
 
 世代ごとの重みは `pipeline/gen_001/agents/<cl>/{self.pth,opp.pth}` … `gen_005/` に出力
