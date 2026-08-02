@@ -2321,7 +2321,7 @@ def _select_leaf(
             return None, True
 
 
-# SELFPLAY_ACTION_TEMPERATURE_PATCH_V1
+# SELFPLAY_ACTION_TEMPERATURE_PATCH_V2
 def _selfplay_action_temperature(context: _SearchContext) -> float | None:
     """自己対戦学習時だけ、累計学習episode数とturn数から行動選択温度を返す。"""
     if os.environ.get("SELFPLAY_ACTION_TEMPERATURE_ENABLED") != "1":
@@ -2358,40 +2358,44 @@ def _selfplay_action_temperature(context: _SearchContext) -> float | None:
     )
 
 
-def _sample_child_by_visit_temperature(
+def _sample_child_by_visit_prior_temperature(
     children: list[_Child],
     temperature: float,
+    prior_pseudocount: float,
 ) -> _Child | None:
-    """visit countを N^(1/tau) に変換して子ノードをサンプリングする。"""
-    visited_children = [
-        child
-        for child in children
-        if child.node is not None
-    ]
-    if not visited_children:
+    """(visit + c * NN prior)^(1/tau) で全合法手からサンプリングする。"""
+    if not children:
         return None
+
+    prior_pseudocount = max(prior_pseudocount, 0.0)
+    effective_counts = []
+    for child in children:
+        visit = (
+            max(int(child.node.visit), 0)
+            if child.node is not None
+            else 0
+        )
+        effective_counts.append(
+            visit + prior_pseudocount * max(float(child.probability), 0.0)
+        )
+
+    if max(effective_counts, default=0.0) <= 0.0:
+        return max(children, key=lambda child: child.probability)
 
     if temperature <= 1e-8:
         return max(
-            visited_children,
-            key=lambda child: child.node.visit,
-        )
-
-    visits = [
-        max(int(child.node.visit), 0)
-        for child in visited_children
-    ]
-    if max(visits, default=0) <= 0:
-        return None
+            zip(children, effective_counts, strict=True),
+            key=lambda pair: pair[1],
+        )[0]
 
     inverse_temperature = 1.0 / temperature
     log_weights = [
         (
             -math.inf
-            if visit <= 0
-            else inverse_temperature * math.log(visit)
+            if count <= 0.0
+            else inverse_temperature * math.log(count)
         )
-        for visit in visits
+        for count in effective_counts
     ]
     max_log_weight = max(log_weights)
     weights = [
@@ -2403,7 +2407,7 @@ def _sample_child_by_visit_temperature(
         for log_weight in log_weights
     ]
     return random.choices(
-        visited_children,
+        children,
         weights=weights,
         k=1,
     )[0]
@@ -2436,9 +2440,16 @@ def _finish_search(context: _SearchContext) -> list[int]:
 
     temperature = _selfplay_action_temperature(context)
     if temperature is not None:
-        sampled_child = _sample_child_by_visit_temperature(
+        prior_pseudocount = float(
+            os.environ.get(
+                "SELFPLAY_TEMPERATURE_PRIOR_PSEUDOCOUNT",
+                "1.0",
+            )
+        )
+        sampled_child = _sample_child_by_visit_prior_temperature(
             root.children,
             temperature,
+            prior_pseudocount,
         )
         if sampled_child is not None:
             max_child = sampled_child
