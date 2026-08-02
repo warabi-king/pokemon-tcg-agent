@@ -5,15 +5,28 @@
 self.pth+opp.pth+deck.csvの集まりなので、そのままでは使えない（main.pyが無い）。
 
 このツールは指定した世代×クラスタを`package_agent.py`で自動的に実行可能な
-main.py一式へ梱包し、`tools/run_matches_round_robin.py`へ橋渡しする。
-バックエンド（legacy/batched/worker-batched/cuda-streams/cuda-ensemble/gpu-tree）は
-そのまま透過的に指定できる（既定はbatched, device=auto）。
+main.py一式へ梱包し、`tools/run_matches_round_robin.py`のバックエンド実装
+（legacy/batched/worker-batched/cuda-streams/cuda-ensemble/gpu-tree）を
+関数として直接呼び出す（CLI越しではなく import して使う）。
+
+CLIをそのまま呼ばずimportする理由: `--cross-gen-only`
+（同一世代同士の対戦を除外し、異なる世代同士の組み合わせだけを対戦させる）を
+実現するには対戦カード一覧（pairings）を外から差し込む必要があるが、
+`run_matches_round_robin.py`のCLIは常に指定agent全体の総当たり
+（combinations_with_replacement）を内部で組み立てるため、それを渡す口が無い。
+一方バックエンド実装（run_tournament_parallel/run_batched_tournament/...）は
+いずれも`pairings`を引数に取るので、ここではそれらを直接呼んで好きな
+対戦カード一覧を渡す。
 
 対戦後は agent単位の総合成績に加えて、世代単位に集約した勝率表も出す。
 
 使用例:
     # gen_000 / gen_005 / gen_010 を全16クラスタで総当たり（既定: batched backend）
     python tools/pipeline/run_gen_tournament.py --gen 0 --gen 5 --gen 10
+
+    # 世代をまたぐ組み合わせだけ対戦させる（同一世代同士は対戦しない）。
+    # gen_000とgen_010なら 16×16=256 対戦カードになる。
+    python tools/pipeline/run_gen_tournament.py --gen 0 --gen 10 --cross-gen-only
 
     # gen_XXX の命名から外れたディレクトリ（手動コピー等）もそのまま指定できる
     python tools/pipeline/run_gen_tournament.py --gen 0 --gen gen_005-copy --gen 10
@@ -42,13 +55,14 @@ import itertools
 import json
 from pathlib import Path
 import re
-import subprocess
 import sys
 import time
 
 import config
 from deck_utils import load_agents
 from package_agent import package_agent
+
+import run_matches_round_robin as rr  # noqa: E402
 
 
 def resolve_gen_dir(spec: str, root: Path) -> Path:
@@ -121,20 +135,131 @@ def package_generations(
     return specs, name_to_gen
 
 
-def build_pairings(names: list[str], no_self: bool) -> list[tuple[str, str]]:
-    if no_self:
-        return list(itertools.combinations(names, 2))
-    return list(itertools.combinations_with_replacement(names, 2))
+def build_pairings(
+    names: list[str], name_to_gen: dict[str, str], no_self: bool, cross_gen_only: bool
+) -> list[tuple[str, str]]:
+    pairings = (
+        list(itertools.combinations(names, 2))
+        if no_self
+        else list(itertools.combinations_with_replacement(names, 2))
+    )
+    if cross_gen_only:
+        pairings = [
+            (n0, n1) for n0, n1 in pairings if name_to_gen[n0] != name_to_gen[n1]
+        ]
+    return pairings
+
+
+def run_tournament(
+    specs: list[rr.AgentSpec],
+    pairings: list[tuple[str, str]],
+    args: argparse.Namespace,
+) -> dict[tuple[str, str], "rr.HeadToHead"]:
+    """`run_matches_round_robin.py`のbackend実装をpairings指定で直接呼ぶ。"""
+    total_games = len(pairings) * args.games
+    lanes = total_games if args.lanes == 0 else min(args.lanes, total_games)
+    workers = 0
+    if args.backend == "worker-batched" and args.workers == 0:
+        workers = lanes
+    elif args.backend in ("legacy", "worker-batched"):
+        workers = rr.resolve_worker_count(args.workers, total_games)
+
+    if args.backend == "worker-batched":
+        from batched_tournament import run_worker_batched_tournament
+
+        out = run_worker_batched_tournament(
+            specs=specs, pairings=pairings, num_games=args.games,
+            alternate_sides=not args.no_alternate, device_name=args.device,
+            batch_size=args.batch_size, lanes=lanes, search_count=args.search_count,
+            seed=args.seed, cpu_workers=workers,
+        )
+        h2h_map, _ = rr.aggregate_tournament_results(
+            pairings, out.results, num_games=args.games, verbose=not args.quiet
+        )
+    elif args.backend == "gpu-tree":
+        from gpu_tree_tournament import run_gpu_tree_tournament
+
+        out = run_gpu_tree_tournament(
+            specs=specs, pairings=pairings, num_games=args.games,
+            alternate_sides=not args.no_alternate, device_name=args.device,
+            batch_size=args.batch_size, lanes=lanes, search_count=args.search_count,
+            seed=args.seed,
+        )
+        h2h_map, _ = rr.aggregate_tournament_results(
+            pairings, out.results, num_games=args.games, verbose=not args.quiet
+        )
+    elif args.backend in ("batched", "cuda-streams", "cuda-ensemble"):
+        from batched_tournament import run_batched_tournament
+
+        out = run_batched_tournament(
+            specs=specs, pairings=pairings, num_games=args.games,
+            alternate_sides=not args.no_alternate, device_name=args.device,
+            batch_size=args.batch_size, lanes=lanes, search_count=args.search_count,
+            seed=args.seed,
+            parallel_cuda_models=args.backend == "cuda-streams",
+            cuda_ensemble_models=args.backend == "cuda-ensemble",
+        )
+        h2h_map, _ = rr.aggregate_tournament_results(
+            pairings, out.results, num_games=args.games, verbose=not args.quiet
+        )
+    elif workers == 1:
+        loaded = {spec.name: rr.load_agent(spec, f"gen_tournament_agent_{i}") for i, spec in enumerate(specs)}
+        h2h_map = {}
+        for name0, name1 in pairings:
+            h2h, _ = rr.run_pairing(
+                loaded[name0], loaded[name1], num_games=args.games,
+                alternate_sides=not args.no_alternate, debug=False, verbose=not args.quiet,
+            )
+            h2h_map[(name0, name1)] = h2h
+    else:
+        h2h_map, _ = rr.run_tournament_parallel(
+            specs=specs, pairings=pairings, num_games=args.games, workers=workers,
+            alternate_sides=not args.no_alternate, debug=False, verbose=not args.quiet,
+        )
+    return h2h_map
+
+
+def print_overall(names: list[str], pairings: list[tuple[str, str]], h2h_map) -> dict[str, "rr.OverallRecord"]:
+    overall = {name: rr.OverallRecord(name=name) for name in names}
+    for name0, name1 in pairings:
+        h2h = h2h_map[(name0, name1)]
+        if h2h.is_self_match:
+            overall[name0].wins += h2h.name0_wins
+            overall[name0].losses += h2h.name1_wins
+            overall[name0].draws += h2h.draws
+            overall[name0].unresolved += h2h.unresolved
+            continue
+        overall[name0].wins += h2h.name0_wins
+        overall[name0].losses += h2h.name1_wins
+        overall[name0].draws += h2h.draws
+        overall[name0].unresolved += h2h.unresolved
+        overall[name1].wins += h2h.name1_wins
+        overall[name1].losses += h2h.name0_wins
+        overall[name1].draws += h2h.draws
+        overall[name1].unresolved += h2h.unresolved
+
+    print("\n=== 対戦カード別 勝ち数（行 vs 列） ===")
+    rr.print_head_to_head_table(names, h2h_map)
+    print("  ※対角成分は自己対戦。対戦していない組み合わせは n/a")
+
+    print("\n=== agent単位 総合成績（勝率順） ===")
+    ranking = sorted(overall.values(), key=lambda r: r.win_rate, reverse=True)
+    header = f"{'順位':<4}{'エージェント':<20}{'試合数':>6}{'勝':>5}{'負':>5}{'分':>5}{'勝率':>8}"
+    print(header)
+    for rank, record in enumerate(ranking, start=1):
+        print(
+            f"{rank:<4}{record.name:<20}{record.games:>6}{record.wins:>5}"
+            f"{record.losses:>5}{record.draws:>5}{record.win_rate:>7.1f}%"
+        )
+    return overall
 
 
 def summarize_by_generation(
-    result_json: dict,
     pairings: list[tuple[str, str]],
+    h2h_map,
     name_to_gen: dict[str, str],
 ) -> None:
     """agent単位の head_to_head を gen単位に集約して表示する。"""
-    h2h_by_key = result_json["head_to_head"]
-
     gen_overall: dict[str, dict[str, int]] = defaultdict(
         lambda: {"games": 0, "wins": 0, "losses": 0, "draws": 0}
     )
@@ -144,13 +269,11 @@ def summarize_by_generation(
     )
 
     for name0, name1 in pairings:
-        h2h = h2h_by_key[f"{name0}_vs_{name1}"]
-        wins0, wins1, draws, total = (
-            h2h["name0_wins"], h2h["name1_wins"], h2h["draws"], h2h["total"]
-        )
+        h2h = h2h_map[(name0, name1)]
+        wins0, wins1, draws, total = h2h.name0_wins, h2h.name1_wins, h2h.draws, h2h.total
         g0, g1 = name_to_gen[name0], name_to_gen[name1]
 
-        if h2h["is_self_match"]:
+        if h2h.is_self_match:
             gen_overall[g0]["wins"] += wins0
             gen_overall[g0]["losses"] += wins1
             gen_overall[g0]["draws"] += draws
@@ -208,6 +331,56 @@ def summarize_by_generation(
             )
 
 
+def save_json(
+    out_path: Path,
+    specs: list[tuple[str, Path, Path]],
+    pairings: list[tuple[str, str]],
+    h2h_map,
+    overall: dict[str, "rr.OverallRecord"],
+    args: argparse.Namespace,
+    elapsed: float,
+) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        json.dumps(
+            {
+                "agents": [
+                    {"name": name, "agent_path": str(main_py), "deck_path": str(deck_csv)}
+                    for name, main_py, deck_csv in specs
+                ],
+                "games_per_matchup": args.games,
+                "cross_gen_only": args.cross_gen_only,
+                "include_self_matches": not args.no_self,
+                "backend": args.backend,
+                "overall": {
+                    name: {
+                        "games": rec.games, "wins": rec.wins, "losses": rec.losses,
+                        "draws": rec.draws, "unresolved": rec.unresolved,
+                        "win_rate": rec.win_rate,
+                    }
+                    for name, rec in overall.items()
+                },
+                "head_to_head": {
+                    f"{n0}_vs_{n1}": {
+                        "is_self_match": h2h_map[(n0, n1)].is_self_match,
+                        "name0_wins": h2h_map[(n0, n1)].name0_wins,
+                        "name1_wins": h2h_map[(n0, n1)].name1_wins,
+                        "draws": h2h_map[(n0, n1)].draws,
+                        "unresolved": h2h_map[(n0, n1)].unresolved,
+                        "total": h2h_map[(n0, n1)].total,
+                    }
+                    for n0, n1 in pairings
+                },
+                "elapsed_seconds": elapsed,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print(f"\n詳細JSON: {out_path}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--gen", type=str, action="append", required=True, dest="gens",
@@ -226,15 +399,22 @@ def parse_args() -> argparse.Namespace:
         "--backend",
         choices=("legacy", "batched", "worker-batched", "cuda-streams", "cuda-ensemble", "gpu-tree"),
         default="batched",
-        help="tools/run_matches_round_robin.pyへそのまま渡すbackend（既定: batched）",
+        help="対戦の実行backend（既定: batched）",
     )
     parser.add_argument("--device", default="auto", help="batched系backendのdevice（既定: auto）")
     parser.add_argument("--lanes", type=int, default=0, help="batched系backendの同時試合数（既定0=全試合）")
-    parser.add_argument("--batch-size", type=int, default=None, help="batched系backendのNN batch size")
+    parser.add_argument("--batch-size", type=int, default=128, help="batched系backendのNN batch size")
     parser.add_argument("--workers", type=int, default=0, help="legacy/worker-batchedの並列数")
+    parser.add_argument("--seed", type=int, default=0, help="batched系backendの乱数seed")
     parser.add_argument("--no-self", action="store_true", help="自己対戦（同一世代・同一クラスタ）を除外する")
+    parser.add_argument(
+        "--cross-gen-only", action="store_true",
+        help="同一世代同士の対戦（クラスタ違い含む）を除外し、異なる世代の組み合わせだけ対戦させる。"
+             "例: --gen 0 --gen 10 --cross-gen-only なら 16x16=256 対戦カードになる。",
+    )
     parser.add_argument("--no-alternate", action="store_true", help="先手/後手を固定する")
     parser.add_argument("--quiet", action="store_true", help="試合ごとの結果表示を省略する")
+    parser.add_argument("--no-save-json", action="store_true", help="詳細JSONをresults/へ保存しない")
     return parser.parse_args()
 
 
@@ -252,51 +432,40 @@ def main() -> None:
         raise SystemExit(f"clusters.jsonに無いクラスタが指定されました: {unknown}")
 
     print(f"=== 梱包: 世代指定={args.gens} クラスタ数={len(clusters)} ===")
-    specs, name_to_gen = package_generations(args.gens, clusters, root, workdir, args.search_count)
-    if len(specs) < 2:
+    packaged, name_to_gen = package_generations(args.gens, clusters, root, workdir, args.search_count)
+    if len(packaged) < 2:
         raise SystemExit("梱包できたagentが2体未満です（世代/クラスタの指定を確認してください）。")
-    for name, main_py, deck_csv in specs:
+    for name, main_py, deck_csv in packaged:
         print(f"  {name}: {main_py} (deck: {deck_csv})")
 
-    names = [name for name, _, _ in specs]
-    pairings = build_pairings(names, args.no_self)
+    names = [name for name, _, _ in packaged]
+    pairings = build_pairings(names, name_to_gen, args.no_self, args.cross_gen_only)
+    if not pairings:
+        raise SystemExit(
+            "対戦カードが0件です。--cross-gen-onlyを指定した場合は--genを2つ以上（異なる世代）指定してください。"
+        )
 
-    round_robin_script = config.REPO_ROOT / "tools" / "run_matches_round_robin.py"
-    argv = [sys.executable, str(round_robin_script)]
-    for name, main_py, deck_csv in specs:
-        argv += ["--agent", f"{name}={main_py}:{deck_csv}"]
-    argv += [
-        "--games", str(args.games),
-        "--backend", args.backend,
-        "--device", args.device,
-        "--lanes", str(args.lanes),
-        "--search-count", str(args.search_count),
-        "--workers", str(args.workers),
-        "--save-json",
-    ]
-    if args.batch_size is not None:
-        argv += ["--batch-size", str(args.batch_size)]
-    if args.no_self:
-        argv.append("--no-self")
-    if args.no_alternate:
-        argv.append("--no-alternate")
-    if args.quiet:
-        argv.append("--quiet")
+    specs = [rr.AgentSpec(name=n, agent_path=p.resolve(), deck_path=d.resolve()) for n, p, d in packaged]
+
+    n_gens = len(set(name_to_gen.values()))
+    print(
+        f"\n=== 総当たり戦開始 (世代数={n_gens}, 対戦カード数={len(pairings)}, "
+        f"カードあたり{args.games}試合, cross_gen_only={args.cross_gen_only}, "
+        f"backend={args.backend}, device={args.device}) ===\n"
+    )
 
     started = time.time()
-    subprocess.run(argv, cwd=config.REPO_ROOT, check=True)
+    h2h_map = run_tournament(specs, pairings, args)
+    elapsed = time.time() - started
 
-    results_root = config.REPO_ROOT / "results"
-    candidates = [
-        p for p in results_root.glob("tournament_*.json") if p.stat().st_mtime >= started - 1
-    ]
-    if not candidates:
-        print("[warn] 詳細JSONが見つからず、世代単位の集約表示をスキップします。", file=sys.stderr)
-        return
-    result_path = max(candidates, key=lambda p: p.stat().st_mtime)
-    result_json = json.loads(result_path.read_text(encoding="utf-8"))
-    summarize_by_generation(result_json, pairings, name_to_gen)
-    print(f"\n詳細JSON: {result_path}")
+    overall = print_overall(names, pairings, h2h_map)
+    print(f"\n所要時間: {elapsed:.1f}秒")
+
+    summarize_by_generation(pairings, h2h_map, name_to_gen)
+
+    if not args.no_save_json:
+        out_path = config.REPO_ROOT / "results" / f"gen_tournament_{int(time.time())}.json"
+        save_json(out_path, packaged, pairings, h2h_map, overall, args, elapsed)
 
 
 if __name__ == "__main__":

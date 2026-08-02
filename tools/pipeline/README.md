@@ -33,13 +33,18 @@ python tools/pipeline/orchestrate.py
 `gen_000` と `gen_005` のように、任意の世代同士を丸ごと総当たりで対戦させて
 強さを比較したい場合は `run_gen_tournament.py` を使う。世代（`gen_XXX`）を
 `--gen` で指定するだけで、内部で16クラスタ分を自動的に梱包し
-（`package_agent.py`）、`tools/run_matches_round_robin.py` に橋渡しして
+（`package_agent.py`）、`tools/run_matches_round_robin.py` のbackend実装
+（legacy/batched/worker-batched/cuda-streams/cuda-ensemble/gpu-tree）を直接呼んで
 総当たり戦を実行する。既定でGPUバッチ化（`--backend batched --device auto`）
 が有効なので素の `run_matches_round_robin.py` を直接使うより高速。
 
 ```bash
 # gen_000 / gen_005 / gen_010 を全16クラスタで総当たり（既定: batched backend）
 python tools/pipeline/run_gen_tournament.py --gen 0 --gen 5 --gen 10
+
+# 同一世代同士の対戦を除外し、世代をまたぐ組み合わせだけ対戦させる
+# （--gen 0 --gen 10 なら 16クラスタ×16クラスタ=256対戦カード）
+python tools/pipeline/run_gen_tournament.py --gen 0 --gen 10 --cross-gen-only
 
 # gen_XXX の命名から外れたディレクトリ（手動コピー等）も直接指定できる
 python tools/pipeline/run_gen_tournament.py --gen 0 --gen gen_005-copy --gen 10
@@ -50,11 +55,15 @@ python tools/pipeline/run_gen_tournament.py --gen 0 --gen 5 --gen 10 \
 ```
 
 - `--gen` は数値（`gen_005` を指す）・`gen_XXX` 以外のディレクトリ名・任意パスのいずれでもよい。何回でも指定できる。
+- `--cross-gen-only` を付けると、同一世代内の組み合わせ（自己対戦・同世代内クラスタ違い）を除外し、
+  異なる世代同士の組み合わせだけを対戦させる。指定しない場合は同一世代内の対戦も含めた完全な総当たりになる。
 - 個々のagent(main.py)は `results/tournament_cache/` に梱包される（Git管理対象外）。
 - `--backend legacy|batched|worker-batched|cuda-streams|cuda-ensemble|gpu-tree` と
-  `--device`/`--lanes`/`--batch-size` はそのまま `run_matches_round_robin.py` に渡る。
+  `--device`/`--lanes`/`--batch-size` を指定できる（`gpu-tree` は依存モジュール
+  `gpu_tree_tournament` が未実装のため現状使用不可。これは`run_matches_round_robin.py`
+  側も同様）。
 - 結果は agent（`gen005_cl00` など）単位の勝率表に加えて、**世代単位に集約した勝率表・対戦成績**も出力する。
-- 内部で `--save-json` を付けて呼ぶため、詳細ログは `results/tournament_*.json` に残る。
+- 詳細ログは既定で `results/gen_tournament_*.json` に保存される（`--no-save-json` で無効化）。
 
 ## 設定（環境変数・既定値は config.py）
 
