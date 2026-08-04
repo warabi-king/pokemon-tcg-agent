@@ -1,0 +1,25 @@
+{
+  "format": "pokemon-tcg-agent/runtime-benchmark-v1",
+  "torch_version": "2.12.1",
+  "torch_threads": 4,
+  "mps_built": true,
+  "mps_available": false,
+  "mps_status": "unavailable; not benchmarked",
+  "model": "agents/belief_puct/src/model.pth",
+  "model_bytes": 50143233,
+  "parameter_count": 12533634,
+  "sample_shard": "agents/belief_puct/train/shards/validation_20260718_20/shard_00000.pkl",
+  "results": [
+    {
+      "device": "cpu",
+      "batch_size": 32,
+      "warmup": 3,
+      "repeats": 20,
+      "median_batch_ms": 1.4083744972595014,
+      "p95_batch_ms": 1.5813750069355592,
+      "median_sample_ms": 0.04401170303935942,
+      "min_batch_ms": 1.2711669987766072,
+      "max_batch_ms": 1.5813750069355592
+    }
+  ]
+}
