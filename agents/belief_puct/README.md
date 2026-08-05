@@ -8,10 +8,10 @@
 - 非公開状態: 観測履歴と60枚デッキ候補DBから1状態を決定的にサンプル
 - 探索: 1決定化 × 24探索
 - 方策・価値: 約50.1 MBのTransformer checkpoint
-- デッキ・checkpoint: 固定リーグで選択したcluster 05 specialist
+- デッキ・checkpoint: 模倣学習完了checkpointを固定し、固定リーグで選ぶ60枚デッキ
 - 暗黙fallback: `model.pth`欠落時は例外。ランダム行動へは縮退しない
 
-事前登録した候補Cのうち、複数決定化、追加模倣学習、相手モデルは比較実験で悪化したため最終構成から外しました。`candidate_05` の「05」は設計候補A〜Dではなく、デッキ・checkpointのクラスタ番号です。
+過去のcluster 05 checkpointは比較基準として `train/candidates/cluster05_pretrained_model.pth` に保持します。現在の `src/model.pth` は模倣学習完了後の重みであり、以後のデッキ探索ではこのcheckpointを固定して比較します。
 
 ## ディレクトリ
 
@@ -86,7 +86,7 @@ python agents/belief_puct/train/train_imitation.py \
   --output-model agents/belief_puct/train/checkpoints/imitation_candidate_epoch1.pth
 ```
 
-今回の模倣学習はvalidation top-1精度を37.96%から53.98%まで改善しましたが、固定対戦では4勝16敗でした。そのため、`src/model.pth`は模倣重みではなくcluster 05の事前学習checkpointです。
+今回の模倣学習はvalidation top-1精度を37.96%から53.98%まで改善しました。`imitation_candidate.pth` はepoch 99完了後の軽量なモデル重みであり、現在は `src/model.pth` に反映されています。過去の固定対戦4勝16敗は、旧デッキ・旧評価条件の結果であり、この重みを固定した新しいデッキ探索とは区別します。
 
 ## 固定リーグ評価
 
@@ -124,6 +124,65 @@ python tools/validate_submission.py \
 ```
 
 検証器はアーカイブ直下の`main.py`、`deck.csv`、`cg/`、60枚デッキ、不要な学習物・cacheの不在、path traversal、`/kaggle_simulations/agent/`を模した展開先からのimport、複数seed自己対戦を確認します。
+
+## 段階的なデッキ・モデル学習
+
+`tools/run_belief_pipeline.py`は、模倣事前学習、固定リーグでのデッキ探索、混合相手RL、候補DB拡張、holdout検証を同じrunとして記録する入口です。最初は既存の60枚DBからクラスタ多様性を保って候補を選びます。公式由来DBを上書きせず、runごとの選抜DBとログを`train/runs/<run-id>/`へ保存します。
+
+```bash
+python tools/run_belief_pipeline.py \
+  --database agents/belief_puct/src/rl_mcts/deck_candidates_by_wins.jsonl \
+  --run-id trial-001 --candidate-count 16 --min-candidate-games 20 --dry-run
+```
+
+## Phase 2a: 固定リーグでのデッキ選抜
+
+候補間で変更するのは `deck.csv` だけです。候補側のモデル・探索設定を固定したまま、事前に凍結した多様な相手リーグとの成績で選びます。`ranking.json` は平均勝率、最苦手相手、Wilson下限、相手別勝敗を残します。`--resume` は正常に完走した候補×相手の組だけを再利用します。短時間制約を評価条件へ含めるときは `--errors-as-losses` を指定し、timeout・未判定試合を候補側の敗戦として分母へ含めます。
+
+```bash
+python tools/search_deck_fixed_league.py \
+  --agent-src agents/belief_puct/src --model agents/belief_puct/src/model.pth \
+  --candidate-dir agents/belief_puct/train/runs/trial-001/candidates \
+  --opponents fixed_league_opponents.json \
+  --games-per-opponent 40 --output-dir results/deck_search_trial-001 --resume
+```
+
+`fixed_league_opponents.json` は次の形式です。各パスはこのJSONファイルからの相対パスで指定できます。`model` は省略可能です。
+
+```json
+{
+  "opponents": [
+    {"name": "baseline", "agent_src": "agents/rl_mcts/src", "deck": "agents/rl_mcts/src/deck.csv", "weight": 1.0}
+  ]
+}
+```
+
+`--dry-run`はファイルを作らず、入力DB、選抜候補、後続5工程の計画だけを標準出力します。実行時は`--dry-run`を外します。候補選抜は既定で20試合未満の構成を除外します。候補の正式採用は、自己対戦ではなく、checkpoint・相手・seedを固定した多様な相手リーグの結果で行います。
+
+## Phase 2b: 固定デッキ・混合相手RL
+
+Phase 2aで選んだdeckを固定し、学習中モデル同士の自己対戦と、開始時checkpointをrun内にコピーして凍結したbelief_puctを混ぜます。凍結相手の手は学習データにせず、学習側の手だけで更新するため、過去の弱い方策を誤って教師にしません。追加の過去checkpointは`--frozen-model`で複数指定できます。
+
+```bash
+python agents/belief_puct/train/train_mixed_opponents.py \
+  --deck agents/belief_puct/train/runs/phase2a-001/candidates/candidate_004/deck.csv \
+  --initial-model agents/belief_puct/src/model.pth \
+  --run-dir agents/belief_puct/train/runs/phase2b-001 \
+  --iterations 10 --games-per-iteration 40 \
+  --frozen-opponent-fraction 0.5 --search-count 10
+```
+
+各iteration完了時に、`checkpoints/`、`metrics.csv`、`events.jsonl`、モデル・optimizer・乱数状態を含む`training_state_latest.pth`を保存します。途中停止後は同じ総iteration数を指定して再開できます。
+
+```bash
+python agents/belief_puct/train/train_mixed_opponents.py \
+  --deck agents/belief_puct/train/runs/phase2a-001/candidates/candidate_004/deck.csv \
+  --initial-model agents/belief_puct/src/model.pth \
+  --run-dir agents/belief_puct/train/runs/phase2b-001 \
+  --iterations 10 --games-per-iteration 40 \
+  --frozen-opponent-fraction 0.5 --search-count 10 \
+  --resume agents/belief_puct/train/runs/phase2b-001/training_state_latest.pth
+```
 
 ## 記録
 

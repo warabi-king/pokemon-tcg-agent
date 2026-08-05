@@ -4,7 +4,7 @@
     python tools/plot_experiment_results.py
     python tools/plot_experiment_results.py --league-dir results/upsize1_vs_belief_20260804
 
-既定では ``results/plots`` に以下を保存する。
+既定では ``results/plots/<league-dirのフォルダ名>`` に以下を保存する。
 
 * ``imitation_learning.png``: imitation 学習の損失・正解率
 * ``league_ranking.png``: 完了済み試合だけに基づくリーグ順位
@@ -26,10 +26,10 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_METRICS_FILE = PROJECT_ROOT / "agents" / "belief_puct" / "train" / "logs" / "imitation_metrics.csv"
 DEFAULT_LEAGUE_DIR = PROJECT_ROOT / "results" / "upsize1_vs_belief_20260804"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "results" / "plots"
+DEFAULT_PLOTS_DIR = PROJECT_ROOT / "results" / "plots"
 
 # 読み取り専用の結果解析でも、Matplotlib がユーザー設定を書き換えないようにする。
-os.environ.setdefault("MPLCONFIGDIR", str(DEFAULT_OUTPUT_DIR / "matplotlib_config"))
+os.environ.setdefault("MPLCONFIGDIR", str(DEFAULT_PLOTS_DIR / "matplotlib_config"))
 
 import matplotlib
 
@@ -185,28 +185,40 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metrics-file", type=Path, default=DEFAULT_METRICS_FILE)
     parser.add_argument("--league-dir", type=Path, default=DEFAULT_LEAGUE_DIR)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="出力先。省略時は results/plots/<league-dirのフォルダ名>",
+    )
     return parser.parse_args()
+
+
+def resolve_output_dir(league_dir: Path, output_dir: Path | None) -> Path:
+    """明示指定を優先し、なければ対戦結果フォルダ名から出力先を決める。"""
+    if output_dir is not None:
+        return output_dir
+    return DEFAULT_PLOTS_DIR / league_dir.name
 
 
 def main() -> None:
     """指定されたログと結果から、再実行可能なPNG群を生成する。"""
     args = parse_args()
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = resolve_output_dir(args.league_dir, args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     configure_style()
 
-    plot_imitation_learning(read_imitation_metrics(args.metrics_file), args.output_dir / "imitation_learning.png")
+    plot_imitation_learning(read_imitation_metrics(args.metrics_file), output_dir / "imitation_learning.png")
     plot_win_rates(
         read_league_ranking(args.league_dir / "aggregate.json"),
         "Cross-worktree league ranking (completed games only)",
-        args.output_dir / "league_ranking.png",
+        output_dir / "league_ranking.png",
     )
     plot_win_rates(
         read_belief_matchups(args.league_dir / "pairings"),
         "belief_puct vs each cluster",
-        args.output_dir / "belief_puct_matchups.png",
+        output_dir / "belief_puct_matchups.png",
     )
-    print(f"Graphs saved: {args.output_dir}")
+    print(f"Graphs saved: {output_dir}")
 
 
 if __name__ == "__main__":

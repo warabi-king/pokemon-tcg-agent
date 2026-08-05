@@ -161,6 +161,14 @@ def _checkpoint_model_kwargs(model_path: Path) -> dict[str, int] | None:
             "num_layers_encoder": 3,
             "num_layers_decoder": 2,
         }
+    if architecture == (256, 1024, 4, 3):
+        return {
+            "d_model": 256,
+            "num_heads": 8,
+            "d_feedforward": 1024,
+            "num_layers_encoder": 4,
+            "num_layers_decoder": 3,
+        }
     raise ValueError(
         "checkpointのTransformer構造が未登録です: "
         f"d_model={d_model}, d_feedforward={d_feedforward}, "

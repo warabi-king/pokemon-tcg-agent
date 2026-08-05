@@ -1,0 +1,26 @@
+{
+  "format": "pokemon-tcg-agent/fixed-opponent-league-v1",
+  "description": "Phase 2aの標準ローカルリーグ。候補側はbelief_puctのモデルと探索設定を固定し、候補deck.csvだけを入れ替える。",
+  "opponents": [
+    {
+      "name": "random_baseline",
+      "agent_src": "agents/random/src",
+      "deck": "agents/random/src/deck.csv",
+      "weight": 1.0
+    },
+    {
+      "name": "rl_mcts",
+      "agent_src": "agents/rl_mcts/src",
+      "deck": "agents/rl_mcts/src/deck.csv",
+      "model": "agents/rl_mcts/src/model.pth",
+      "weight": 1.0
+    },
+    {
+      "name": "rl_mcts_sample",
+      "agent_src": "agents/rl_mcts_sample/src",
+      "deck": "agents/rl_mcts_sample/src/deck.csv",
+      "model": "agents/rl_mcts_sample/src/model.pth",
+      "weight": 1.0
+    }
+  ]
+}
