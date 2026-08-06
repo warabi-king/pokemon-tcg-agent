@@ -505,8 +505,14 @@ def _load_training_state(
     device,
     log_file: Path,
 ) -> tuple[object, int, Path | None]:
-    """AdamW/schedulerの状態を前回更新から引き継ぐ。"""
-    gamma = float(os.environ.get("SELFPLAY_LR_GAMMA", "0.99995"))
+    """AdamW/schedulerの状態を前回更新から引き継ぐ。
+
+    AdamWのモーメントの引き継ぎと、学習率の減衰は独立している。既定の
+    SELFPLAY_LR_GAMMA=1.0では学習率は減衰せず、モーメントの引き継ぎだけが働く。
+    減衰は別セッションの実測で 3e-4→8.15e-5(73%減)まで動かしても
+    −2.33pt(p=0.20)と改善が出なかったため、既定では無効にしている。
+    """
+    gamma = float(os.environ.get("SELFPLAY_LR_GAMMA", "1.0"))
     min_lr = float(os.environ.get("SELFPLAY_MIN_LR", "3e-5"))
     min_factor = min_lr / base_lr if base_lr > 0 else 1.0
     scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -551,7 +557,7 @@ def _save_training_state(
         "gamma": (
             gamma
             if gamma is not None
-            else float(os.environ.get("SELFPLAY_LR_GAMMA", "0.99995"))
+            else float(os.environ.get("SELFPLAY_LR_GAMMA", "1.0"))
         ),
         "min_lr": (
             min_lr
