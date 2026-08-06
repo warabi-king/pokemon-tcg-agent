@@ -253,6 +253,11 @@ class BatchedLearnSample:
     policy: list[float]
     sv_enc: Any
     sv_dec: Any
+    # SELFPLAY_COMPLETED_Q_TARGET_PATCH_V1
+    # 実際に木探索が走った(=policyがQ優位度に書き換わった)局面だけTrueになる。
+    # セットアップ中の探索なし1-step policy判断(_prepare_policy_only_root)では
+    # policyが全て同値の退化ベクトルになるため、学習側でhard labelへ退避させる。
+    searched: bool = False
 
 
 @dataclass
@@ -303,6 +308,15 @@ class _PlayerTrainingBuffer:
     decoder_offset: _RaggedTrainingBuffer = field(
         default_factory=_RaggedTrainingBuffer
     )
+    # SELFPLAY_COMPLETED_Q_TARGET_PATCH_V1: 合法手ごとのQ優位度。探索が走らなかった
+    # 局面では空行になり、学習側はその行だけhard labelへ退避する。
+    completed_q: _RaggedTrainingBuffer = field(
+        default_factory=_RaggedTrainingBuffer
+    )
+    # SELFPLAY_SEARCH_VALUE_TARGET_PATCH_V1: 探索rootの評価値(探索なしの局面はNaN)。
+    search_values: list[float] = field(default_factory=list)
+    # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1: 決定が行われたターン番号。
+    turns: list[int] = field(default_factory=list)
 
     def append(self, decision: tuple[Any, ...]) -> None:
         self.encoder_index.append(decision[1])
@@ -312,6 +326,12 @@ class _PlayerTrainingBuffer:
         self.decoder_value.append(decision[5])
         self.decoder_offset.append(decision[6])
         self.chosen_indices.append(int(decision[7]))
+        self.completed_q.append(decision[8] if len(decision) > 8 else [])
+        search_value = decision[9] if len(decision) > 9 else None
+        self.search_values.append(
+            float("nan") if search_value is None else float(search_value)
+        )
+        self.turns.append(int(decision[10]) if len(decision) > 10 else 0)
 
     def pack(self, reward: int) -> dict[str, Any]:
         count = len(self.chosen_indices)
@@ -325,6 +345,9 @@ class _PlayerTrainingBuffer:
             "decoderIndex": self.decoder_index.pack(np.int32),
             "decoderValue": self.decoder_value.pack(np.float32),
             "decoderOffset": self.decoder_offset.pack(np.int32),
+            "completedQ": self.completed_q.pack(np.float32),
+            "searchValue": np.asarray(self.search_values, dtype=np.float32),
+            "turn": np.asarray(self.turns, dtype=np.int32),
         }
 
 
@@ -1491,6 +1514,27 @@ def _build_preencoded_training_decision(
     )
     if chosen_index is None:
         return None
+    # SELFPLAY_COMPLETED_Q_TARGET_PATCH_V1
+    # sample.policyは_finish_search()が合法手ごとのQ優位度
+    # clamp(Q(a) - Q(root), -1, 1) へ書き換えたベクトル(未展開の子は悲観的補完値)。
+    # 従来はここで捨てられており、学習側にはchosen_index(=1手のargmax)しか渡って
+    # いなかった。search_count=10ではvisit分布がほぼ均等(80.1%の局面でvisit最大が
+    # 同数)でargmaxが列挙順で決まってしまうため、Q優位度ベクトルを併せて保存する。
+    # 保存するだけで、既定の学習は従来どおりchosen_indexのhard labelを使う。
+    completed_q: list[float] = []
+    if sample.searched and len(sample.policy) == len(actions):
+        completed_q = [float(value) for value in sample.policy]
+    # SELFPLAY_SEARCH_VALUE_TARGET_PATCH_V1
+    # 探索rootの評価値。value教師は現在「その試合の最終勝敗(±1)」を全局面へ一律に
+    # 付けており分散が最大。q tie-break採用でQ値が着手を決めるようになったため、
+    # valueヘッドの質は着手品質へ直接効く。保存するだけで、既定の学習は従来どおり
+    # 最終勝敗のみを使う(SELFPLAY_VALUE_TARGET_LAMBDA=1.0)。
+    search_value = float(sample.value) if sample.searched else None
+    # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1
+    # この決定が行われたターン番号。方策損失に勝敗を入れる際、終局までの距離で
+    # 割り引くのに使う。1ターン内の決定回数は局面により大きく変わるため、決定回数
+    # ではなくターン数を単位にする。保存するだけで、既定の学習では未使用。
+    turn = int(current.get("turn", 0))
     return (
         int(current["yourIndex"]),
         sample.sv_enc.index,
@@ -1500,6 +1544,9 @@ def _build_preencoded_training_decision(
         sample.sv_dec.value,
         sample.sv_dec.offset,
         chosen_index,
+        completed_q,
+        search_value,
+        turn,
     )
 
 
@@ -1840,6 +1887,59 @@ class _RemoteEvaluationClient:
             _commit_evaluation_rows(chunk, value_rows, policy_rows)
 
 
+# SELFPLAY_ROOT_DIRICHLET_NOISE_PATCH_V1
+def _sample_dirichlet_noise(count: int, alpha: float) -> list[float]:
+    """対称Dirichlet(alpha)分布からcount個の重みをsampleする（合計1.0）。"""
+    if count <= 0:
+        return []
+    samples = [random.gammavariate(alpha, 1.0) for _ in range(count)]
+    total = sum(samples)
+    if total <= 0.0:
+        return [1.0 / count] * count
+    return [sample / total for sample in samples]
+
+
+def _apply_root_dirichlet_noise(probabilities: list[float]) -> list[float]:
+    """selfplay時だけ有効な、root事前確率へのDirichletノイズ混合。
+
+    AlphaZero同様 ``(1-eps)*p + eps*noise`` で混合する。実対戦・評価対戦では
+    ``SELFPLAY_ROOT_NOISE_ENABLED`` を設定しないため、この関数は入力をそのまま返す。
+    """
+    if os.environ.get("SELFPLAY_ROOT_NOISE_ENABLED") != "1":
+        return probabilities
+    if len(probabilities) <= 1:
+        return probabilities
+    alpha = float(os.environ.get("SELFPLAY_ROOT_NOISE_ALPHA", "0.3"))
+    epsilon = float(os.environ.get("SELFPLAY_ROOT_NOISE_EPSILON", "0.25"))
+    if epsilon <= 0.0:
+        return probabilities
+    noise = _sample_dirichlet_noise(len(probabilities), alpha)
+    return [
+        (1.0 - epsilon) * probability + epsilon * noise_value
+        for probability, noise_value in zip(probabilities, noise, strict=True)
+    ]
+
+
+# SELFPLAY_PRIOR_EXPONENT_PATCH_V1
+def _prior_exponent(context: _SearchContext) -> float:
+    """MCTS事前確率 softmax(policy * k) の係数 k を返す(既定は従来と同じ10.0)。
+
+    ``SELFPLAY_PRIOR_EXPONENT_AGENT_PREFIX`` を設定すると、agent名がその接頭辞に
+    一致する参加者だけが新しい係数を使う。同じ重みの新旧設定を1トーナメント内で
+    直接対戦させ、学習を伴わずに比較するために使う(tie-break検証と同じ方式)。
+    """
+    raw = os.environ.get("SELFPLAY_PRIOR_EXPONENT")
+    if raw is None:
+        return 10.0
+    prefix = os.environ.get("SELFPLAY_PRIOR_EXPONENT_AGENT_PREFIX")
+    if prefix and not context.participant.name.startswith(prefix):
+        return 10.0
+    exponent = float(raw)
+    if not math.isfinite(exponent) or exponent <= 0.0:
+        raise ValueError(f"SELFPLAY_PRIOR_EXPONENTが不正です: {raw!r}")
+    return exponent
+
+
 def _commit_evaluation_rows(
     chunk: list[_EvalRequest],
     value_rows: list[list[float]],
@@ -1871,16 +1971,30 @@ def _commit_evaluation_rows(
         request.node.value = propagated
         request.node.backprop(propagated)
 
+        # SELFPLAY_PRIOR_EXPONENT_PATCH_V1
+        # MCTSの事前確率は softmax(policy出力 * 10) で作られる。この係数は
+        # 方策の「尖り具合」そのもの。search_count=10では探索予算が小さく、
+        # 強さのほとんどがこの事前確率の質から来ている(2026-08-05実測:
+        # 方策を平坦化するsoft target学習が-14.9pt、方策により強く従う
+        # prior tie-breakが+5.9pt)。係数を環境変数で振れるようにする。
+        # 未設定なら従来どおり10.0。
+        exponent = _prior_exponent(request.context)
         probabilities = [
-            math.exp(float(policy_row[index]) * 10.0)
+            math.exp(float(policy_row[index]) * exponent)
             for index in range(len(request.actions))
         ]
         probability_sum = sum(probabilities)
+        normalized_probabilities = [
+            probability / probability_sum if probability_sum > 0 else probability
+            for probability in probabilities
+        ]
+        if request.node.parent is None:
+            normalized_probabilities = _apply_root_dirichlet_noise(
+                normalized_probabilities
+            )
         for action, probability in zip(
-            request.actions, probabilities, strict=True
+            request.actions, normalized_probabilities, strict=True
         ):
-            if probability_sum > 0:
-                probability /= probability_sum
             request.node.children.append(_Child(action, probability))
         if request.reserved_child is not None:
             request.reserved_child.in_flight = False
@@ -2252,6 +2366,42 @@ def _prepare_policy_only_root(
     )
 
 
+# SELFPLAY_FPU_REDUCTION_PATCH_V1
+def _fpu_reduction(context: _SearchContext) -> float:
+    """未展開の子(first play urgency)に与える減点を返す(既定0.0=従来動作)。
+
+    ``SELFPLAY_FPU_REDUCTION_AGENT_PREFIX`` を設定すると、agent名がその接頭辞に
+    一致する参加者だけが減点を使う。同じ重みの新旧設定を1トーナメント内で直接
+    対戦させるための仕組みで、tie-break/prior exponentの検証と同じ方式。
+    """
+    raw = os.environ.get("SELFPLAY_FPU_REDUCTION")
+    if raw is None:
+        return 0.0
+    prefix = os.environ.get("SELFPLAY_FPU_REDUCTION_AGENT_PREFIX")
+    if prefix and not context.participant.name.startswith(prefix):
+        return 0.0
+    reduction = float(raw)
+    if not math.isfinite(reduction):
+        raise ValueError(f"SELFPLAY_FPU_REDUCTIONが不正です: {raw!r}")
+    return reduction
+
+
+def _puct_exploration_c(context: _SearchContext) -> float:
+    """PUCT探索項の係数を返す(既定は従来と同じ0.4)。
+
+    ``SELFPLAY_PUCT_EXPLORATION_C_AGENT_PREFIX`` を足したのは、他の規則と同様に
+    同一重み・1トーナメント内でのA/Bを可能にするため。2026-08-05に測ったのは
+    0.15(下げる方向)だけで、それは有意差なしだった。上げる方向は未検証。
+    """
+    raw = os.environ.get("SELFPLAY_PUCT_EXPLORATION_C")
+    if raw is None:
+        return 0.4
+    prefix = os.environ.get("SELFPLAY_PUCT_EXPLORATION_C_AGENT_PREFIX")
+    if prefix and not context.participant.name.startswith(prefix):
+        return 0.4
+    return float(raw)
+
+
 def _select_leaf(
     runtime: _Runtime,
     context: _SearchContext,
@@ -2262,21 +2412,37 @@ def _select_leaf(
         return None, False
     reserved_root_child: _Child | None = None
 
+    # SELFPLAY_PUCT_EXPLORATION_C_PATCH_V1: 探索予算(search_count)が小さい環境では
+    # デフォルト係数0.4のPUCT探索項がQ値差より支配的になり、visitが合法手へ
+    # ほぼ均等に配られてしまう(2026-08-04計測: 305局面で最多visit手の占有率平均27.6%)。
+    # 環境変数で係数を下げられるようにし、同じsearch_countでも探索木がより
+    # exploitation寄りに配分されるかを検証できるようにする。未設定時は元の0.4のまま。
+    # SELFPLAY_FPU_REDUCTION_PATCH_V1: 未展開の子は「親のQ値そのもの」で評価される
+    # (first play urgency = 親Q、減点なし)。search_count=10では未展開の子が親と同点で
+    # 並ぶため、探索は同じ深さを横に舐めるだけになりやすい。減点を入れると既に評価済みの
+    # 枝を掘り下げる方向に寄り、逆に負の値を入れると更に幅優先へ寄る。既定0.0は
+    # パッチ前と完全に同じ挙動。
+    fpu_reduction = _fpu_reduction(context)
+    exploration_c = _puct_exploration_c(context)
     while True:
         best_value = -1e9
         best_child: _Child | None = None
-        exploration = 0.4 * math.sqrt(max(current.visit, 1))
+        exploration = exploration_c * math.sqrt(max(current.visit, 1))
         for child in current.children:
             if child.in_flight:
                 continue
             visit = 0
-            if child.node is None:
+            unexpanded = child.node is None
+            if unexpanded:
                 value = current.total / max(current.visit, 1)
             else:
                 value = child.node.total / max(child.node.visit, 1)
                 visit = child.node.visit
             if current.player_index != context.your_index:
                 value = -value
+            if unexpanded and fpu_reduction:
+                # 符号反転の後に引く(手番側から見て常に「未知の枝を減点」する)。
+                value -= fpu_reduction
             value += exploration * child.probability / (1 + visit)
             if best_value < value:
                 best_value = value
@@ -2421,30 +2587,210 @@ def _sample_child_by_visit_prior_temperature(
     )[0]
 
 
-def _finish_search(context: _SearchContext) -> list[int]:
+# SELFPLAY_VISIT_TIE_BREAK_PATCH_V1
+_VISIT_TIE_BREAK_MODES = frozenset(
+    {"enum", "q", "prior", "random", "q_only", "q_then_visit"}
+)
+
+
+def _visit_tie_break_mode(context: _SearchContext) -> str:
+    """visit最大が同数のときに、どの情報でtieを解くかを返す。
+
+    2026-08-05計測(305 real decisions / search_count=10のvisitdump):
+      - visit最大が複数の子で同数になる局面が 80.1%
+      - tieに参加する子の数は平均 4.42
+      - 従来の厳密">"は列挙順で最初の子を選ぶため、そのうち 56.6% は
+        NN自身の最有力手と食い違う
+      => 実質「全real decisionの45.4%で、学習ラベルが合法手の列挙順だけで決まり、
+         しかもネットワークの持つ情報と逆を教えている」状態だった。
+
+    ``SELFPLAY_VISIT_TIE_BREAK`` 未設定時は従来動作(``enum``)のまま。
+    ``SELFPLAY_VISIT_TIE_BREAK_AGENT_PREFIX`` を設定すると、agent名がその接頭辞に
+    一致する参加者だけが新しいtie-breakを使う。1回のトーナメント内で同じ重みの
+    新旧tie-breakを直接対戦させ、学習を伴わずに比較するために使う。
+    """
+    mode = os.environ.get("SELFPLAY_VISIT_TIE_BREAK", "enum")
+    if mode not in _VISIT_TIE_BREAK_MODES:
+        raise ValueError(
+            f"SELFPLAY_VISIT_TIE_BREAKが不正です: {mode!r} "
+            f"(有効値: {sorted(_VISIT_TIE_BREAK_MODES)})"
+        )
+    prefix = os.environ.get("SELFPLAY_VISIT_TIE_BREAK_AGENT_PREFIX")
+    if prefix and not context.participant.name.startswith(prefix):
+        # 接頭辞に一致しない側が使う規則。既定は従来動作の"enum"だが、既に採用済みの
+        # 規則(q)を対照にして新候補を測りたい場合はこれを指定する。
+        baseline = os.environ.get("SELFPLAY_VISIT_TIE_BREAK_BASELINE", "enum")
+        if baseline not in _VISIT_TIE_BREAK_MODES:
+            raise ValueError(
+                f"SELFPLAY_VISIT_TIE_BREAK_BASELINEが不正です: {baseline!r} "
+                f"(有効値: {sorted(_VISIT_TIE_BREAK_MODES)})"
+            )
+        return baseline
+    return mode
+
+
+# SELFPLAY_VISIT_TIE_MARGIN_PATCH_V1
+def _visit_tie_margin(context: _SearchContext) -> int:
+    """visitが最大値から何差までを「同数扱い」にするかを返す(既定0=従来動作)。
+
+    ``SELFPLAY_VISIT_TIE_MARGIN_AGENT_PREFIX`` で片側だけに適用でき、同じ重みの
+    新旧規則を1トーナメント内で直接対戦させられる(tie-break検証と同じ方式)。
+    """
+    raw = os.environ.get("SELFPLAY_VISIT_TIE_MARGIN")
+    if raw is None:
+        return 0
+    prefix = os.environ.get("SELFPLAY_VISIT_TIE_MARGIN_AGENT_PREFIX")
+    if prefix and not context.participant.name.startswith(prefix):
+        return 0
+    margin = int(raw)
+    if margin < 0:
+        raise ValueError(f"SELFPLAY_VISIT_TIE_MARGINは0以上にしてください: {raw!r}")
+    return margin
+
+
+# SELFPLAY_DECISION_DUMP_PATCH_V1 (計測専用。既定では何もしない)
+# process終了時にCPythonが閉じるので明示クローズはしない(計測用の一時フック)。
+_DECISION_DUMP_HANDLES: dict[str, object] = {}
+
+
+def _dump_decision(
+    context: _SearchContext,
+    root: "_Node",
+    chosen: "_Child | None",
+    flip_value: bool,
+) -> None:
+    """``SELFPLAY_DECISION_DUMP`` が指すディレクトリへ、root決定の内訳を1行JSONで残す。
+
+    「今の規則で着手が実際に何によって決まっているか」(visitの一意最大か / Q値の
+    tie-breakか / それでも同値でpriorか)を実測するための一時計測フック。
+    worker processごとにファイルを分けるのでロックは要らない。
+    """
+    directory = os.environ.get("SELFPLAY_DECISION_DUMP")
+    if not directory:
+        return
+    visits: list[int] = []
+    qualities: list[float] = []
+    priors: list[float] = []
+    chosen_index = -1
+    for index, child in enumerate(root.children):
+        if child.node is None:
+            continue
+        value = child.node.total / max(child.node.visit, 1)
+        visits.append(child.node.visit)
+        qualities.append(-value if flip_value else value)
+        priors.append(child.probability)
+        if child is chosen:
+            chosen_index = len(visits) - 1
+    if not visits:
+        return
+    sample = context.root_sample
+    record = {
+        "visits": visits,
+        "q": [round(value, 6) for value in qualities],
+        "prior": [round(value, 6) for value in priors],
+        "chosen": chosen_index,
+        "legal": len(root.children),
+        "root_q": round(root.total / max(root.visit, 1), 6),
+        # sample.value はこの時点ではまだNNの生rootvalue(後段で探索平均に上書きされる)。
+        "root_nn": round(float(sample.value), 6) if sample is not None else None,
+    }
+    handle = _DECISION_DUMP_HANDLES.get(directory)
+    if handle is None:
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"decisions.{os.getpid()}.jsonl")
+        handle = open(path, "a", encoding="utf-8")
+        _DECISION_DUMP_HANDLES[directory] = handle
+    handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+
+
+def _finish_search(context: _SearchContext) -> tuple[list[int], list[int]]:
+    """(実際にplayする手, 学習ラベルとして記録する手) を返す。
+
+    # SELFPLAY_PLAY_LABEL_SPLIT_PATCH_V1
+    温度サンプリングは「対局の多様性」のために実際のplay actionだけを揺らし、
+    模倣学習(train_imitation.py)へ渡す学習ラベルは常に生visit数のargmaxで決定的に
+    選ぶ。温度が同じ1個の戻り値をplayとlabelの両方に使っていたため、似た局面でも
+    サンプリングの度に異なる手が正解ラベルになり、hard-label分類学習にラベルノイズを
+    直接注入していた（2026-08-04のablationで確認、A/B/C比較でtemperature無効=C勝ち）。
+    """
     root = context.root
     if root is None or not root.children:
         observation = context.session.observation
         select = observation.get("select") or {}
         option_count = len(select.get("option", []))
         select_count = int(select.get("maxCount", 0))
-        return random.sample(range(option_count), select_count)
+        fallback = random.sample(range(option_count), select_count)
+        return fallback, fallback
 
     max_child: _Child | None = None
     max_visit = -1
     min_value = 10.0
+    tie_break = _visit_tie_break_mode(context)
+    # 手番がyour_indexでないrootではQ値の符号が反転する(_select_leafと同じ規則)。
+    flip_value = root.player_index != context.your_index
+    best_key: tuple[float, float, float] | None = None
     for child in root.children:
         if child.node is None:
             continue
-        if child.node.visit > max_visit:
+        child_value = child.node.total / max(child.node.visit, 1)
+        min_value = min(min_value, child_value)
+        if tie_break == "enum":
+            # 従来動作: 厳密な">"なので、visit最大が同数のときは
+            # 合法手の列挙順で最も早い子が必ず選ばれる。
+            if child.node.visit > max_visit:
+                max_child = child
+                max_visit = child.node.visit
+            continue
+        quality = -child_value if flip_value else child_value
+        if tie_break == "q":
+            key = (float(child.node.visit), quality, child.probability)
+        elif tie_break == "prior":
+            key = (float(child.node.visit), child.probability, quality)
+        elif tie_break == "q_only":
+            # visit数を一切見ない。search_count=10ではvisitが80%の局面で同数になり
+            # (2026-08-05実測)、探索が幅優先スイープになるため visit 自体が
+            # ほとんど情報を持たない。visitを主キーから外し、Q値だけで順位付けする。
+            key = (quality, child.probability, 0.0)
+        elif tie_break == "q_then_visit":
+            # Q値を主キー、同値のときだけvisit数で解く(q_onlyとqの中間)。
+            key = (quality, float(child.node.visit), child.probability)
+        else:  # "random"
+            key = (float(child.node.visit), random.random(), 0.0)
+        if best_key is None or key > best_key:
+            best_key = key
             max_child = child
             max_visit = child.node.visit
-        min_value = min(
-            min_value,
-            child.node.total / max(child.node.visit, 1),
-        )
+    # SELFPLAY_VISIT_TIE_MARGIN_PATCH_V1
+    # 既定の"q"はvisitが「完全に同数」の子だけをtieとみなす。search_count=10の実測
+    # visitベクトルは [3,3,4] や [3,3,2,2] のように1差が普通に出るので、1差を有意な
+    # 差として扱うと事実上ノイズで着手が決まる。marginを入れると「max_visitからm以内」
+    # をtie集合として扱い、その中はQ値で決める。m=0は従来の"q"と完全に同一、
+    # m=無限大は既に測定済みの"q_only"(-10.8pt)に一致する中間点の探索。
+    tie_margin = _visit_tie_margin(context)
+    if tie_margin > 0 and tie_break in {"q", "prior"} and max_child is not None:
+        threshold = max_visit - tie_margin
+        margin_key: tuple[float, float, float] | None = None
+        for child in root.children:
+            if child.node is None or child.node.visit < threshold:
+                continue
+            child_value = child.node.total / max(child.node.visit, 1)
+            quality = -child_value if flip_value else child_value
+            if tie_break == "q":
+                key = (quality, child.probability, float(child.node.visit))
+            else:
+                key = (child.probability, quality, float(child.node.visit))
+            if margin_key is None or key > margin_key:
+                margin_key = key
+                max_child = child
+
     if max_child is None:
         max_child = max(root.children, key=lambda child: child.probability)
+
+    _dump_decision(context, root, max_child, flip_value)
+
+    # label_child: 温度に関係なく常に決定的（生visit数argmax、tieは同じ規則）。
+    label_child = max_child
+    play_child = max_child
 
     temperature = _selfplay_action_temperature(context)
     if temperature is not None:
@@ -2460,11 +2806,14 @@ def _finish_search(context: _SearchContext) -> list[int]:
             prior_pseudocount,
         )
         if sampled_child is not None:
-            max_child = sampled_child
+            play_child = sampled_child
 
     sample = context.root_sample
     if sample is not None:
         sample.value = root.total / max(root.visit, 1)
+        # 展開済みの子が1つも無い局面(セットアップ中のpolicy-only判断)では、以下の
+        # ループが全要素を同じ定数(-0.03)にしてしまい教師信号にならない。
+        sample.searched = min_value != 10.0
         if min_value == 10.0:
             min_value = sample.value
         for index, child in enumerate(root.children):
@@ -2474,7 +2823,41 @@ def _finish_search(context: _SearchContext) -> list[int]:
             else:
                 value = child.node.total / max(child.node.visit, 1) - value
             sample.policy[index] = max(-1.0, min(1.0, value))
-    return max_child.select
+    return play_child.select, label_child.select
+
+
+_AGENT_SEARCH_COUNT_CACHE: dict[str, int] | None = None
+
+
+def _agent_search_count(context: _SearchContext, default: int) -> int:
+    """SELFPLAY_SEARCH_COUNT_BY_AGENT_PATCH_V1: agent別の探索回数。
+
+    --search-count は大会全体で1つしか指定できないため、「同じ重みで
+    探索あり/なしを直接対戦させる」比較ができなかった。環境変数
+    SELFPLAY_SEARCH_COUNT_BY_AGENT に {"agent名": 探索回数} のJSONを
+    渡したときだけ、そのagentの探索回数を差し替える。未設定なら
+    従来どおり全agentが --search-count で動く。
+
+    探索回数0のagentは、rootの子が1つも展開されないため
+    _finish_search の最終フォールバック(probability最大の子)に落ち、
+    NN policyのargmaxをそのまま指す = 探索なしの生ポリシーになる。
+    """
+    global _AGENT_SEARCH_COUNT_CACHE
+    if _AGENT_SEARCH_COUNT_CACHE is None:
+        raw = os.environ.get("SELFPLAY_SEARCH_COUNT_BY_AGENT", "")
+        overrides: dict[str, int] = {}
+        if raw:
+            for name, value in json.loads(raw).items():
+                count = int(value)
+                if count < 0:
+                    raise ValueError(
+                        f"SELFPLAY_SEARCH_COUNT_BY_AGENTの探索回数は0以上です: {name}={count}"
+                    )
+                overrides[str(name)] = count
+        _AGENT_SEARCH_COUNT_CACHE = overrides
+    if not _AGENT_SEARCH_COUNT_CACHE:
+        return default
+    return _AGENT_SEARCH_COUNT_CACHE.get(context.participant.name, default)
 
 
 def _run_search_wave(
@@ -2488,10 +2871,12 @@ def _run_search_wave(
     cuda_streams: dict[str, torch.cuda.Stream] | None = None,
     cuda_ensemble: _CudaEnsembleEvaluator | None = None,
     remote_evaluator: _RemoteEvaluationClient | None = None,
-) -> dict[int, list[int]]:
+) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
+    """(play用action, 学習ラベル用action) の2つのdictを返す。"""
     actions: dict[int, list[int]] = {}
+    label_actions: dict[int, list[int]] = {}
     if not contexts:
-        return actions
+        return actions, label_actions
 
     search_started = False
     try:
@@ -2516,7 +2901,10 @@ def _run_search_wave(
             remote_evaluator,
         )
 
-        remaining = {id(context): search_count for context in tree_contexts}
+        remaining = {
+            id(context): _agent_search_count(context, search_count)
+            for context in tree_contexts
+        }
         while any(count > 0 for count in remaining.values()):
             leaf_requests: list[_EvalRequest] = []
             made_progress = False
@@ -2544,10 +2932,12 @@ def _run_search_wave(
                 break
 
         for context in contexts:
-            actions[context.session.battle_ptr] = _finish_search(context)
+            play_action, label_action = _finish_search(context)
+            actions[context.session.battle_ptr] = play_action
+            label_actions[context.session.battle_ptr] = label_action
             if sample_sink is not None and context.root_sample is not None:
                 sample_sink[context.session.battle_ptr] = context.root_sample
-        return actions
+        return actions, label_actions
     finally:
         if search_started:
             started = time.perf_counter()
@@ -2789,6 +3179,7 @@ def run_batched_tournament(
                 break
 
             selected_actions: dict[int, list[int]] = {}
+            label_actions: dict[int, list[int]] = {}
             preencoded_samples: dict[int, BatchedLearnSample] | None = (
                 {}
                 if training_format in {"preencoded", "comparison"}
@@ -2800,15 +3191,20 @@ def run_batched_tournament(
                 select = observation.get("select")
                 if select is None:
                     selected_actions[session.battle_ptr] = []
+                    label_actions[session.battle_ptr] = []
                     continue
                 if len(select["option"]) == 0 or int(select["maxCount"]) == 0:
                     selected_actions[session.battle_ptr] = []
+                    label_actions[session.battle_ptr] = []
                     continue
 
                 your_index = int(observation["current"]["yourIndex"])
                 participant = session.players[your_index]
                 if participant.random_policy:
-                    selected_actions[session.battle_ptr] = _random_action(observation)
+                    random_action = _random_action(observation)
+                    selected_actions[session.battle_ptr] = random_action
+                    # MCTSを介さない手番なのでplay/labelを分ける対象がない。
+                    label_actions[session.battle_ptr] = random_action
                 else:
                     contexts.append(
                         _SearchContext(
@@ -2818,30 +3214,33 @@ def run_batched_tournament(
                         )
                     )
 
-            selected_actions.update(
-                _run_search_wave(
-                    runtime,
-                    contexts,
-                    search_count,
-                    device,
-                    batch_size,
-                    profile,
-                    sample_sink=preencoded_samples,
-                    cuda_streams=cuda_streams,
-                    cuda_ensemble=cuda_ensemble,
-                    remote_evaluator=_evaluation_client,
-                )
+            wave_actions, wave_label_actions = _run_search_wave(
+                runtime,
+                contexts,
+                search_count,
+                device,
+                batch_size,
+                profile,
+                sample_sink=preencoded_samples,
+                cuda_streams=cuda_streams,
+                cuda_ensemble=cuda_ensemble,
+                remote_evaluator=_evaluation_client,
             )
+            selected_actions.update(wave_actions)
+            label_actions.update(wave_label_actions)
 
             next_active: list[_MatchSession] = []
             for session in active:
+                # action: 実際に対局を進める手（温度が有効ならここだけ確率的）。
+                # label_action: 模倣学習の正解ラベル（常に決定的なvisit数argmax）。
                 action = selected_actions[session.battle_ptr]
+                label_action = label_actions[session.battle_ptr]
                 if training_output_dir is not None:
                     preencoded_decision = None
                     if training_format in {"preencoded", "comparison"}:
                         preencoded_decision = _build_preencoded_training_decision(
                             session.observation,
-                            action,
+                            label_action,
                             (
                                 preencoded_samples.get(session.battle_ptr)
                                 if preencoded_samples is not None
@@ -2855,7 +3254,7 @@ def run_batched_tournament(
                     if training_format in {"json", "comparison"}:
                         json_decision = _build_training_decision(
                             session.observation,
-                            action,
+                            label_action,
                         )
                         if json_decision is not None:
                             session.training_decisions.append(json_decision)

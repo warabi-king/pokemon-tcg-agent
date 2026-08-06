@@ -155,7 +155,7 @@ def create_node(
 
     prob_sum = 0.0
     for i in range(len(policy)):
-        p = math.exp(policy[i] * 10.0)
+        p = math.exp(policy[i] * 4.0)
         node.children.append(Child(actions[i], p))
         prob_sum += p
     if prob_sum > 0:
@@ -227,18 +227,30 @@ def mcts_agent(
                     current.backprop(current.value)
                     break
 
+        # VISIT_TIE_BREAK_V1
+        # search_count=10ではPUCTの探索項が1回のvisitで半減するため、探索は事実上
+        # 合法手への幅優先スイープになり、visit数が同数で並ぶ。2026-08-05計測(305局面):
+        # 最多visitが同数になる局面が80.1%、並ぶ子の数は平均4.42。
+        # 元実装は厳密な "<" だったので、その80%の局面で「合法手の列挙順で最初の手」が
+        # 選ばれていた(enumerate_actionsは組合せを辞書順に返すため、常にoption列の先頭)。
+        # 同数のときはQ値(同値ならNN prior)で解く。同一重み・10,240試合の直接対戦で
+        # +7.4pt(deck対応づけ検定 t(15)=+2.97, p=0.0096)。
+        # visit数が多い子を優先する規則自体は変えていない(tieのときだけの判定)。
         max_child: Child | None = None
-        max_visit = -1
+        best_key: tuple[int, float, float] | None = None
         min_value = 10.0
+        flip_value = root.state.observation.current.yourIndex != your_index
         for child in root.children:
             if child.node is None:
                 continue
-            if max_visit < child.node.visit:
-                max_child = child
-                max_visit = child.node.visit
             v = child.node.total / max(child.node.visit, 1)
             if min_value > v:
                 min_value = v
+            quality = -v if flip_value else v
+            key = (child.node.visit, quality, child.prob)
+            if best_key is None or key > best_key:
+                best_key = key
+                max_child = child
 
         if max_child is None:
             max_child = max(root.children, key=lambda child: child.prob)

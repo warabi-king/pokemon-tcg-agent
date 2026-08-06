@@ -26,6 +26,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
+import os
 import pickle
 import random
 import sys
@@ -50,14 +52,126 @@ def load_shard(path: Path) -> list[tuple]:
         return pickle.load(f)
 
 
+# SELFPLAY_COMPLETED_Q_TARGET_PATCH_V1
+# search_count=10のself-playでは、MCTSのvisit分布がほぼ均等になる(2026-08-05実測:
+# 305 real decisionsのうち80.1%でvisit最大が同数、tieの平均幅4.42)。そのため
+# chosen_index(=visit argmax)は合法手の列挙順で決まってしまい、45.4%の局面では
+# ネットワーク自身の最有力手と食い違うラベルになっていた。
+# completed_q(合法手ごとのQ優位度 clamp(Q(a)-Q(root), -1, 1))が保存されている
+# サンプルでは、1手のhard labelではなくsoftmax(Q/T)のsoft targetを教師にできる。
+# 環境変数SELFPLAY_POLICY_TARGET未設定時は従来どおりhard labelのまま。
+POLICY_TARGET_MODES = frozenset({"hard", "completed_q"})
+
+
+def policy_target_mode() -> str:
+    mode = os.environ.get("SELFPLAY_POLICY_TARGET", "hard")
+    if mode not in POLICY_TARGET_MODES:
+        raise SystemExit(
+            f"SELFPLAY_POLICY_TARGETが不正です: {mode!r} (有効値: {sorted(POLICY_TARGET_MODES)})"
+        )
+    return mode
+
+
+def policy_target_temperature() -> float:
+    temperature = float(os.environ.get("SELFPLAY_POLICY_TARGET_TEMPERATURE", "0.25"))
+    if temperature <= 0.0:
+        raise SystemExit("SELFPLAY_POLICY_TARGET_TEMPERATUREは正の値が必要です。")
+    return temperature
+
+
+# SELFPLAY_SEARCH_VALUE_TARGET_PATCH_V1
+# valueの教師は「その試合の最終勝敗(±1)」を全局面へ一律に付けたもの。60ターンの
+# 試合なら序盤も終盤も同じ±1になり、局面ごとの優劣が入らない最大分散の教師になる。
+# q tie-breakの採用でQ値が着手を決めるようになったため、valueヘッドの質は直接
+# 着手品質に効く。探索rootの評価値と混ぜて分散を下げられるようにする。
+# lambda=1.0(既定)なら従来どおり最終勝敗そのまま。
+def value_target_lambda() -> float:
+    lam = float(os.environ.get("SELFPLAY_VALUE_TARGET_LAMBDA", "1.0"))
+    if not 0.0 <= lam <= 1.0:
+        raise SystemExit(
+            f"SELFPLAY_VALUE_TARGET_LAMBDAは0.0〜1.0にしてください: {lam}"
+        )
+    return lam
+
+
+def blended_value(outcome: float, search_value, lam: float) -> float:
+    if lam >= 1.0 or search_value is None:
+        return outcome
+    return lam * outcome + (1.0 - lam) * float(search_value)
+
+
+def policy_target_zero_spread() -> str:
+    """Q優位度が全合法手で同値だった行の扱い。
+
+    実測(2026-08-05, 条件Iの実shard 107,997サンプル)では28.2%の行がこれに当たる。
+    softmaxをそのまま適用すると一様分布が教師になり、学習データの28%が
+    「方策を平坦にせよ」という勾配になってしまう。既定では従来のhard labelへ
+    退避させ、探索が意見を持っている行だけをsoft targetに変える(条件Jで
+    測りたいのはそこだけなので、交絡させない)。
+    """
+    mode = os.environ.get("SELFPLAY_POLICY_TARGET_ZERO_SPREAD", "hard")
+    if mode not in {"hard", "uniform"}:
+        raise SystemExit(
+            f"SELFPLAY_POLICY_TARGET_ZERO_SPREADが不正です: {mode!r} (有効値: ['hard', 'uniform'])"
+        )
+    return mode
+
+
+def soft_target_row(
+    completed_q: list[float],
+    chosen_index: int,
+    n_candidates: int,
+    temperature: float,
+    zero_spread: str = "hard",
+) -> list[float]:
+    """1サンプル分のsoft target分布を返す(長さはn_candidates)。"""
+    if len(completed_q) != n_candidates:
+        # 探索が走らなかった局面(セットアップ中のpolicy-only判断)などは
+        # completed_qが空になる。その行だけ従来のhard labelへ退避する。
+        row = [0.0] * n_candidates
+        row[chosen_index] = 1.0
+        return row
+    if zero_spread == "hard" and max(completed_q) == min(completed_q):
+        row = [0.0] * n_candidates
+        row[chosen_index] = 1.0
+        return row
+    scaled = [value / temperature for value in completed_q]
+    highest = max(scaled)
+    weights = [math.exp(value - highest) for value in scaled]
+    total = sum(weights)
+    if total <= 0.0:
+        row = [0.0] * n_candidates
+        row[chosen_index] = 1.0
+        return row
+    return [weight / total for weight in weights]
+
+
 def build_batch_tensors(batch: list[tuple], device: torch.device):
     input_enc = LearnInput()
     input_dec = LearnInput()
     mask: list[float] = []
     label_value: list[float] = []
     chosen_indices: list[int] = []
+    soft_targets: list[float] = []
+    mode = policy_target_mode()
+    temperature = policy_target_temperature()
+    zero_spread = policy_target_zero_spread()
+    value_lambda = value_target_lambda()
 
-    for enc_index, enc_value, enc_offset, dec_index, dec_value, dec_offset, chosen_index, value in batch:
+    for sample in batch:
+        (
+            enc_index,
+            enc_value,
+            enc_offset,
+            dec_index,
+            dec_value,
+            dec_offset,
+            chosen_index,
+            value,
+        ) = sample[:8]
+        completed_q = list(sample[8]) if len(sample) > 8 else []
+        search_value = sample[9] if len(sample) > 9 else None
+        value = blended_value(value, search_value, value_lambda)
         enc_count = len(input_enc.index)
         input_enc.index.extend(enc_index)
         input_enc.value.extend(enc_value)
@@ -73,14 +187,27 @@ def build_batch_tensors(batch: list[tuple], device: torch.device):
 
         n_candidates = len(dec_offset)
         mask.extend([1.0] * n_candidates)
+        if mode == "completed_q":
+            soft_targets.extend(
+                soft_target_row(
+                    completed_q, chosen_index, n_candidates, temperature, zero_spread
+                )
+            )
         for _ in range(MAX_ACTIONS - n_candidates):
             mask.append(0.0)
+            if mode == "completed_q":
+                soft_targets.append(0.0)
             input_dec.offset.append(len(input_dec.index))
 
     n = len(batch)
     mask_tensor = torch.tensor(mask, dtype=torch.float32, device=device).view(n, -1)
     label_value_tensor = torch.tensor(label_value, dtype=torch.float32, device=device).view(n, -1)
     chosen_index_tensor = torch.tensor(chosen_indices, dtype=torch.long, device=device)
+    soft_target_tensor = (
+        torch.tensor(soft_targets, dtype=torch.float32, device=device).view(n, -1)
+        if mode == "completed_q"
+        else None
+    )
 
     tensors = (
         torch.tensor(input_enc.index, dtype=torch.int32, device=device),
@@ -90,7 +217,7 @@ def build_batch_tensors(batch: list[tuple], device: torch.device):
         torch.tensor(input_dec.value, dtype=torch.float32, device=device),
         torch.tensor(input_dec.offset, dtype=torch.int32, device=device),
     )
-    return tensors, mask_tensor, label_value_tensor, chosen_index_tensor
+    return tensors, mask_tensor, label_value_tensor, chosen_index_tensor, soft_target_tensor
 
 
 def iter_batches(shard_paths: list[Path], batch_size: int, shuffle: bool) -> Iterator[list[tuple]]:
@@ -120,14 +247,27 @@ def train_one_epoch(model, optimizer, shard_paths: list[Path], batch_size: int, 
     total_correct = total_seen = 0
 
     for batch in iter_batches(shard_paths, batch_size, shuffle=True):
-        tensors, mask_tensor, label_value_tensor, chosen_index_tensor = build_batch_tensors(batch, device)
+        (
+            tensors,
+            mask_tensor,
+            label_value_tensor,
+            chosen_index_tensor,
+            soft_target_tensor,
+        ) = build_batch_tensors(batch, device)
 
         optimizer.zero_grad()
         out_enc, out_dec = model(*tensors)
 
         loss_value = loss_fn_value(out_enc, label_value_tensor)
         masked_logits = out_dec.masked_fill(mask_tensor == 0, float("-inf"))
-        loss_policy = F.cross_entropy(masked_logits, chosen_index_tensor)
+        if soft_target_tensor is None:
+            loss_policy = F.cross_entropy(masked_logits, chosen_index_tensor)
+        else:
+            # maskされた位置のlog_probは-infなので、0 * -inf = nan を避けるため
+            # 先に0で埋める(soft targetもその位置は0)。
+            log_probabilities = torch.log_softmax(masked_logits, dim=1)
+            log_probabilities = log_probabilities.masked_fill(mask_tensor == 0, 0.0)
+            loss_policy = -(soft_target_tensor * log_probabilities).sum(dim=1).mean()
 
         loss = loss_value + loss_policy
         loss.backward()
@@ -163,7 +303,7 @@ def evaluate(model, shard_paths: list[Path], batch_size: int, device: torch.devi
     correct = total = 0
     with torch.no_grad():
         for batch in iter_batches(shard_paths, batch_size, shuffle=False):
-            tensors, mask_tensor, _, chosen_index_tensor = build_batch_tensors(batch, device)
+            tensors, mask_tensor, _, chosen_index_tensor, _ = build_batch_tensors(batch, device)
             _, out_dec = model(*tensors)
             masked_logits = out_dec.masked_fill(mask_tensor == 0, float("-inf"))
             pred = masked_logits.argmax(dim=1)

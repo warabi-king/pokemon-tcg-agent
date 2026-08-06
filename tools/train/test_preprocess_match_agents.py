@@ -63,8 +63,8 @@ class PreencodedMatchAgentPreprocessTest(unittest.TestCase):
                 "boundaries": np.asarray([0, len(values)], dtype=np.int64),
             }
 
-        def packed_player(value: float) -> dict:
-            return {
+        def packed_player(value: float, completed_q: list[float] | None = None) -> dict:
+            packed = {
                 "count": 1,
                 "chosenIndex": np.asarray([0], dtype=np.int64),
                 "value": np.asarray([value], dtype=np.float32),
@@ -75,6 +75,9 @@ class PreencodedMatchAgentPreprocessTest(unittest.TestCase):
                 "decoderValue": ragged([1.0], np.float32),
                 "decoderOffset": ragged([0], np.int32),
             }
+            if completed_q is not None:
+                packed["completedQ"] = ragged(completed_q, np.float32)
+            return packed
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -102,11 +105,125 @@ class PreencodedMatchAgentPreprocessTest(unittest.TestCase):
                 shard_size=10,
             )
 
+            # completedQ/searchValueを持たない旧episodeも、その2枠が空/Noneで読める。
             with (output / "a_own" / "shard_00000.pkl").open("rb") as file:
-                self.assertEqual(pickle.load(file), [sample(1.0)])
+                self.assertEqual(pickle.load(file), [(*sample(1.0), [], None)])
             with (output / "a_opponent" / "shard_00000.pkl").open("rb") as file:
-                self.assertEqual(pickle.load(file), [sample(-1.0)])
+                self.assertEqual(pickle.load(file), [(*sample(-1.0), [], None)])
             self.assertEqual(summary["a_own"]["samples"], 1)
+
+    def test_packed_preencoded_samples_carry_completed_q(self) -> None:
+        def ragged(values, dtype):
+            return {
+                "values": np.asarray(values, dtype=dtype),
+                "boundaries": np.asarray([0, len(values)], dtype=np.int64),
+            }
+
+        def packed_player(value: float, completed_q: list[float]) -> dict:
+            return {
+                "count": 1,
+                "chosenIndex": np.asarray([0], dtype=np.int64),
+                "value": np.asarray([value], dtype=np.float32),
+                "encoderIndex": ragged([1], np.int32),
+                "encoderValue": ragged([0.5], np.float32),
+                "encoderOffset": ragged([0], np.int32),
+                "decoderIndex": ragged([2], np.int32),
+                "decoderValue": ragged([1.0], np.float32),
+                "decoderOffset": ragged([0], np.int32),
+                "completedQ": ragged(completed_q, np.float32),
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            episodes = root / "episodes"
+            output = root / "shards"
+            episodes.mkdir()
+            deck_a = [1] * 60
+            deck_b = [2] * 60
+            deck_a_path = root / "deck_a.csv"
+            deck_b_path = root / "deck_b.csv"
+            deck_a_path.write_text("\n".join(map(str, deck_a)), encoding="utf-8")
+            deck_b_path.write_text("\n".join(map(str, deck_b)), encoding="utf-8")
+            episode = {
+                "format": PREENCODED_TRAINING_EPISODE_FORMAT,
+                "decks": [deck_a, deck_b],
+                "packedPlayerSamples": [
+                    packed_player(1.0, [0.25, -0.5]),
+                    packed_player(-1.0, [0.25, -0.5]),
+                ],
+            }
+            with (episodes / "episode_test.pkl").open("wb") as file:
+                pickle.dump(episode, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+            preprocess_match_agents(
+                [episodes],
+                [("a", deck_a_path), ("b", deck_b_path)],
+                output,
+                shard_size=10,
+            )
+
+            with (output / "a_own" / "shard_00000.pkl").open("rb") as file:
+                samples = pickle.load(file)
+            self.assertEqual(len(samples), 1)
+            self.assertEqual(len(samples[0]), 10)
+            self.assertAlmostEqual(samples[0][8][0], 0.25, places=5)
+            self.assertAlmostEqual(samples[0][8][1], -0.5, places=5)
+            self.assertIsNone(samples[0][9])
+
+    def test_packed_preencoded_samples_carry_search_value(self) -> None:
+        def ragged(values, dtype):
+            return {
+                "values": np.asarray(values, dtype=dtype),
+                "boundaries": np.asarray([0, len(values)], dtype=np.int64),
+            }
+
+        def packed_player(value: float, search_value: float) -> dict:
+            return {
+                "count": 1,
+                "chosenIndex": np.asarray([0], dtype=np.int64),
+                "value": np.asarray([value], dtype=np.float32),
+                "searchValue": np.asarray([search_value], dtype=np.float32),
+                "encoderIndex": ragged([1], np.int32),
+                "encoderValue": ragged([0.5], np.float32),
+                "encoderOffset": ragged([0], np.int32),
+                "decoderIndex": ragged([2], np.int32),
+                "decoderValue": ragged([1.0], np.float32),
+                "decoderOffset": ragged([0], np.int32),
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            episodes = root / "episodes"
+            output = root / "shards"
+            episodes.mkdir()
+            deck_a = [1] * 60
+            deck_b = [2] * 60
+            deck_a_path = root / "deck_a.csv"
+            deck_b_path = root / "deck_b.csv"
+            deck_a_path.write_text("\n".join(map(str, deck_a)), encoding="utf-8")
+            deck_b_path.write_text("\n".join(map(str, deck_b)), encoding="utf-8")
+            episode = {
+                "format": PREENCODED_TRAINING_EPISODE_FORMAT,
+                "decks": [deck_a, deck_b],
+                "packedPlayerSamples": [
+                    packed_player(1.0, -0.25),
+                    packed_player(-1.0, 0.25),
+                ],
+            }
+            with (episodes / "episode_test.pkl").open("wb") as file:
+                pickle.dump(episode, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+            preprocess_match_agents(
+                [episodes],
+                [("a", deck_a_path), ("b", deck_b_path)],
+                output,
+                shard_size=10,
+            )
+            with (output / "a_own" / "shard_00000.pkl").open("rb") as file:
+                samples = pickle.load(file)
+            self.assertEqual(len(samples[0]), 10)
+            self.assertAlmostEqual(samples[0][7], 1.0, places=5)
+            self.assertAlmostEqual(samples[0][9], -0.25, places=5)
 
 
 if __name__ == "__main__":

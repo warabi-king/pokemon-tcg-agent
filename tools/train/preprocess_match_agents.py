@@ -71,6 +71,17 @@ def iter_training_episodes(
             yield from iter_multi_source([source])
 
 
+def _optional_search_value(search_values, sample_index: int) -> float | None:
+    """探索rootの評価値を返す。探索が走らなかった局面はNaNで記録されているのでNone。
+
+    NaNをそのままfloatとして返すと、value教師へ混ぜたときlossがNaNになる。
+    """
+    if search_values is None:
+        return None
+    value = float(search_values[sample_index])
+    return None if value != value else value
+
+
 def extract_preencoded_player_samples(
     data: bytes,
 ) -> tuple[list[list[int]], list[list[tuple]]] | None:
@@ -115,6 +126,22 @@ def extract_preencoded_player_samples(
             ):
                 return None
 
+            # SELFPLAY_SEARCH_VALUE_TARGET_PATCH_V1: 探索rootの評価値。無ければNone
+            # (この patch 以前のepisode)。学習側は既定では使わない。
+            search_values = packed.get("searchValue")
+            if not (
+                isinstance(search_values, np.ndarray)
+                and len(search_values) == count
+            ):
+                search_values = None
+
+            # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1: 決定ごとのターン番号。
+            # この patch 以前のepisodeには入っていないのでNone扱いにする。
+            turns = packed.get("turn")
+            if not (isinstance(turns, np.ndarray) and len(turns) == count):
+                turns = None
+            final_turn = int(turns.max()) if turns is not None and count else 0
+
             ragged_fields: list[tuple[np.ndarray, np.ndarray]] = []
             for field_name in field_names:
                 ragged = packed.get(field_name)
@@ -132,6 +159,23 @@ def extract_preencoded_player_samples(
                     return None
                 ragged_fields.append((flat_values, boundaries))
 
+            # SELFPLAY_COMPLETED_Q_TARGET_PATCH_V1: 合法手ごとのQ優位度。この
+            # patch以前に作られたepisodeには入っていないので、無ければ空扱いにする
+            # (学習側は従来どおりchosen_indexのhard labelを使う)。
+            completed_q_field: tuple[np.ndarray, np.ndarray] | None = None
+            completed_q_ragged = packed.get("completedQ")
+            if isinstance(completed_q_ragged, dict):
+                flat_values = completed_q_ragged.get("values")
+                boundaries = completed_q_ragged.get("boundaries")
+                if (
+                    isinstance(flat_values, np.ndarray)
+                    and isinstance(boundaries, np.ndarray)
+                    and len(boundaries) == count + 1
+                    and int(boundaries[0]) == 0
+                    and int(boundaries[-1]) == len(flat_values)
+                ):
+                    completed_q_field = (flat_values, boundaries)
+
             for sample_index in range(count):
                 fields = []
                 for flat_values, boundaries in ragged_fields:
@@ -140,8 +184,35 @@ def extract_preencoded_player_samples(
                     if start < 0 or end < start or end > len(flat_values):
                         return None
                     fields.append(flat_values[start:end].tolist())
+                completed_q: list[float] = []
+                if completed_q_field is not None:
+                    flat_values, boundaries = completed_q_field
+                    start = int(boundaries[sample_index])
+                    end = int(boundaries[sample_index + 1])
+                    if start < 0 or end < start or end > len(flat_values):
+                        return None
+                    completed_q = flat_values[start:end].tolist()
+                # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1
+                # 終局までの残りターン数を、その試合の総ターン数で正規化した値
+                # (最終ターンで0.0、初手で1.0に近づく)。学習は1エピソードが
+                # 終わってから回すので、その試合の長さが使える。固定の割引率だと
+                # 長い試合の序盤だけが極端に潰れて、試合の長さで扱いが変わるため、
+                # 相対位置で持つ。ターン番号を持たない旧episodeでは0.0(=割引なし)。
+                # 保存するだけで、既定の学習では未使用。
+                remaining_fraction = (
+                    (final_turn - int(turns[sample_index])) / max(final_turn, 1)
+                    if turns is not None
+                    else 0.0
+                )
                 player_samples[player].append(
-                    (*fields, int(chosen_indices[sample_index]), float(values[sample_index]))
+                    (
+                        *fields,
+                        int(chosen_indices[sample_index]),
+                        float(values[sample_index]),
+                        completed_q,
+                        _optional_search_value(search_values, sample_index),
+                        float(remaining_fraction),
+                    )
                 )
         return decks, player_samples
 

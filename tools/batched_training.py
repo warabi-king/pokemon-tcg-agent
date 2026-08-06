@@ -195,17 +195,20 @@ def collect_batched_training_samples(
                 )
 
             wave_samples: dict[int, BatchedLearnSample] = {}
-            selected_actions.update(
-                _run_search_wave(
-                    runtime,
-                    contexts,
-                    search_count,
-                    device,
-                    batch_size,
-                    profile,
-                    sample_sink=wave_samples,
-                )
+            # SELFPLAY_PLAY_LABEL_SPLIT_PATCH_V1 以降、_run_search_waveは
+            # (play用action, 学習ラベル用action) の2つのdictを返す。ここは実際に
+            # ゲームを進める側なのでplay用を使う(取り違えるとdict.updateがタプルを
+            # そのまま食ってactionがintになる)。
+            wave_actions, _wave_label_actions = _run_search_wave(
+                runtime,
+                contexts,
+                search_count,
+                device,
+                batch_size,
+                profile,
+                sample_sink=wave_samples,
             )
+            selected_actions.update(wave_actions)
             for context in contexts:
                 sample = wave_samples.get(context.session.battle_ptr)
                 if sample is not None:
