@@ -17,6 +17,11 @@ agents/16model_pretrained_source/**/*.pyc
 # Model weights are large; keep only the selected 16-model artifacts in Git.
 *.pth
 !agents/16model_pretrained_source/**/*.pth
+!agents/adamw_best_ep21600_cluster_03/
+!agents/adamw_best_ep21600_cluster_03/**
+!agents/adamw_best_ep21600_cluster_03/**/*.pth
+agents/adamw_best_ep21600_cluster_03/**/__pycache__/
+agents/adamw_best_ep21600_cluster_03/**/*.pyc
 
 episodes/
 shards/

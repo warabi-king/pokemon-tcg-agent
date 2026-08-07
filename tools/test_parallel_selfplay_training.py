@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+import math
 from pathlib import Path
 import sys
 import tempfile
@@ -142,6 +143,28 @@ class ParallelSelfplayTrainingTest(unittest.TestCase):
         self.assertEqual(rows[0]["job"], "cluster_00_self")
         self.assertEqual(rows[0]["epoch"], 0)
         self.assertEqual(rows[0]["loss"], 1.2)
+        self.assertTrue(math.isnan(rows[0]["policy_entropy"]))
+        self.assertTrue(math.isnan(rows[0]["mean_advantage"]))
+
+    def test_reads_optional_policy_metrics_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            metrics = output / "jobs" / "cluster_00_self" / "metrics.csv"
+            metrics.parent.mkdir(parents=True)
+            metrics.write_text(
+                "epoch,batches,loss,loss_value,loss_policy,"
+                "policy_entropy,mean_advantage,train_accuracy,"
+                "val_accuracy,learning_rate,global_step,elapsed_seconds\n"
+                "0,4,1.2,0.2,1.0,0.8,0.1,0.75,0.0,0.0001,12,2.5\n",
+                encoding="utf-8",
+            )
+
+            rows = read_parallel_training_metrics(output)
+
+        self.assertEqual(rows[0]["policy_entropy"], 0.8)
+        self.assertEqual(rows[0]["mean_advantage"], 0.1)
+        self.assertEqual(rows[0]["learning_rate"], 0.0001)
+        self.assertEqual(rows[0]["global_step"], 12)
 
     def test_parallel_training_publishes_only_completed_model_set(self) -> None:
         fake_preprocessor = """\

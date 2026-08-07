@@ -331,19 +331,36 @@ def read_parallel_training_metrics(
             with metrics_file.open(newline="", encoding="utf-8") as file:
                 for row in csv.DictReader(file):
                     try:
-                        rows.append(
-                            {
-                                "job": metrics_file.parent.name,
-                                "epoch": int(row["epoch"]),
-                                "batches": int(row["batches"]),
-                                "loss": float(row["loss"]),
-                                "loss_value": float(row["loss_value"]),
-                                "loss_policy": float(row["loss_policy"]),
-                                "train_accuracy": float(row["train_accuracy"]),
-                                "val_accuracy": float(row["val_accuracy"]),
-                                "elapsed_seconds": float(row["elapsed_seconds"]),
-                            }
-                        )
+                        parsed: dict[str, object] = {
+                            "job": metrics_file.parent.name,
+                            "epoch": int(row["epoch"]),
+                            "batches": int(row["batches"]),
+                            "loss": float(row["loss"]),
+                            "loss_value": float(row["loss_value"]),
+                            "loss_policy": float(row["loss_policy"]),
+                            "train_accuracy": float(row["train_accuracy"]),
+                            "val_accuracy": float(row["val_accuracy"]),
+                            "elapsed_seconds": float(row["elapsed_seconds"]),
+                        }
+                        # 旧trainerのmetrics.csvには次の2列がない。表示側で
+                        # 同じ列集合を安全に集計できるよう、欠損時はNaNで補う。
+                        for policy_float in (
+                            "policy_entropy",
+                            "mean_advantage",
+                        ):
+                            value = row.get(policy_float)
+                            parsed[policy_float] = (
+                                float(value)
+                                if value not in (None, "")
+                                else float("nan")
+                            )
+                        learning_rate = row.get("learning_rate")
+                        if learning_rate not in (None, ""):
+                            parsed["learning_rate"] = float(learning_rate)
+                        global_step = row.get("global_step")
+                        if global_step not in (None, ""):
+                            parsed["global_step"] = int(global_step)
+                        rows.append(parsed)
                     except (KeyError, TypeError, ValueError):
                         # CSV末尾が追記途中なら、次回のpollで完成行を読み直す。
                         continue

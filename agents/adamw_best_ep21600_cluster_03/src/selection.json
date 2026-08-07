@@ -1,0 +1,38 @@
+{
+  "sourceNotebook": "notebooks/parallel_selfplay_training_loop_stateful_adamw.ipynb",
+  "trainingRun": "20260803_095342_717598",
+  "agent": "cluster_03",
+  "checkpointEpisodes": 21600,
+  "evaluatedInEpisodeBatch": 25200,
+  "evaluation": {
+    "selfPlayExcluded": true,
+    "games": 398,
+    "wins": 222,
+    "losses": 172,
+    "draws": 4,
+    "winRate": 0.5577889447236181,
+    "decisiveWinRate": 0.5634517766497462
+  },
+  "runtimeParameters": {
+    "searchCount": 10,
+    "maxActions": 64,
+    "explorationCoefficient": 0.4,
+    "policyLogitMultiplier": 10.0,
+    "selfModel": "model.pth",
+    "opponentModel": "opponent_model.pth"
+  },
+  "trainingParameters": {
+    "gamesPerUpdate": 3600,
+    "completedUpdates": 6,
+    "epochsPerUpdate": 1,
+    "trainMinibatchSize": 128,
+    "baseLearningRate": 0.0001,
+    "minimumLearningRate": 0.00001,
+    "cosineTMax": 13,
+    "shardSize": 20000
+  },
+  "sha256": {
+    "model.pth": "9a60540f741939a68fe7a67f7cbac708182027b7f47d25b285222886561fc2eb",
+    "opponent_model.pth": "83a074b0ccd610eb84fc4ad9dd6c956f1e8309559951a38a82ab8c5840ac3283"
+  }
+}
