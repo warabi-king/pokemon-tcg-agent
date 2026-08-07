@@ -209,8 +209,11 @@ def main() -> None:
     match_root.mkdir(exist_ok=True)
     result_path = match_root / "result.html"
     kaggle_result_path = match_root / "result_kaggle.html"
-    kaggle_result_path.write_text(env.render(mode="html"))
-    result_path.write_text(build_result_html(env.steps, [agent_a_name, agent_b_name]))
+    kaggle_result_path.write_text(env.render(mode="html"), encoding="utf-8")
+    result_path.write_text(
+        build_result_html(env.steps, [agent_a_name, agent_b_name]),
+        encoding="utf-8",
+    )
     print(f"シミュレーションが完了しました: {result_path}")
     print(f"Kaggle標準HTMLも出力しました: {kaggle_result_path}")
     print(f"player0: {agent_a_name} ({src_a})")

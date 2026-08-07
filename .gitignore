@@ -22,6 +22,11 @@ agents/16model_pretrained_source/**/*.pyc
 !agents/adamw_best_ep21600_cluster_03/**/*.pth
 agents/adamw_best_ep21600_cluster_03/**/__pycache__/
 agents/adamw_best_ep21600_cluster_03/**/*.pyc
+!agents/mcts_hands/
+!agents/mcts_hands/**
+!agents/mcts_hands/**/*.pth
+agents/mcts_hands/**/__pycache__/
+agents/mcts_hands/**/*.pyc
 
 episodes/
 shards/
