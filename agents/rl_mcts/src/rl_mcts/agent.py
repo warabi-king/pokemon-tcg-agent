@@ -8,16 +8,29 @@ from cg.api import Observation, to_observation_class
 from rl_mcts.deck import read_deck_csv
 from rl_mcts.mcts import mcts_agent
 from rl_mcts.model import MyModel, create_model
+from rl_mcts.opponent_deck import OpponentDeckPredictor
 
 
 class RlMctsAgent:
     """学習済みモデルを使ってMCTSで手を選ぶagent。"""
 
-    def __init__(self, model_path: Path | None = None, search_count: int = 10) -> None:
+    def __init__(
+        self,
+        model_path: Path | None = None,
+        search_count: int = 10,
+        opponent_model_path: Path | None = None,
+    ) -> None:
         src_root = Path(__file__).resolve().parents[1]
         self.model_path = model_path or src_root / "model.pth"
         self.search_count = search_count
         self.model: MyModel | None = None
+        self.opponent_predictor = OpponentDeckPredictor(
+            opponent_model_path or src_root / "opponent_deck_mlp.pth"
+        )
+
+    def reset(self) -> None:
+        """新しい対戦に向けて、累積した相手の公開カードを破棄する。"""
+        self.opponent_predictor.reset()
 
     def select_action(self, obs_dict: dict) -> list[int]:
         """現在局面から合法手を選ぶ。"""
@@ -29,6 +42,9 @@ class RlMctsAgent:
             return []
 
         model = self.get_model()
+        opponent_cards = None
+        if self.opponent_predictor.available:
+            opponent_cards = self.opponent_predictor.predict(obs)
 
         with torch.inference_mode():
             selected, _ = mcts_agent(
@@ -36,6 +52,7 @@ class RlMctsAgent:
                 read_deck_csv(),
                 model,
                 search_count=self.search_count,
+                opponent_cards=opponent_cards,
             )
         return selected
 

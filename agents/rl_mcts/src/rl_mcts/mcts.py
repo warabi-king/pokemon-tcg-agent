@@ -10,6 +10,7 @@ import torch
 from cg.api import SearchState, search_begin, search_end, search_step, to_observation_class
 from rl_mcts.features import SparseVector, get_decoder_input, get_encoder_input
 from rl_mcts.model import MyModel
+from rl_mcts.opponent_deck import OpponentHiddenCards
 
 SEARCH_COUNT = 10
 MAX_ACTIONS = 64
@@ -170,6 +171,7 @@ def mcts_agent(
     your_deck: list[int],
     model: MyModel,
     search_count: int = SEARCH_COUNT,
+    opponent_cards: OpponentHiddenCards | None = None,
 ) -> tuple[list[int], LearnSample | None]:
     """MCTSで手を選び、root局面の学習サンプルを返す。"""
     obs = to_observation_class(obs_dict)
@@ -179,14 +181,24 @@ def mcts_agent(
     your_index = obs.current.yourIndex
     state = obs.current
     active = state.players[1 - your_index].active
+    if opponent_cards is None:
+        opponent_deck = [1072] * state.players[1 - your_index].deckCount
+        opponent_prize = [1] * len(state.players[1 - your_index].prize)
+        opponent_hand = [1] * state.players[1 - your_index].handCount
+        opponent_active = [1072] if len(active) > 0 and active[0] is None else []
+    else:
+        opponent_deck = opponent_cards.deck
+        opponent_prize = opponent_cards.prize
+        opponent_hand = opponent_cards.hand
+        opponent_active = opponent_cards.active
     search_state = search_begin(
         obs,
         your_deck=random.sample(your_deck, min(len(your_deck), state.players[your_index].deckCount)),
         your_prize=random.sample(your_deck, min(len(your_deck), len(state.players[your_index].prize))),
-        opponent_deck=[1072] * state.players[1 - your_index].deckCount,
-        opponent_prize=[1] * len(state.players[1 - your_index].prize),
-        opponent_hand=[1] * state.players[1 - your_index].handCount,
-        opponent_active=[1072] if len(active) > 0 and active[0] is None else [],
+        opponent_deck=opponent_deck,
+        opponent_prize=opponent_prize,
+        opponent_hand=opponent_hand,
+        opponent_active=opponent_active,
     )
 
     try:

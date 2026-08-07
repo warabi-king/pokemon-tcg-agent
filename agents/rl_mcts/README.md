@@ -15,6 +15,7 @@ agents/rl_mcts/
     main.py
     deck.csv
     model.pth
+    opponent_deck_mlp.pth
     cg/
     rl_mcts/
       agent.py
@@ -22,14 +23,71 @@ agents/rl_mcts/
       features.py
       mcts.py
       model.py
+      opponent_deck.py
   train/
     train.py
+    train_opponent_deck.py
     plot_metrics.py
     checkpoints/
     logs/
 ```
 
 `src/` は提出対象です。`train/` は学習用で、提出アーカイブには含めません。
+
+## 相手デッキ推定MLP
+
+`train/train_opponent_deck.py` は、Kaggleの対戦ZIPに含まれる各プレイヤーの実際の
+`observation` だけを入力として使い、その対戦の最初に提出された相手の60枚デッキを
+教師ラベルにしてMLPを学習します。`visualize` に入っている全カード情報は使いません。
+
+公開カードには、相手のバトル場、ベンチ、トラッシュ、公開されたサイド、進化前、
+ポケモンのどうぐ、エネルギー、相手所有のスタジアム、および対戦者向けログに
+`cardId` が残っているカードを含めます。同じカードを複数回数えないように、対戦中の
+`serial` で追跡します。一度公開されて非公開領域へ戻ったカードも既知カードとして
+保持します。
+
+入力はカードID別の累積公開枚数に「公開総数」と「ターン」を加えたベクトル、出力は
+カードID別の60枚デッキ内枚数です。同一episodeのターンサンプルが学習側と検証側に
+分かれないよう、episode名の固定ハッシュで分割します。大量データでは全期間から
+`--max-samples` 件をreservoir samplingするため、先頭の日付だけに偏りません。
+
+短時間の動作確認:
+
+```bash
+python agents/rl_mcts/train/train_opponent_deck.py train \
+  --date 2026-07-01 \
+  --max-episodes 100 \
+  --max-samples 2000 \
+  --epochs 2 \
+  --output results/opponent_deck_smoke.pth
+```
+
+利用可能な全ZIPから学習:
+
+```bash
+python agents/rl_mcts/train/train_opponent_deck.py train \
+  --max-samples 200000 \
+  --epochs 20 \
+  --output agents/rl_mcts/src/opponent_deck_mlp.pth
+```
+
+手動で公開カードを与えて推定結果を確認:
+
+```bash
+python agents/rl_mcts/train/train_opponent_deck.py predict \
+  --observed 646,646,648 \
+  --turn 5 \
+  --json
+```
+
+`src/opponent_deck_mlp.pth` があれば、agentは予測した60枚から現在見えているカードを
+差し引き、相手の山札・サイド・手札を構成してMCTSの `search_begin` に渡します。
+checkpointがない場合は従来の固定ダミーカードによる探索へ自動的に戻ります。
+
+同梱するbootstrap checkpointは `2026-07-01` の先頭200対戦を使い、観測した
+4,516ターンサンプルから上限4,000件を抽出して10 epoch学習したものです。検証346件の
+60枚丸め後カードコピー一致率は約46.6%です。本番用には上記の全ZIP学習で更新して
+ください。
 
 ## 学習の流れ
 
