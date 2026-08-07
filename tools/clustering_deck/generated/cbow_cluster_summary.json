@@ -1,0 +1,4706 @@
+{
+  "method": {
+    "name": "idf-cbow-spherical-kmeans",
+    "similarity": "semantic_weight*CBOW_cosine+(1-semantic_weight)*TFIDF_count_cosine",
+    "semantic_weight": 0.7,
+    "composition_weight": 0.30000000000000004,
+    "cluster_selection": "maximum cosine silhouette",
+    "selected_clusters": 22,
+    "selected_silhouette": 0.8063108325004578
+  },
+  "source": {
+    "input": "C:\\mizuki\\PokeTCG\\pokemon-tcg-agent\\tools\\deck_generator_dbrecon\\deck_candidates_by_wins.jsonl",
+    "checkpoint": "C:\\mizuki\\PokeTCG\\pokemon-tcg-agent\\tools\\deck_generator\\generated\\deck_word2vec.pt",
+    "decks": 633,
+    "cards": 322,
+    "embedding_dimension": 128,
+    "checkpoint_metrics": {
+      "best_valid_loss": 3.7751309833829363,
+      "best_valid_top1": 0.0873015873015873,
+      "best_valid_top5": 0.2857142857142857,
+      "source_decks": 633,
+      "used_decks": 633,
+      "train_decks": 570,
+      "valid_decks": 63,
+      "mean_win_rate": 0.3898020324992537,
+      "mean_cluster_weight": 1.0,
+      "mean_cluster_wins": 13572.699842022117,
+      "mean_loss_weight": 1.0,
+      "mean_deck_sampling_weight": 1.0
+    }
+  },
+  "cluster_count_evaluations": [
+    {
+      "clusters": 4,
+      "silhouette": 0.4575662910938263,
+      "inertia": 183.35386657714844,
+      "iterations": 5
+    },
+    {
+      "clusters": 6,
+      "silhouette": 0.5855095982551575,
+      "inertia": 125.50205993652344,
+      "iterations": 4
+    },
+    {
+      "clusters": 8,
+      "silhouette": 0.6848891973495483,
+      "inertia": 86.90760803222656,
+      "iterations": 11
+    },
+    {
+      "clusters": 10,
+      "silhouette": 0.712129533290863,
+      "inertia": 71.20761108398438,
+      "iterations": 9
+    },
+    {
+      "clusters": 12,
+      "silhouette": 0.7484803199768066,
+      "inertia": 59.38193893432617,
+      "iterations": 8
+    },
+    {
+      "clusters": 14,
+      "silhouette": 0.7759908437728882,
+      "inertia": 48.40853500366211,
+      "iterations": 5
+    },
+    {
+      "clusters": 16,
+      "silhouette": 0.7844828367233276,
+      "inertia": 45.00361251831055,
+      "iterations": 5
+    },
+    {
+      "clusters": 18,
+      "silhouette": 0.7641104459762573,
+      "inertia": 39.41987991333008,
+      "iterations": 5
+    },
+    {
+      "clusters": 20,
+      "silhouette": 0.7721162438392639,
+      "inertia": 36.879188537597656,
+      "iterations": 5
+    },
+    {
+      "clusters": 22,
+      "silhouette": 0.8063108325004578,
+      "inertia": 33.12641906738281,
+      "iterations": 7
+    },
+    {
+      "clusters": 24,
+      "silhouette": 0.6970030665397644,
+      "inertia": 29.638160705566406,
+      "iterations": 4
+    }
+  ],
+  "clusters": [
+    {
+      "cluster_id": 0,
+      "members": 181,
+      "games": 72515,
+      "wins": 34834,
+      "losses": 37594,
+      "draws": 87,
+      "win_rate": 0.4803695787078536,
+      "mean_centroid_similarity": 0.9614649286586276,
+      "representative_record_index": 72,
+      "representative_deck_counts": {
+        "5": 3,
+        "13": 1,
+        "19": 4,
+        "66": 3,
+        "305": 3,
+        "741": 4,
+        "742": 4,
+        "743": 4,
+        "1079": 4,
+        "1081": 4,
+        "1086": 4,
+        "1097": 3,
+        "1129": 1,
+        "1152": 4,
+        "1182": 3,
+        "1184": 1,
+        "1197": 1,
+        "1225": 4,
+        "1231": 4,
+        "1264": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 741,
+          "name": "Abra",
+          "count": 4
+        },
+        {
+          "card_id": 743,
+          "name": "Alakazam",
+          "count": 4
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 1231,
+          "name": "Dawn",
+          "count": 4
+        },
+        {
+          "card_id": 1081,
+          "name": "Enhanced Hammer",
+          "count": 4
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 4
+        },
+        {
+          "card_id": 742,
+          "name": "Kadabra",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1079,
+          "name": "Rare Candy",
+          "count": 4
+        },
+        {
+          "card_id": 19,
+          "name": "Telepath Psychic Energy",
+          "count": 4
+        },
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "count": 3
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 66,
+          "name": "Dudunsparce",
+          "count": 3
+        },
+        {
+          "card_id": 305,
+          "name": "Dunsparce",
+          "count": 3
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 3
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "count": 1
+        },
+        {
+          "card_id": 13,
+          "name": "Enriching Energy",
+          "count": 1
+        },
+        {
+          "card_id": 1184,
+          "name": "Lana’s Aid",
+          "count": 1
+        },
+        {
+          "card_id": 1129,
+          "name": "Sacred Ash",
+          "count": 1
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 742,
+          "name": "Kadabra",
+          "decks": 181,
+          "copies": 723
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 181,
+          "copies": 723
+        },
+        {
+          "card_id": 19,
+          "name": "Telepath Psychic Energy",
+          "decks": 181,
+          "copies": 721
+        },
+        {
+          "card_id": 1231,
+          "name": "Dawn",
+          "decks": 181,
+          "copies": 716
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "decks": 181,
+          "copies": 697
+        },
+        {
+          "card_id": 743,
+          "name": "Alakazam",
+          "decks": 181,
+          "copies": 685
+        },
+        {
+          "card_id": 1079,
+          "name": "Rare Candy",
+          "decks": 181,
+          "copies": 647
+        },
+        {
+          "card_id": 66,
+          "name": "Dudunsparce",
+          "decks": 181,
+          "copies": 543
+        },
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "decks": 181,
+          "copies": 475
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 180,
+          "copies": 706
+        },
+        {
+          "card_id": 741,
+          "name": "Abra",
+          "decks": 179,
+          "copies": 716
+        },
+        {
+          "card_id": 1129,
+          "name": "Sacred Ash",
+          "decks": 176,
+          "copies": 216
+        }
+      ]
+    },
+    {
+      "cluster_id": 1,
+      "members": 60,
+      "games": 50446,
+      "wins": 25964,
+      "losses": 24436,
+      "draws": 46,
+      "win_rate": 0.5146889743488087,
+      "mean_centroid_similarity": 0.9465780556201935,
+      "representative_record_index": 221,
+      "representative_deck_counts": {
+        "7": 9,
+        "104": 1,
+        "112": 4,
+        "646": 4,
+        "647": 3,
+        "648": 4,
+        "860": 1,
+        "1079": 4,
+        "1086": 4,
+        "1097": 3,
+        "1152": 4,
+        "1159": 1,
+        "1182": 3,
+        "1197": 1,
+        "1213": 1,
+        "1219": 3,
+        "1227": 4,
+        "1231": 2,
+        "1259": 4
+      },
+      "representative_cards": [
+        {
+          "card_id": 7,
+          "name": "Basic {D} Energy",
+          "count": 9
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 648,
+          "name": "Marnie's Grimmsnarl ex",
+          "count": 4
+        },
+        {
+          "card_id": 646,
+          "name": "Marnie's Impidimp",
+          "count": 4
+        },
+        {
+          "card_id": 112,
+          "name": "Munkidori",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1079,
+          "name": "Rare Candy",
+          "count": 4
+        },
+        {
+          "card_id": 1259,
+          "name": "Spikemuth Gym",
+          "count": 4
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 647,
+          "name": "Marnie's Morgrem",
+          "count": 3
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 3
+        },
+        {
+          "card_id": 1219,
+          "name": "Team Rocket's Petrel",
+          "count": 3
+        },
+        {
+          "card_id": 1231,
+          "name": "Dawn",
+          "count": 2
+        },
+        {
+          "card_id": 104,
+          "name": "Froslass",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 1213,
+          "name": "Judge",
+          "count": 1
+        },
+        {
+          "card_id": 860,
+          "name": "Snorunt",
+          "count": 1
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 7,
+          "name": "Basic {D} Energy",
+          "decks": 60,
+          "copies": 620
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 60,
+          "copies": 239
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 60,
+          "copies": 233
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 60,
+          "copies": 230
+        },
+        {
+          "card_id": 646,
+          "name": "Marnie's Impidimp",
+          "decks": 58,
+          "copies": 232
+        },
+        {
+          "card_id": 1259,
+          "name": "Spikemuth Gym",
+          "decks": 58,
+          "copies": 223
+        },
+        {
+          "card_id": 112,
+          "name": "Munkidori",
+          "decks": 58,
+          "copies": 221
+        },
+        {
+          "card_id": 1079,
+          "name": "Rare Candy",
+          "decks": 58,
+          "copies": 205
+        },
+        {
+          "card_id": 648,
+          "name": "Marnie's Grimmsnarl ex",
+          "decks": 58,
+          "copies": 193
+        },
+        {
+          "card_id": 647,
+          "name": "Marnie's Morgrem",
+          "decks": 58,
+          "copies": 156
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 55,
+          "copies": 134
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 47,
+          "copies": 101
+        }
+      ]
+    },
+    {
+      "cluster_id": 2,
+      "members": 36,
+      "games": 24655,
+      "wins": 12415,
+      "losses": 12222,
+      "draws": 18,
+      "win_rate": 0.5035489758669641,
+      "mean_centroid_similarity": 0.9339788373973634,
+      "representative_record_index": 266,
+      "representative_deck_counts": {
+        "1": 2,
+        "11": 4,
+        "14": 4,
+        "18": 4,
+        "344": 3,
+        "345": 3,
+        "756": 4,
+        "1086": 3,
+        "1120": 2,
+        "1121": 2,
+        "1122": 4,
+        "1123": 2,
+        "1147": 4,
+        "1159": 1,
+        "1182": 3,
+        "1186": 1,
+        "1194": 1,
+        "1197": 2,
+        "1219": 3,
+        "1225": 3,
+        "1227": 4,
+        "1264": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 18,
+          "name": "Grow Grass Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1147,
+          "name": "Jumbo Ice Cream",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 756,
+          "name": "Mega Kangaskhan ex",
+          "count": 4
+        },
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 4
+        },
+        {
+          "card_id": 14,
+          "name": "Spiky Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 3
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "count": 3
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "count": 3
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 3
+        },
+        {
+          "card_id": 1219,
+          "name": "Team Rocket's Petrel",
+          "count": 3
+        },
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "count": 2
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "count": 2
+        },
+        {
+          "card_id": 1123,
+          "name": "Switch",
+          "count": 2
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 2
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 2
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "count": 1
+        },
+        {
+          "card_id": 1194,
+          "name": "Colress’s Tenacity",
+          "count": 1
+        },
+        {
+          "card_id": 1186,
+          "name": "Eri",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 36,
+          "copies": 143
+        },
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "decks": 36,
+          "copies": 142
+        },
+        {
+          "card_id": 1147,
+          "name": "Jumbo Ice Cream",
+          "decks": 36,
+          "copies": 139
+        },
+        {
+          "card_id": 14,
+          "name": "Spiky Energy",
+          "decks": 36,
+          "copies": 134
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 36,
+          "copies": 114
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "decks": 36,
+          "copies": 36
+        },
+        {
+          "card_id": 18,
+          "name": "Grow Grass Energy",
+          "decks": 35,
+          "copies": 140
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "decks": 35,
+          "copies": 129
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "decks": 35,
+          "copies": 121
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "decks": 34,
+          "copies": 82
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "decks": 32,
+          "copies": 119
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "decks": 32,
+          "copies": 100
+        }
+      ]
+    },
+    {
+      "cluster_id": 3,
+      "members": 24,
+      "games": 12786,
+      "wins": 6768,
+      "losses": 6014,
+      "draws": 4,
+      "win_rate": 0.5293289535429376,
+      "mean_centroid_similarity": 0.9798669343193372,
+      "representative_record_index": 238,
+      "representative_deck_counts": {
+        "6": 6,
+        "20": 4,
+        "341": 4,
+        "342": 3,
+        "379": 4,
+        "380": 4,
+        "381": 3,
+        "387": 2,
+        "1080": 1,
+        "1086": 4,
+        "1129": 1,
+        "1141": 1,
+        "1142": 4,
+        "1152": 4,
+        "1173": 4,
+        "1182": 2,
+        "1197": 1,
+        "1225": 3,
+        "1227": 4,
+        "1261": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "count": 6
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 380,
+          "name": "Cynthia's Gabite",
+          "count": 4
+        },
+        {
+          "card_id": 379,
+          "name": "Cynthia's Gible",
+          "count": 4
+        },
+        {
+          "card_id": 1173,
+          "name": "Cynthia's Power Weight",
+          "count": 4
+        },
+        {
+          "card_id": 341,
+          "name": "Cynthia's Roselia",
+          "count": 4
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 20,
+          "name": "Rock Fighting Energy",
+          "count": 4
+        },
+        {
+          "card_id": 381,
+          "name": "Cynthia's Garchomp ex",
+          "count": 3
+        },
+        {
+          "card_id": 342,
+          "name": "Cynthia's Roserade",
+          "count": 3
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 3
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 2
+        },
+        {
+          "card_id": 387,
+          "name": "Cynthia's Spiritomb",
+          "count": 2
+        },
+        {
+          "card_id": 1261,
+          "name": "Forest of Vitality",
+          "count": 1
+        },
+        {
+          "card_id": 1141,
+          "name": "Premium Power Pro",
+          "count": 1
+        },
+        {
+          "card_id": 1129,
+          "name": "Sacred Ash",
+          "count": 1
+        },
+        {
+          "card_id": 1080,
+          "name": "Unfair Stamp",
+          "count": 1
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "decks": 24,
+          "copies": 116
+        },
+        {
+          "card_id": 379,
+          "name": "Cynthia's Gible",
+          "decks": 24,
+          "copies": 96
+        },
+        {
+          "card_id": 380,
+          "name": "Cynthia's Gabite",
+          "decks": 24,
+          "copies": 96
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 24,
+          "copies": 96
+        },
+        {
+          "card_id": 20,
+          "name": "Rock Fighting Energy",
+          "decks": 24,
+          "copies": 95
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 24,
+          "copies": 95
+        },
+        {
+          "card_id": 341,
+          "name": "Cynthia's Roselia",
+          "decks": 24,
+          "copies": 94
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 24,
+          "copies": 94
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "decks": 24,
+          "copies": 87
+        },
+        {
+          "card_id": 1173,
+          "name": "Cynthia's Power Weight",
+          "decks": 24,
+          "copies": 83
+        },
+        {
+          "card_id": 342,
+          "name": "Cynthia's Roserade",
+          "decks": 24,
+          "copies": 82
+        },
+        {
+          "card_id": 381,
+          "name": "Cynthia's Garchomp ex",
+          "decks": 24,
+          "copies": 72
+        }
+      ]
+    },
+    {
+      "cluster_id": 4,
+      "members": 26,
+      "games": 12252,
+      "wins": 6638,
+      "losses": 5605,
+      "draws": 9,
+      "win_rate": 0.5417890956578518,
+      "mean_centroid_similarity": 0.9888627070647019,
+      "representative_record_index": 300,
+      "representative_deck_counts": {
+        "1": 9,
+        "15": 4,
+        "400": 4,
+        "401": 4,
+        "414": 2,
+        "431": 2,
+        "434": 2,
+        "1094": 3,
+        "1121": 1,
+        "1134": 4,
+        "1152": 4,
+        "1159": 1,
+        "1175": 1,
+        "1216": 4,
+        "1217": 2,
+        "1218": 3,
+        "1220": 4,
+        "1227": 3,
+        "1257": 3
+      },
+      "representative_cards": [
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "count": 9
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1216,
+          "name": "Team Rocket's Ariana",
+          "count": 4
+        },
+        {
+          "card_id": 15,
+          "name": "Team Rocket's Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1220,
+          "name": "Team Rocket's Proton",
+          "count": 4
+        },
+        {
+          "card_id": 401,
+          "name": "Team Rocket's Spidops",
+          "count": 4
+        },
+        {
+          "card_id": 400,
+          "name": "Team Rocket's Tarountula",
+          "count": 4
+        },
+        {
+          "card_id": 1134,
+          "name": "Team Rocket's Transceiver",
+          "count": 4
+        },
+        {
+          "card_id": 1094,
+          "name": "Bug Catching Set",
+          "count": 3
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 3
+        },
+        {
+          "card_id": 1257,
+          "name": "Team Rocket's Factory",
+          "count": 3
+        },
+        {
+          "card_id": 1218,
+          "name": "Team Rocket's Giovanni",
+          "count": 3
+        },
+        {
+          "card_id": 1217,
+          "name": "Team Rocket's Archer",
+          "count": 2
+        },
+        {
+          "card_id": 414,
+          "name": "Team Rocket's Articuno",
+          "count": 2
+        },
+        {
+          "card_id": 431,
+          "name": "Team Rocket's Mewtwo ex",
+          "count": 2
+        },
+        {
+          "card_id": 434,
+          "name": "Team Rocket's Mimikyu",
+          "count": 2
+        },
+        {
+          "card_id": 1175,
+          "name": "Brave Bangle",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "decks": 26,
+          "copies": 207
+        },
+        {
+          "card_id": 15,
+          "name": "Team Rocket's Energy",
+          "decks": 26,
+          "copies": 104
+        },
+        {
+          "card_id": 400,
+          "name": "Team Rocket's Tarountula",
+          "decks": 26,
+          "copies": 104
+        },
+        {
+          "card_id": 401,
+          "name": "Team Rocket's Spidops",
+          "decks": 26,
+          "copies": 104
+        },
+        {
+          "card_id": 1134,
+          "name": "Team Rocket's Transceiver",
+          "decks": 26,
+          "copies": 104
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 26,
+          "copies": 99
+        },
+        {
+          "card_id": 1216,
+          "name": "Team Rocket's Ariana",
+          "decks": 26,
+          "copies": 98
+        },
+        {
+          "card_id": 1220,
+          "name": "Team Rocket's Proton",
+          "decks": 26,
+          "copies": 98
+        },
+        {
+          "card_id": 1094,
+          "name": "Bug Catching Set",
+          "decks": 26,
+          "copies": 76
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 26,
+          "copies": 74
+        },
+        {
+          "card_id": 414,
+          "name": "Team Rocket's Articuno",
+          "decks": 26,
+          "copies": 52
+        },
+        {
+          "card_id": 431,
+          "name": "Team Rocket's Mewtwo ex",
+          "decks": 26,
+          "copies": 52
+        }
+      ]
+    },
+    {
+      "cluster_id": 5,
+      "members": 35,
+      "games": 10119,
+      "wins": 5280,
+      "losses": 4802,
+      "draws": 37,
+      "win_rate": 0.5217906907797213,
+      "mean_centroid_similarity": 0.9158384936196463,
+      "representative_record_index": 328,
+      "representative_deck_counts": {
+        "3": 9,
+        "17": 4,
+        "666": 4,
+        "1030": 4,
+        "1031": 3,
+        "1086": 4,
+        "1097": 2,
+        "1120": 4,
+        "1121": 1,
+        "1122": 4,
+        "1145": 4,
+        "1159": 1,
+        "1182": 1,
+        "1189": 4,
+        "1223": 1,
+        "1225": 2,
+        "1227": 4,
+        "1229": 4
+      },
+      "representative_cards": [
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "count": 9
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 666,
+          "name": "Cinderace",
+          "count": 4
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "count": 4
+        },
+        {
+          "card_id": 17,
+          "name": "Ignition Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1145,
+          "name": "Mega Signal",
+          "count": 4
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 4
+        },
+        {
+          "card_id": 1189,
+          "name": "Salvatore",
+          "count": 4
+        },
+        {
+          "card_id": 1030,
+          "name": "Staryu",
+          "count": 4
+        },
+        {
+          "card_id": 1229,
+          "name": "Wally's Compassion",
+          "count": 4
+        },
+        {
+          "card_id": 1031,
+          "name": "Mega Starmie ex",
+          "count": 3
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 2
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 2
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 1
+        },
+        {
+          "card_id": 1223,
+          "name": "Harlequin",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "decks": 35,
+          "copies": 301
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 35,
+          "copies": 140
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 35,
+          "copies": 138
+        },
+        {
+          "card_id": 1229,
+          "name": "Wally's Compassion",
+          "decks": 35,
+          "copies": 129
+        },
+        {
+          "card_id": 1030,
+          "name": "Staryu",
+          "decks": 34,
+          "copies": 115
+        },
+        {
+          "card_id": 1031,
+          "name": "Mega Starmie ex",
+          "decks": 34,
+          "copies": 108
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "decks": 33,
+          "copies": 88
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "decks": 31,
+          "copies": 108
+        },
+        {
+          "card_id": 1145,
+          "name": "Mega Signal",
+          "decks": 29,
+          "copies": 87
+        },
+        {
+          "card_id": 1189,
+          "name": "Salvatore",
+          "decks": 28,
+          "copies": 85
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 27,
+          "copies": 44
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "decks": 25,
+          "copies": 25
+        }
+      ]
+    },
+    {
+      "cluster_id": 6,
+      "members": 39,
+      "games": 6833,
+      "wins": 3505,
+      "losses": 3318,
+      "draws": 10,
+      "win_rate": 0.51295185130982,
+      "mean_centroid_similarity": 0.9415630392539196,
+      "representative_record_index": 344,
+      "representative_deck_counts": {
+        "2": 4,
+        "5": 4,
+        "7": 2,
+        "112": 2,
+        "119": 4,
+        "120": 4,
+        "121": 3,
+        "140": 1,
+        "235": 2,
+        "1071": 1,
+        "1080": 1,
+        "1086": 4,
+        "1097": 3,
+        "1120": 2,
+        "1121": 4,
+        "1152": 4,
+        "1182": 3,
+        "1197": 1,
+        "1198": 3,
+        "1213": 1,
+        "1227": 4,
+        "1231": 1,
+        "1256": 2
+      },
+      "representative_cards": [
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "count": 4
+        },
+        {
+          "card_id": 2,
+          "name": "Basic {R} Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 120,
+          "name": "Drakloak",
+          "count": 4
+        },
+        {
+          "card_id": 119,
+          "name": "Dreepy",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 4
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 1198,
+          "name": "Crispin",
+          "count": 3
+        },
+        {
+          "card_id": 121,
+          "name": "Dragapult ex",
+          "count": 3
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 3
+        },
+        {
+          "card_id": 7,
+          "name": "Basic {D} Energy",
+          "count": 2
+        },
+        {
+          "card_id": 235,
+          "name": "Budew",
+          "count": 2
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "count": 2
+        },
+        {
+          "card_id": 112,
+          "name": "Munkidori",
+          "count": 2
+        },
+        {
+          "card_id": 1256,
+          "name": "Team Rocket's Watchtower",
+          "count": 2
+        },
+        {
+          "card_id": 1231,
+          "name": "Dawn",
+          "count": 1
+        },
+        {
+          "card_id": 140,
+          "name": "Fezandipiti ex",
+          "count": 1
+        },
+        {
+          "card_id": 1213,
+          "name": "Judge",
+          "count": 1
+        },
+        {
+          "card_id": 1071,
+          "name": "Meowth ex",
+          "count": 1
+        },
+        {
+          "card_id": 1080,
+          "name": "Unfair Stamp",
+          "count": 1
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 2,
+          "name": "Basic {R} Energy",
+          "decks": 39,
+          "copies": 157
+        },
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "decks": 39,
+          "copies": 155
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 39,
+          "copies": 155
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 39,
+          "copies": 154
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "decks": 39,
+          "copies": 153
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 39,
+          "copies": 148
+        },
+        {
+          "card_id": 1198,
+          "name": "Crispin",
+          "decks": 39,
+          "copies": 125
+        },
+        {
+          "card_id": 119,
+          "name": "Dreepy",
+          "decks": 38,
+          "copies": 152
+        },
+        {
+          "card_id": 120,
+          "name": "Drakloak",
+          "decks": 38,
+          "copies": 152
+        },
+        {
+          "card_id": 121,
+          "name": "Dragapult ex",
+          "decks": 38,
+          "copies": 119
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 38,
+          "copies": 109
+        },
+        {
+          "card_id": 235,
+          "name": "Budew",
+          "decks": 38,
+          "copies": 64
+        }
+      ]
+    },
+    {
+      "cluster_id": 7,
+      "members": 84,
+      "games": 6635,
+      "wins": 2989,
+      "losses": 3637,
+      "draws": 9,
+      "win_rate": 0.4504898266767144,
+      "mean_centroid_similarity": 0.9738723245405015,
+      "representative_record_index": 470,
+      "representative_deck_counts": {
+        "8": 12,
+        "57": 1,
+        "169": 4,
+        "190": 4,
+        "666": 4,
+        "1097": 3,
+        "1121": 4,
+        "1122": 4,
+        "1147": 2,
+        "1152": 4,
+        "1159": 1,
+        "1182": 1,
+        "1185": 4,
+        "1197": 3,
+        "1213": 1,
+        "1227": 4,
+        "1244": 4
+      },
+      "representative_cards": [
+        {
+          "card_id": 8,
+          "name": "Basic {M} Energy",
+          "count": 12
+        },
+        {
+          "card_id": 190,
+          "name": "Archaludon ex",
+          "count": 4
+        },
+        {
+          "card_id": 666,
+          "name": "Cinderace",
+          "count": 4
+        },
+        {
+          "card_id": 169,
+          "name": "Duraludon",
+          "count": 4
+        },
+        {
+          "card_id": 1185,
+          "name": "Explorer’s Guidance",
+          "count": 4
+        },
+        {
+          "card_id": 1244,
+          "name": "Full Metal Lab",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 4
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 4
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 3
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 3
+        },
+        {
+          "card_id": 1147,
+          "name": "Jumbo Ice Cream",
+          "count": 2
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 1213,
+          "name": "Judge",
+          "count": 1
+        },
+        {
+          "card_id": 57,
+          "name": "Relicanth",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 8,
+          "name": "Basic {M} Energy",
+          "decks": 84,
+          "copies": 1038
+        },
+        {
+          "card_id": 169,
+          "name": "Duraludon",
+          "decks": 84,
+          "copies": 336
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 84,
+          "copies": 335
+        },
+        {
+          "card_id": 190,
+          "name": "Archaludon ex",
+          "decks": 84,
+          "copies": 334
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "decks": 84,
+          "copies": 330
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 84,
+          "copies": 326
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 84,
+          "copies": 282
+        },
+        {
+          "card_id": 1244,
+          "name": "Full Metal Lab",
+          "decks": 82,
+          "copies": 285
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "decks": 82,
+          "copies": 82
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "decks": 80,
+          "copies": 302
+        },
+        {
+          "card_id": 666,
+          "name": "Cinderace",
+          "decks": 72,
+          "copies": 283
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 71,
+          "copies": 206
+        }
+      ]
+    },
+    {
+      "cluster_id": 8,
+      "members": 7,
+      "games": 4649,
+      "wins": 2555,
+      "losses": 2084,
+      "draws": 10,
+      "win_rate": 0.5495805549580555,
+      "mean_centroid_similarity": 0.8221829192978996,
+      "representative_record_index": 414,
+      "representative_deck_counts": {
+        "3": 2,
+        "5": 4,
+        "6": 3,
+        "19": 1,
+        "108": 2,
+        "117": 1,
+        "140": 2,
+        "184": 3,
+        "272": 4,
+        "756": 4,
+        "979": 1,
+        "1071": 4,
+        "1088": 1,
+        "1102": 4,
+        "1121": 4,
+        "1146": 3,
+        "1172": 2,
+        "1182": 3,
+        "1188": 2,
+        "1197": 1,
+        "1198": 4,
+        "1205": 1,
+        "1250": 4
+      },
+      "representative_cards": [
+        {
+          "card_id": 1250,
+          "name": "Area Zero Underdepths",
+          "count": 4
+        },
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1198,
+          "name": "Crispin",
+          "count": 4
+        },
+        {
+          "card_id": 1102,
+          "name": "Dusk Ball",
+          "count": 4
+        },
+        {
+          "card_id": 272,
+          "name": "Lillie’s Clefairy ex",
+          "count": 4
+        },
+        {
+          "card_id": 756,
+          "name": "Mega Kangaskhan ex",
+          "count": 4
+        },
+        {
+          "card_id": 1071,
+          "name": "Meowth ex",
+          "count": 4
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 4
+        },
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "count": 3
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 184,
+          "name": "Latias ex",
+          "count": 3
+        },
+        {
+          "card_id": 1146,
+          "name": "Wondrous Patch",
+          "count": 3
+        },
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "count": 2
+        },
+        {
+          "card_id": 1188,
+          "name": "Ciphermaniac’s Codebreaking",
+          "count": 2
+        },
+        {
+          "card_id": 140,
+          "name": "Fezandipiti ex",
+          "count": 2
+        },
+        {
+          "card_id": 1172,
+          "name": "Lillie’s Pearl",
+          "count": 2
+        },
+        {
+          "card_id": 108,
+          "name": "Wellspring Mask Ogerpon ex",
+          "count": 2
+        },
+        {
+          "card_id": 117,
+          "name": "Cornerstone Mask Ogerpon ex",
+          "count": 1
+        },
+        {
+          "card_id": 1205,
+          "name": "Cyrano",
+          "count": 1
+        },
+        {
+          "card_id": 979,
+          "name": "Koraidon ex",
+          "count": 1
+        },
+        {
+          "card_id": 1088,
+          "name": "Prime Catcher",
+          "count": 1
+        },
+        {
+          "card_id": 19,
+          "name": "Telepath Psychic Energy",
+          "count": 1
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "decks": 7,
+          "copies": 26
+        },
+        {
+          "card_id": 756,
+          "name": "Mega Kangaskhan ex",
+          "decks": 7,
+          "copies": 24
+        },
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "decks": 7,
+          "copies": 23
+        },
+        {
+          "card_id": 184,
+          "name": "Latias ex",
+          "decks": 7,
+          "copies": 17
+        },
+        {
+          "card_id": 140,
+          "name": "Fezandipiti ex",
+          "decks": 7,
+          "copies": 11
+        },
+        {
+          "card_id": 1071,
+          "name": "Meowth ex",
+          "decks": 6,
+          "copies": 19
+        },
+        {
+          "card_id": 1198,
+          "name": "Crispin",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1250,
+          "name": "Area Zero Underdepths",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 272,
+          "name": "Lillie’s Clefairy ex",
+          "decks": 5,
+          "copies": 15
+        },
+        {
+          "card_id": 1146,
+          "name": "Wondrous Patch",
+          "decks": 5,
+          "copies": 15
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 5,
+          "copies": 13
+        },
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "decks": 5,
+          "copies": 11
+        }
+      ]
+    },
+    {
+      "cluster_id": 9,
+      "members": 23,
+      "games": 4503,
+      "wins": 2132,
+      "losses": 2371,
+      "draws": 0,
+      "win_rate": 0.47346213635354206,
+      "mean_centroid_similarity": 0.8226537471232207,
+      "representative_record_index": 537,
+      "representative_deck_counts": {
+        "5": 6,
+        "19": 4,
+        "164": 4,
+        "343": 1,
+        "817": 2,
+        "818": 2,
+        "1081": 2,
+        "1086": 4,
+        "1097": 4,
+        "1120": 4,
+        "1122": 2,
+        "1152": 4,
+        "1161": 3,
+        "1184": 2,
+        "1197": 4,
+        "1225": 4,
+        "1227": 4,
+        "1228": 3,
+        "1247": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "count": 6
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 164,
+          "name": "Comfey",
+          "count": 4
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "count": 4
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 19,
+          "name": "Telepath Psychic Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 4
+        },
+        {
+          "card_id": 1228,
+          "name": "Acerola's Mischief",
+          "count": 3
+        },
+        {
+          "card_id": 1161,
+          "name": "Handheld Fan",
+          "count": 3
+        },
+        {
+          "card_id": 818,
+          "name": "Brambleghast",
+          "count": 2
+        },
+        {
+          "card_id": 817,
+          "name": "Bramblin",
+          "count": 2
+        },
+        {
+          "card_id": 1081,
+          "name": "Enhanced Hammer",
+          "count": 2
+        },
+        {
+          "card_id": 1184,
+          "name": "Lana’s Aid",
+          "count": 2
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 2
+        },
+        {
+          "card_id": 1247,
+          "name": "Neutralization Zone",
+          "count": 1
+        },
+        {
+          "card_id": 343,
+          "name": "Shaymin",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 5,
+          "name": "Basic {P} Energy",
+          "decks": 23,
+          "copies": 131
+        },
+        {
+          "card_id": 19,
+          "name": "Telepath Psychic Energy",
+          "decks": 23,
+          "copies": 92
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 23,
+          "copies": 90
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 23,
+          "copies": 90
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "decks": 23,
+          "copies": 84
+        },
+        {
+          "card_id": 343,
+          "name": "Shaymin",
+          "decks": 20,
+          "copies": 21
+        },
+        {
+          "card_id": 164,
+          "name": "Comfey",
+          "decks": 19,
+          "copies": 76
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 19,
+          "copies": 74
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "decks": 18,
+          "copies": 67
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 18,
+          "copies": 63
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "decks": 14,
+          "copies": 50
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 12,
+          "copies": 35
+        }
+      ]
+    },
+    {
+      "cluster_id": 10,
+      "members": 30,
+      "games": 4438,
+      "wins": 2056,
+      "losses": 2380,
+      "draws": 2,
+      "win_rate": 0.4632717440288418,
+      "mean_centroid_similarity": 0.9731341063976288,
+      "representative_record_index": 397,
+      "representative_deck_counts": {
+        "6": 14,
+        "673": 1,
+        "674": 1,
+        "675": 2,
+        "676": 3,
+        "677": 4,
+        "678": 4,
+        "1102": 4,
+        "1123": 3,
+        "1141": 4,
+        "1142": 4,
+        "1152": 2,
+        "1159": 1,
+        "1182": 3,
+        "1192": 4,
+        "1213": 1,
+        "1227": 4,
+        "1252": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "count": 14
+        },
+        {
+          "card_id": 1192,
+          "name": "Carmine",
+          "count": 4
+        },
+        {
+          "card_id": 1102,
+          "name": "Dusk Ball",
+          "count": 4
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 678,
+          "name": "Mega Lucario ex",
+          "count": 4
+        },
+        {
+          "card_id": 1141,
+          "name": "Premium Power Pro",
+          "count": 4
+        },
+        {
+          "card_id": 677,
+          "name": "Riolu",
+          "count": 4
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 676,
+          "name": "Solrock",
+          "count": 3
+        },
+        {
+          "card_id": 1123,
+          "name": "Switch",
+          "count": 3
+        },
+        {
+          "card_id": 675,
+          "name": "Lunatone",
+          "count": 2
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 2
+        },
+        {
+          "card_id": 1252,
+          "name": "Gravity Mountain",
+          "count": 1
+        },
+        {
+          "card_id": 674,
+          "name": "Hariyama",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 1213,
+          "name": "Judge",
+          "count": 1
+        },
+        {
+          "card_id": 673,
+          "name": "Makuhita",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "decks": 30,
+          "copies": 372
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "decks": 30,
+          "copies": 119
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 30,
+          "copies": 118
+        },
+        {
+          "card_id": 1141,
+          "name": "Premium Power Pro",
+          "decks": 30,
+          "copies": 117
+        },
+        {
+          "card_id": 678,
+          "name": "Mega Lucario ex",
+          "decks": 30,
+          "copies": 114
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 30,
+          "copies": 96
+        },
+        {
+          "card_id": 676,
+          "name": "Solrock",
+          "decks": 30,
+          "copies": 89
+        },
+        {
+          "card_id": 675,
+          "name": "Lunatone",
+          "decks": 30,
+          "copies": 62
+        },
+        {
+          "card_id": 1102,
+          "name": "Dusk Ball",
+          "decks": 29,
+          "copies": 110
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 29,
+          "copies": 59
+        },
+        {
+          "card_id": 677,
+          "name": "Riolu",
+          "decks": 28,
+          "copies": 109
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "decks": 27,
+          "copies": 27
+        }
+      ]
+    },
+    {
+      "cluster_id": 11,
+      "members": 7,
+      "games": 4053,
+      "wins": 2039,
+      "losses": 1972,
+      "draws": 42,
+      "win_rate": 0.5030841352084875,
+      "mean_centroid_similarity": 0.983932980469295,
+      "representative_record_index": 337,
+      "representative_deck_counts": {
+        "6": 8,
+        "7": 1,
+        "12": 1,
+        "16": 4,
+        "20": 1,
+        "112": 1,
+        "116": 3,
+        "117": 1,
+        "135": 1,
+        "675": 2,
+        "676": 3,
+        "1051": 2,
+        "1052": 2,
+        "1097": 2,
+        "1122": 2,
+        "1137": 1,
+        "1142": 4,
+        "1152": 4,
+        "1174": 2,
+        "1182": 3,
+        "1187": 1,
+        "1197": 1,
+        "1213": 1,
+        "1227": 4,
+        "1238": 3,
+        "1264": 2
+      },
+      "representative_cards": [
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "count": 8
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 16,
+          "name": "Prism Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 116,
+          "name": "Okidogi",
+          "count": 3
+        },
+        {
+          "card_id": 676,
+          "name": "Solrock",
+          "count": 3
+        },
+        {
+          "card_id": 1238,
+          "name": "Tarragon",
+          "count": 3
+        },
+        {
+          "card_id": 1174,
+          "name": "Air Balloon",
+          "count": 2
+        },
+        {
+          "card_id": 1052,
+          "name": "Barbaracle",
+          "count": 2
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "count": 2
+        },
+        {
+          "card_id": 1051,
+          "name": "Binacle",
+          "count": 2
+        },
+        {
+          "card_id": 675,
+          "name": "Lunatone",
+          "count": 2
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 2
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 2
+        },
+        {
+          "card_id": 7,
+          "name": "Basic {D} Energy",
+          "count": 1
+        },
+        {
+          "card_id": 135,
+          "name": "Bloodmoon Ursaluna",
+          "count": 1
+        },
+        {
+          "card_id": 117,
+          "name": "Cornerstone Mask Ogerpon ex",
+          "count": 1
+        },
+        {
+          "card_id": 1213,
+          "name": "Judge",
+          "count": 1
+        },
+        {
+          "card_id": 12,
+          "name": "Legacy Energy",
+          "count": 1
+        },
+        {
+          "card_id": 1187,
+          "name": "Morty’s Conviction",
+          "count": 1
+        },
+        {
+          "card_id": 112,
+          "name": "Munkidori",
+          "count": 1
+        },
+        {
+          "card_id": 20,
+          "name": "Rock Fighting Energy",
+          "count": 1
+        },
+        {
+          "card_id": 1137,
+          "name": "Tool Scrapper",
+          "count": 1
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 6,
+          "name": "Basic {F} Energy",
+          "decks": 7,
+          "copies": 63
+        },
+        {
+          "card_id": 16,
+          "name": "Prism Energy",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 676,
+          "name": "Solrock",
+          "decks": 7,
+          "copies": 23
+        },
+        {
+          "card_id": 116,
+          "name": "Okidogi",
+          "decks": 7,
+          "copies": 22
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 7,
+          "copies": 20
+        },
+        {
+          "card_id": 1238,
+          "name": "Tarragon",
+          "decks": 7,
+          "copies": 18
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 7,
+          "copies": 17
+        },
+        {
+          "card_id": 1174,
+          "name": "Air Balloon",
+          "decks": 7,
+          "copies": 15
+        },
+        {
+          "card_id": 675,
+          "name": "Lunatone",
+          "decks": 7,
+          "copies": 14
+        }
+      ]
+    },
+    {
+      "cluster_id": 12,
+      "members": 22,
+      "games": 3764,
+      "wins": 1704,
+      "losses": 2060,
+      "draws": 0,
+      "win_rate": 0.4527098831030818,
+      "mean_centroid_similarity": 0.9103372530503706,
+      "representative_record_index": 558,
+      "representative_deck_counts": {
+        "3": 12,
+        "235": 2,
+        "343": 2,
+        "506": 4,
+        "1086": 4,
+        "1097": 4,
+        "1120": 4,
+        "1121": 4,
+        "1122": 4,
+        "1123": 1,
+        "1152": 4,
+        "1197": 4,
+        "1208": 2,
+        "1227": 4,
+        "1247": 1,
+        "1264": 4
+      },
+      "representative_cards": [
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "count": 12
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "count": 4
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "count": 4
+        },
+        {
+          "card_id": 506,
+          "name": "Cubchoo",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 4
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 4
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 4
+        },
+        {
+          "card_id": 235,
+          "name": "Budew",
+          "count": 2
+        },
+        {
+          "card_id": 1208,
+          "name": "Iris’s Fighting Spirit",
+          "count": 2
+        },
+        {
+          "card_id": 343,
+          "name": "Shaymin",
+          "count": 2
+        },
+        {
+          "card_id": 1247,
+          "name": "Neutralization Zone",
+          "count": 1
+        },
+        {
+          "card_id": 1123,
+          "name": "Switch",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "decks": 22,
+          "copies": 249
+        },
+        {
+          "card_id": 506,
+          "name": "Cubchoo",
+          "decks": 22,
+          "copies": 88
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 22,
+          "copies": 88
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 22,
+          "copies": 81
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 22,
+          "copies": 75
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 22,
+          "copies": 68
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "decks": 21,
+          "copies": 58
+        },
+        {
+          "card_id": 1247,
+          "name": "Neutralization Zone",
+          "decks": 20,
+          "copies": 20
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "decks": 19,
+          "copies": 74
+        },
+        {
+          "card_id": 1081,
+          "name": "Enhanced Hammer",
+          "decks": 17,
+          "copies": 64
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "decks": 17,
+          "copies": 55
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 14,
+          "copies": 39
+        }
+      ]
+    },
+    {
+      "cluster_id": 13,
+      "members": 12,
+      "games": 2575,
+      "wins": 1240,
+      "losses": 1335,
+      "draws": 0,
+      "win_rate": 0.4815533980582524,
+      "mean_centroid_similarity": 0.8443029274543127,
+      "representative_record_index": 589,
+      "representative_deck_counts": {
+        "1": 8,
+        "3": 3,
+        "14": 4,
+        "18": 3,
+        "343": 1,
+        "344": 4,
+        "345": 4,
+        "414": 2,
+        "666": 4,
+        "1086": 4,
+        "1094": 2,
+        "1129": 2,
+        "1152": 4,
+        "1159": 1,
+        "1182": 1,
+        "1198": 4,
+        "1210": 3,
+        "1227": 4,
+        "1264": 2
+      },
+      "representative_cards": [
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "count": 8
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 666,
+          "name": "Cinderace",
+          "count": 4
+        },
+        {
+          "card_id": 1198,
+          "name": "Crispin",
+          "count": 4
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "count": 4
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 14,
+          "name": "Spiky Energy",
+          "count": 4
+        },
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "count": 3
+        },
+        {
+          "card_id": 1210,
+          "name": "Brock’s Scouting",
+          "count": 3
+        },
+        {
+          "card_id": 18,
+          "name": "Grow Grass Energy",
+          "count": 3
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "count": 2
+        },
+        {
+          "card_id": 1094,
+          "name": "Bug Catching Set",
+          "count": 2
+        },
+        {
+          "card_id": 1129,
+          "name": "Sacred Ash",
+          "count": 2
+        },
+        {
+          "card_id": 414,
+          "name": "Team Rocket's Articuno",
+          "count": 2
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 343,
+          "name": "Shaymin",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "decks": 12,
+          "copies": 71
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 12,
+          "copies": 46
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "decks": 12,
+          "copies": 12
+        },
+        {
+          "card_id": 1198,
+          "name": "Crispin",
+          "decks": 11,
+          "copies": 44
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 11,
+          "copies": 43
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "decks": 11,
+          "copies": 42
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "decks": 11,
+          "copies": 42
+        },
+        {
+          "card_id": 18,
+          "name": "Grow Grass Energy",
+          "decks": 11,
+          "copies": 25
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 9,
+          "copies": 32
+        },
+        {
+          "card_id": 1210,
+          "name": "Brock’s Scouting",
+          "decks": 9,
+          "copies": 25
+        },
+        {
+          "card_id": 414,
+          "name": "Team Rocket's Articuno",
+          "decks": 9,
+          "copies": 18
+        },
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "decks": 8,
+          "copies": 22
+        }
+      ]
+    },
+    {
+      "cluster_id": 14,
+      "members": 10,
+      "games": 2119,
+      "wins": 1159,
+      "losses": 959,
+      "draws": 1,
+      "win_rate": 0.5469561113732893,
+      "mean_centroid_similarity": 0.9116922438144683,
+      "representative_record_index": 502,
+      "representative_deck_counts": {
+        "1": 8,
+        "42": 2,
+        "89": 4,
+        "90": 4,
+        "92": 2,
+        "93": 4,
+        "655": 4,
+        "1086": 4,
+        "1094": 4,
+        "1097": 1,
+        "1102": 1,
+        "1129": 1,
+        "1152": 4,
+        "1155": 1,
+        "1175": 2,
+        "1182": 2,
+        "1211": 1,
+        "1225": 3,
+        "1227": 4,
+        "1245": 4
+      },
+      "representative_cards": [
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "count": 8
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 1094,
+          "name": "Bug Catching Set",
+          "count": 4
+        },
+        {
+          "card_id": 655,
+          "name": "Celebi",
+          "count": 4
+        },
+        {
+          "card_id": 93,
+          "name": "Dipplin",
+          "count": 4
+        },
+        {
+          "card_id": 1245,
+          "name": "Festival Grounds",
+          "count": 4
+        },
+        {
+          "card_id": 89,
+          "name": "Grookey",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 90,
+          "name": "Thwackey",
+          "count": 4
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 3
+        },
+        {
+          "card_id": 42,
+          "name": "Applin",
+          "count": 2
+        },
+        {
+          "card_id": 92,
+          "name": "Applin",
+          "count": 2
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 2
+        },
+        {
+          "card_id": 1175,
+          "name": "Brave Bangle",
+          "count": 2
+        },
+        {
+          "card_id": 1211,
+          "name": "Black Belt’s Training",
+          "count": 1
+        },
+        {
+          "card_id": 1102,
+          "name": "Dusk Ball",
+          "count": 1
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 1
+        },
+        {
+          "card_id": 1129,
+          "name": "Sacred Ash",
+          "count": 1
+        },
+        {
+          "card_id": 1155,
+          "name": "Survival Brace",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "decks": 10,
+          "copies": 72
+        },
+        {
+          "card_id": 1094,
+          "name": "Bug Catching Set",
+          "decks": 10,
+          "copies": 40
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 10,
+          "copies": 40
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 10,
+          "copies": 39
+        },
+        {
+          "card_id": 93,
+          "name": "Dipplin",
+          "decks": 10,
+          "copies": 38
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 10,
+          "copies": 20
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 10,
+          "copies": 19
+        },
+        {
+          "card_id": 89,
+          "name": "Grookey",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 90,
+          "name": "Thwackey",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 1245,
+          "name": "Festival Grounds",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 92,
+          "name": "Applin",
+          "decks": 8,
+          "copies": 22
+        }
+      ]
+    },
+    {
+      "cluster_id": 15,
+      "members": 5,
+      "games": 1547,
+      "wins": 796,
+      "losses": 751,
+      "draws": 0,
+      "win_rate": 0.5145442792501616,
+      "mean_centroid_similarity": 0.8248689293861389,
+      "representative_record_index": 545,
+      "representative_deck_counts": {
+        "4": 3,
+        "11": 4,
+        "13": 1,
+        "66": 3,
+        "174": 1,
+        "305": 4,
+        "848": 3,
+        "849": 3,
+        "869": 1,
+        "1086": 4,
+        "1087": 3,
+        "1097": 1,
+        "1121": 4,
+        "1122": 2,
+        "1152": 4,
+        "1174": 3,
+        "1182": 2,
+        "1225": 3,
+        "1227": 4,
+        "1229": 4,
+        "1264": 3
+      },
+      "representative_cards": [
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 305,
+          "name": "Dunsparce",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 4
+        },
+        {
+          "card_id": 1229,
+          "name": "Wally's Compassion",
+          "count": 4
+        },
+        {
+          "card_id": 1174,
+          "name": "Air Balloon",
+          "count": 3
+        },
+        {
+          "card_id": 4,
+          "name": "Basic {L} Energy",
+          "count": 3
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "count": 3
+        },
+        {
+          "card_id": 848,
+          "name": "Buneary",
+          "count": 3
+        },
+        {
+          "card_id": 66,
+          "name": "Dudunsparce",
+          "count": 3
+        },
+        {
+          "card_id": 1087,
+          "name": "Hand Trimmer",
+          "count": 3
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 3
+        },
+        {
+          "card_id": 849,
+          "name": "Mega Lopunny ex",
+          "count": 3
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 2
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 2
+        },
+        {
+          "card_id": 13,
+          "name": "Enriching Energy",
+          "count": 1
+        },
+        {
+          "card_id": 174,
+          "name": "Fan Rotom",
+          "count": 1
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 1
+        },
+        {
+          "card_id": 869,
+          "name": "Stunfisk",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 5,
+          "copies": 19
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 5,
+          "copies": 18
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "decks": 5,
+          "copies": 18
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 5,
+          "copies": 18
+        },
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "decks": 4,
+          "copies": 16
+        },
+        {
+          "card_id": 305,
+          "name": "Dunsparce",
+          "decks": 4,
+          "copies": 15
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "decks": 4,
+          "copies": 14
+        },
+        {
+          "card_id": 1229,
+          "name": "Wally's Compassion",
+          "decks": 4,
+          "copies": 14
+        },
+        {
+          "card_id": 66,
+          "name": "Dudunsparce",
+          "decks": 4,
+          "copies": 13
+        },
+        {
+          "card_id": 1174,
+          "name": "Air Balloon",
+          "decks": 4,
+          "copies": 13
+        },
+        {
+          "card_id": 848,
+          "name": "Buneary",
+          "decks": 4,
+          "copies": 12
+        },
+        {
+          "card_id": 849,
+          "name": "Mega Lopunny ex",
+          "decks": 4,
+          "copies": 11
+        }
+      ]
+    },
+    {
+      "cluster_id": 16,
+      "members": 7,
+      "games": 1291,
+      "wins": 502,
+      "losses": 789,
+      "draws": 0,
+      "win_rate": 0.38884585592563903,
+      "mean_centroid_similarity": 0.9932206443377903,
+      "representative_record_index": 506,
+      "representative_deck_counts": {
+        "11": 4,
+        "20": 4,
+        "58": 4,
+        "344": 4,
+        "345": 4,
+        "607": 1,
+        "1086": 4,
+        "1121": 1,
+        "1122": 4,
+        "1123": 4,
+        "1142": 4,
+        "1147": 1,
+        "1152": 4,
+        "1182": 4,
+        "1185": 4,
+        "1194": 2,
+        "1197": 4,
+        "1204": 2,
+        "1247": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 4
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "count": 4
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "count": 4
+        },
+        {
+          "card_id": 1185,
+          "name": "Explorer’s Guidance",
+          "count": 4
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "count": 4
+        },
+        {
+          "card_id": 58,
+          "name": "Great Tusk",
+          "count": 4
+        },
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 4
+        },
+        {
+          "card_id": 20,
+          "name": "Rock Fighting Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1123,
+          "name": "Switch",
+          "count": 4
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 4
+        },
+        {
+          "card_id": 1194,
+          "name": "Colress’s Tenacity",
+          "count": 2
+        },
+        {
+          "card_id": 1204,
+          "name": "Lisia’s Appeal",
+          "count": 2
+        },
+        {
+          "card_id": 1147,
+          "name": "Jumbo Ice Cream",
+          "count": 1
+        },
+        {
+          "card_id": 1247,
+          "name": "Neutralization Zone",
+          "count": 1
+        },
+        {
+          "card_id": 607,
+          "name": "Terrakion",
+          "count": 1
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 20,
+          "name": "Rock Fighting Energy",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 58,
+          "name": "Great Tusk",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1142,
+          "name": "Fighting Gong",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1185,
+          "name": "Explorer’s Guidance",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "decks": 7,
+          "copies": 28
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 7,
+          "copies": 27
+        }
+      ]
+    },
+    {
+      "cluster_id": 17,
+      "members": 6,
+      "games": 765,
+      "wins": 384,
+      "losses": 380,
+      "draws": 1,
+      "win_rate": 0.5019607843137255,
+      "mean_centroid_similarity": 0.9710809886455536,
+      "representative_record_index": 565,
+      "representative_deck_counts": {
+        "11": 4,
+        "12": 1,
+        "19": 4,
+        "65": 4,
+        "66": 3,
+        "304": 2,
+        "878": 4,
+        "879": 3,
+        "1086": 4,
+        "1097": 3,
+        "1115": 3,
+        "1122": 4,
+        "1152": 4,
+        "1171": 4,
+        "1182": 2,
+        "1197": 2,
+        "1225": 2,
+        "1227": 4,
+        "1255": 3
+      },
+      "representative_cards": [
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 65,
+          "name": "Dunsparce",
+          "count": 4
+        },
+        {
+          "card_id": 878,
+          "name": "Hop's Phantump",
+          "count": 4
+        },
+        {
+          "card_id": 1171,
+          "name": "Hop’s Choice Band",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "count": 4
+        },
+        {
+          "card_id": 19,
+          "name": "Telepath Psychic Energy",
+          "count": 4
+        },
+        {
+          "card_id": 66,
+          "name": "Dudunsparce",
+          "count": 3
+        },
+        {
+          "card_id": 879,
+          "name": "Hop's Trevenant",
+          "count": 3
+        },
+        {
+          "card_id": 1115,
+          "name": "Hop’s Bag",
+          "count": 3
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 3
+        },
+        {
+          "card_id": 1255,
+          "name": "Postwick",
+          "count": 3
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 2
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 2
+        },
+        {
+          "card_id": 304,
+          "name": "Hop’s Snorlax",
+          "count": 2
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 2
+        },
+        {
+          "card_id": 12,
+          "name": "Legacy Energy",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 11,
+          "name": "Mist Energy",
+          "decks": 6,
+          "copies": 24
+        },
+        {
+          "card_id": 19,
+          "name": "Telepath Psychic Energy",
+          "decks": 6,
+          "copies": 24
+        },
+        {
+          "card_id": 878,
+          "name": "Hop's Phantump",
+          "decks": 6,
+          "copies": 24
+        },
+        {
+          "card_id": 1171,
+          "name": "Hop’s Choice Band",
+          "decks": 6,
+          "copies": 24
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 6,
+          "copies": 24
+        },
+        {
+          "card_id": 1255,
+          "name": "Postwick",
+          "decks": 6,
+          "copies": 23
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 6,
+          "copies": 22
+        },
+        {
+          "card_id": 879,
+          "name": "Hop's Trevenant",
+          "decks": 6,
+          "copies": 20
+        },
+        {
+          "card_id": 1115,
+          "name": "Hop’s Bag",
+          "decks": 6,
+          "copies": 20
+        },
+        {
+          "card_id": 304,
+          "name": "Hop’s Snorlax",
+          "decks": 6,
+          "copies": 13
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1122,
+          "name": "Pokégear 3.0",
+          "decks": 5,
+          "copies": 18
+        }
+      ]
+    },
+    {
+      "cluster_id": 18,
+      "members": 9,
+      "games": 373,
+      "wins": 172,
+      "losses": 201,
+      "draws": 0,
+      "win_rate": 0.46112600536193027,
+      "mean_centroid_similarity": 0.9803375005722046,
+      "representative_record_index": 580,
+      "representative_deck_counts": {
+        "7": 9,
+        "141": 1,
+        "257": 1,
+        "258": 1,
+        "292": 4,
+        "293": 4,
+        "303": 2,
+        "848": 1,
+        "849": 1,
+        "906": 1,
+        "1086": 4,
+        "1097": 2,
+        "1113": 4,
+        "1121": 3,
+        "1137": 1,
+        "1152": 4,
+        "1159": 1,
+        "1182": 3,
+        "1197": 1,
+        "1205": 3,
+        "1213": 2,
+        "1227": 4,
+        "1253": 2,
+        "1256": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 7,
+          "name": "Basic {D} Energy",
+          "count": 9
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1113,
+          "name": "N’s PP Up",
+          "count": 4
+        },
+        {
+          "card_id": 293,
+          "name": "N’s Zoroark ex",
+          "count": 4
+        },
+        {
+          "card_id": 292,
+          "name": "N’s Zorua",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 1205,
+          "name": "Cyrano",
+          "count": 3
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 3
+        },
+        {
+          "card_id": 1213,
+          "name": "Judge",
+          "count": 2
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 2
+        },
+        {
+          "card_id": 1253,
+          "name": "N’s Castle",
+          "count": 2
+        },
+        {
+          "card_id": 303,
+          "name": "N’s Reshiram",
+          "count": 2
+        },
+        {
+          "card_id": 848,
+          "name": "Buneary",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 849,
+          "name": "Mega Lopunny ex",
+          "count": 1
+        },
+        {
+          "card_id": 906,
+          "name": "N's Zekrom",
+          "count": 1
+        },
+        {
+          "card_id": 258,
+          "name": "N’s Darmanitan",
+          "count": 1
+        },
+        {
+          "card_id": 257,
+          "name": "N’s Darumaka",
+          "count": 1
+        },
+        {
+          "card_id": 141,
+          "name": "Pecharunt ex",
+          "count": 1
+        },
+        {
+          "card_id": 1256,
+          "name": "Team Rocket's Watchtower",
+          "count": 1
+        },
+        {
+          "card_id": 1137,
+          "name": "Tool Scrapper",
+          "count": 1
+        },
+        {
+          "card_id": 1197,
+          "name": "Xerosic’s Machinations",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 7,
+          "name": "Basic {D} Energy",
+          "decks": 9,
+          "copies": 82
+        },
+        {
+          "card_id": 292,
+          "name": "N’s Zorua",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 293,
+          "name": "N’s Zoroark ex",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 1113,
+          "name": "N’s PP Up",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 9,
+          "copies": 36
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 9,
+          "copies": 34
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 9,
+          "copies": 28
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "decks": 9,
+          "copies": 26
+        },
+        {
+          "card_id": 1205,
+          "name": "Cyrano",
+          "decks": 9,
+          "copies": 25
+        },
+        {
+          "card_id": 1253,
+          "name": "N’s Castle",
+          "decks": 9,
+          "copies": 22
+        },
+        {
+          "card_id": 303,
+          "name": "N’s Reshiram",
+          "decks": 9,
+          "copies": 18
+        }
+      ]
+    },
+    {
+      "cluster_id": 19,
+      "members": 3,
+      "games": 248,
+      "wins": 116,
+      "losses": 132,
+      "draws": 0,
+      "win_rate": 0.46774193548387094,
+      "mean_centroid_similarity": 0.9722664753595988,
+      "representative_record_index": 561,
+      "representative_deck_counts": {
+        "3": 10,
+        "47": 3,
+        "235": 2,
+        "506": 4,
+        "941": 4,
+        "942": 2,
+        "943": 3,
+        "1079": 4,
+        "1086": 4,
+        "1097": 2,
+        "1120": 4,
+        "1121": 4,
+        "1123": 2,
+        "1129": 1,
+        "1139": 1,
+        "1152": 1,
+        "1182": 2,
+        "1225": 2,
+        "1227": 3,
+        "1247": 1,
+        "1264": 1
+      },
+      "representative_cards": [
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "count": 10
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "count": 4
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "count": 4
+        },
+        {
+          "card_id": 506,
+          "name": "Cubchoo",
+          "count": 4
+        },
+        {
+          "card_id": 1079,
+          "name": "Rare Candy",
+          "count": 4
+        },
+        {
+          "card_id": 941,
+          "name": "Spheal",
+          "count": 4
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 3
+        },
+        {
+          "card_id": 47,
+          "name": "Totodile",
+          "count": 3
+        },
+        {
+          "card_id": 943,
+          "name": "Walrein",
+          "count": 3
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 2
+        },
+        {
+          "card_id": 235,
+          "name": "Budew",
+          "count": 2
+        },
+        {
+          "card_id": 1225,
+          "name": "Hilda",
+          "count": 2
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 2
+        },
+        {
+          "card_id": 942,
+          "name": "Sealeo",
+          "count": 2
+        },
+        {
+          "card_id": 1123,
+          "name": "Switch",
+          "count": 2
+        },
+        {
+          "card_id": 1264,
+          "name": "Battle Cage",
+          "count": 1
+        },
+        {
+          "card_id": 1139,
+          "name": "Energy Recycler",
+          "count": 1
+        },
+        {
+          "card_id": 1247,
+          "name": "Neutralization Zone",
+          "count": 1
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 1
+        },
+        {
+          "card_id": 1129,
+          "name": "Sacred Ash",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 3,
+          "name": "Basic {W} Energy",
+          "decks": 3,
+          "copies": 29
+        },
+        {
+          "card_id": 506,
+          "name": "Cubchoo",
+          "decks": 3,
+          "copies": 12
+        },
+        {
+          "card_id": 941,
+          "name": "Spheal",
+          "decks": 3,
+          "copies": 12
+        },
+        {
+          "card_id": 1079,
+          "name": "Rare Candy",
+          "decks": 3,
+          "copies": 12
+        },
+        {
+          "card_id": 1086,
+          "name": "Buddy-Buddy Poffin",
+          "decks": 3,
+          "copies": 12
+        },
+        {
+          "card_id": 1120,
+          "name": "Crushing Hammer",
+          "decks": 3,
+          "copies": 12
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "decks": 3,
+          "copies": 12
+        },
+        {
+          "card_id": 943,
+          "name": "Walrein",
+          "decks": 3,
+          "copies": 9
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 3,
+          "copies": 9
+        },
+        {
+          "card_id": 235,
+          "name": "Budew",
+          "decks": 3,
+          "copies": 6
+        },
+        {
+          "card_id": 942,
+          "name": "Sealeo",
+          "decks": 3,
+          "copies": 6
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 3,
+          "copies": 6
+        }
+      ]
+    },
+    {
+      "cluster_id": 20,
+      "members": 2,
+      "games": 98,
+      "wins": 38,
+      "losses": 60,
+      "draws": 0,
+      "win_rate": 0.3877551020408163,
+      "mean_centroid_similarity": 0.981471061706543,
+      "representative_record_index": 587,
+      "representative_deck_counts": {
+        "1": 3,
+        "2": 5,
+        "18": 4,
+        "235": 1,
+        "344": 4,
+        "345": 4,
+        "352": 4,
+        "353": 4,
+        "354": 4,
+        "1097": 2,
+        "1121": 1,
+        "1152": 4,
+        "1159": 1,
+        "1182": 3,
+        "1194": 2,
+        "1213": 2,
+        "1215": 4,
+        "1227": 4,
+        "1267": 4
+      },
+      "representative_cards": [
+        {
+          "card_id": 2,
+          "name": "Basic {R} Energy",
+          "count": 5
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "count": 4
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "count": 4
+        },
+        {
+          "card_id": 1215,
+          "name": "Ethan's Adventure",
+          "count": 4
+        },
+        {
+          "card_id": 352,
+          "name": "Ethan's Cyndaquil",
+          "count": 4
+        },
+        {
+          "card_id": 353,
+          "name": "Ethan's Quilava",
+          "count": 4
+        },
+        {
+          "card_id": 354,
+          "name": "Ethan's Typhlosion",
+          "count": 4
+        },
+        {
+          "card_id": 18,
+          "name": "Grow Grass Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "count": 4
+        },
+        {
+          "card_id": 1267,
+          "name": "Lumiose City",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "count": 3
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "count": 3
+        },
+        {
+          "card_id": 1194,
+          "name": "Colress’s Tenacity",
+          "count": 2
+        },
+        {
+          "card_id": 1213,
+          "name": "Judge",
+          "count": 2
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 2
+        },
+        {
+          "card_id": 235,
+          "name": "Budew",
+          "count": 1
+        },
+        {
+          "card_id": 1159,
+          "name": "Hero’s Cape",
+          "count": 1
+        },
+        {
+          "card_id": 1121,
+          "name": "Ultra Ball",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 2,
+          "name": "Basic {R} Energy",
+          "decks": 2,
+          "copies": 12
+        },
+        {
+          "card_id": 18,
+          "name": "Grow Grass Energy",
+          "decks": 2,
+          "copies": 8
+        },
+        {
+          "card_id": 345,
+          "name": "Crustle",
+          "decks": 2,
+          "copies": 8
+        },
+        {
+          "card_id": 352,
+          "name": "Ethan's Cyndaquil",
+          "decks": 2,
+          "copies": 8
+        },
+        {
+          "card_id": 353,
+          "name": "Ethan's Quilava",
+          "decks": 2,
+          "copies": 8
+        },
+        {
+          "card_id": 354,
+          "name": "Ethan's Typhlosion",
+          "decks": 2,
+          "copies": 8
+        },
+        {
+          "card_id": 1215,
+          "name": "Ethan's Adventure",
+          "decks": 2,
+          "copies": 8
+        },
+        {
+          "card_id": 344,
+          "name": "Dwebble",
+          "decks": 2,
+          "copies": 7
+        },
+        {
+          "card_id": 1,
+          "name": "Basic {G} Energy",
+          "decks": 2,
+          "copies": 6
+        },
+        {
+          "card_id": 1227,
+          "name": "Lillie's Determination",
+          "decks": 2,
+          "copies": 6
+        },
+        {
+          "card_id": 1182,
+          "name": "Boss’s Orders",
+          "decks": 2,
+          "copies": 4
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "decks": 2,
+          "copies": 3
+        }
+      ]
+    },
+    {
+      "cluster_id": 21,
+      "members": 5,
+      "games": 44,
+      "wins": 16,
+      "losses": 28,
+      "draws": 0,
+      "win_rate": 0.36363636363636365,
+      "mean_centroid_similarity": 0.9965381026268005,
+      "representative_record_index": 608,
+      "representative_deck_counts": {
+        "15": 4,
+        "17": 4,
+        "414": 1,
+        "463": 4,
+        "473": 2,
+        "474": 2,
+        "891": 4,
+        "1077": 4,
+        "1097": 2,
+        "1109": 1,
+        "1134": 4,
+        "1152": 4,
+        "1174": 1,
+        "1216": 4,
+        "1217": 4,
+        "1218": 4,
+        "1219": 4,
+        "1220": 4,
+        "1257": 3
+      },
+      "representative_cards": [
+        {
+          "card_id": 17,
+          "name": "Ignition Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "count": 4
+        },
+        {
+          "card_id": 1077,
+          "name": "Roto-Stick",
+          "count": 4
+        },
+        {
+          "card_id": 1217,
+          "name": "Team Rocket's Archer",
+          "count": 4
+        },
+        {
+          "card_id": 1216,
+          "name": "Team Rocket's Ariana",
+          "count": 4
+        },
+        {
+          "card_id": 15,
+          "name": "Team Rocket's Energy",
+          "count": 4
+        },
+        {
+          "card_id": 1218,
+          "name": "Team Rocket's Giovanni",
+          "count": 4
+        },
+        {
+          "card_id": 891,
+          "name": "Team Rocket's Honchkrow",
+          "count": 4
+        },
+        {
+          "card_id": 463,
+          "name": "Team Rocket's Murkrow",
+          "count": 4
+        },
+        {
+          "card_id": 1219,
+          "name": "Team Rocket's Petrel",
+          "count": 4
+        },
+        {
+          "card_id": 1220,
+          "name": "Team Rocket's Proton",
+          "count": 4
+        },
+        {
+          "card_id": 1134,
+          "name": "Team Rocket's Transceiver",
+          "count": 4
+        },
+        {
+          "card_id": 1257,
+          "name": "Team Rocket's Factory",
+          "count": 3
+        },
+        {
+          "card_id": 1097,
+          "name": "Night Stretcher",
+          "count": 2
+        },
+        {
+          "card_id": 473,
+          "name": "Team Rocket's Porygon",
+          "count": 2
+        },
+        {
+          "card_id": 474,
+          "name": "Team Rocket's Porygon2",
+          "count": 2
+        },
+        {
+          "card_id": 1174,
+          "name": "Air Balloon",
+          "count": 1
+        },
+        {
+          "card_id": 1109,
+          "name": "Miracle Headset",
+          "count": 1
+        },
+        {
+          "card_id": 414,
+          "name": "Team Rocket's Articuno",
+          "count": 1
+        }
+      ],
+      "top_cards": [
+        {
+          "card_id": 15,
+          "name": "Team Rocket's Energy",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 17,
+          "name": "Ignition Energy",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 463,
+          "name": "Team Rocket's Murkrow",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1134,
+          "name": "Team Rocket's Transceiver",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1152,
+          "name": "Poké Pad",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1216,
+          "name": "Team Rocket's Ariana",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1218,
+          "name": "Team Rocket's Giovanni",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1219,
+          "name": "Team Rocket's Petrel",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1220,
+          "name": "Team Rocket's Proton",
+          "decks": 5,
+          "copies": 20
+        },
+        {
+          "card_id": 1077,
+          "name": "Roto-Stick",
+          "decks": 5,
+          "copies": 19
+        },
+        {
+          "card_id": 1217,
+          "name": "Team Rocket's Archer",
+          "decks": 5,
+          "copies": 19
+        },
+        {
+          "card_id": 891,
+          "name": "Team Rocket's Honchkrow",
+          "decks": 5,
+          "copies": 18
+        }
+      ]
+    }
+  ]
+}
