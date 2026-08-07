@@ -7,10 +7,10 @@ import random
 
 import torch
 
-from cg.api import SearchState, search_begin, search_end, search_step, to_observation_class
+from cg.api import Observation, SearchState, search_begin, search_end, search_step, to_observation_class
 from rl_mcts.features import SparseVector, get_decoder_input, get_encoder_input
 from rl_mcts.model import MyModel
-from rl_mcts.opponent import infer_opponent_deck, predict_facedown_active, sample_from_deck
+from rl_mcts.opponent_hand import HiddenCards
 
 SEARCH_COUNT = 10
 MAX_ACTIONS = 64
@@ -74,6 +74,15 @@ class Node:
         self.visit += 1
         if self.parent is not None:
             self.parent.backprop(value)
+
+
+class MctsRun:
+    """1つの具体化されたhidden-state粒子について探索したroot統計。"""
+
+    def __init__(self, sample: LearnSample | None, root: Node, selected: list[int]) -> None:
+        self.sample = sample
+        self.root = root
+        self.selected = selected
 
 
 def enumerate_actions(option_count: int, select_count: int, limit: int = MAX_ACTIONS) -> list[list[int]]:
@@ -174,42 +183,50 @@ def create_node(
     return node, LearnSample(value, policy, sv_enc, sv_dec)
 
 
-def mcts_agent(
-    obs_dict: dict,
-    your_deck: list[int],
-    model: MyModel,
-    search_count: int = SEARCH_COUNT,
-    opponent_model: MyModel | None = None,
-) -> tuple[list[int], LearnSample | None]:
-    """MCTSで手を選び、root局面の学習サンプルを返す。
+def _legacy_hidden_cards(obs: Observation, your_deck: list[int]) -> HiddenCards:
+    """相手ビリーフ(OpponentBelief)を持たない呼び出し元(自己対戦学習など)向けの簡易フォールバック。
 
-    opponent_modelを指定すると、探索木の中で相手の手番のノードだけ
-    opponent_modelで評価する(「相手はこう指すはず」という専用モデルを使った
-    シミュレーション)。省略時(None)はmodelを両者に使う、これまでと同じ挙動。
+    相手の非公開カードは推定せずダミーIDで埋める(粒子は1つだけ)。実戦での
+    相手推定はRlMctsAgent側でOpponentBelief.sample()を使いdeterminizationsとして渡す。
     """
-    obs = to_observation_class(obs_dict)
-    if obs.select is None:
-        return your_deck, None
-
     your_index = obs.current.yourIndex
     state = obs.current
-    opponent_index = 1 - your_index
-    opponent_deck = infer_opponent_deck(state, opponent_index, obs.logs)
     active = state.players[1 - your_index].active
-    search_state = search_begin(
-        obs,
+    return HiddenCards(
         your_deck=random.sample(your_deck, min(len(your_deck), state.players[your_index].deckCount)),
         your_prize=random.sample(your_deck, min(len(your_deck), len(state.players[your_index].prize))),
-        opponent_deck=sample_from_deck(opponent_deck, state.players[opponent_index].deckCount),
-        opponent_prize=sample_from_deck(opponent_deck, len(state.players[opponent_index].prize)),
-        opponent_hand=sample_from_deck(opponent_deck, state.players[opponent_index].handCount),
-        opponent_active=predict_facedown_active(opponent_deck) if len(active) > 0 and active[0] is None else [],
+        opponent_deck=[1072] * state.players[1 - your_index].deckCount,
+        opponent_prize=[1] * len(state.players[1 - your_index].prize),
+        opponent_hand=[1] * state.players[1 - your_index].handCount,
+        opponent_active=[1072] if len(active) > 0 and active[0] is None else [],
+    )
+
+
+def _run_determinization(
+    obs: Observation,
+    your_deck: list[int],
+    model: MyModel,
+    hidden: HiddenCards,
+    search_count: int,
+    opponent_model: MyModel | None,
+) -> MctsRun:
+    """1つの具体化されたhidden state(粒子)について、通常の完全情報MCTSを行う。"""
+    your_index = obs.current.yourIndex
+    search_state = search_begin(
+        obs,
+        your_deck=hidden.your_deck,
+        your_prize=hidden.your_prize,
+        opponent_deck=hidden.opponent_deck,
+        opponent_prize=hidden.opponent_prize,
+        opponent_hand=hidden.opponent_hand,
+        opponent_active=hidden.opponent_active,
     )
 
     try:
         root, sample = create_node(None, search_state, your_index, your_deck, model, opponent_model)
         if not root.children:
-            return random.sample(list(range(len(obs.select.option))), obs.select.maxCount), sample
+            selected = random.sample(list(range(len(obs.select.option))), obs.select.maxCount)
+            return MctsRun(sample, root, selected)
 
         for _ in range(search_count):
             current = root
@@ -273,6 +290,53 @@ def mcts_agent(
                     v = child.node.total / max(child.node.visit, 1) - v
                 sample.policy[i] = max(-1.0, min(1.0, v))
 
-        return max_child.select, sample
+        return MctsRun(sample, root, max_child.select)
     finally:
         search_end()
+
+
+def mcts_agent(
+    obs_dict: dict,
+    your_deck: list[int],
+    model: MyModel,
+    search_count: int = SEARCH_COUNT,
+    opponent_model: MyModel | None = None,
+    determinizations: list[HiddenCards] | None = None,
+) -> tuple[list[int], LearnSample | None]:
+    """MCTSで手を選び、root局面の学習サンプルを返す。
+
+    determinizationsにhidden-state粒子(相手の手札・山札・サイドなどの具体的な
+    組み合わせ)を複数渡すと、粒子ごとに独立した完全情報MCTSを行い、
+    root訪問数を合算した多数決で最終手を選ぶ(imperfect information対応)。
+    省略時は自己対戦学習用の簡易フォールバック(_legacy_hidden_cards)で1粒子だけ探索する。
+
+    opponent_modelを指定すると、探索木の中で相手の手番のノードだけ
+    opponent_modelで評価する(「相手はこう指すはず」という専用モデルを使った
+    シミュレーション)。省略時(None)はmodelを両者に使う、これまでと同じ挙動。
+    """
+    obs = to_observation_class(obs_dict)
+    if obs.select is None:
+        return your_deck, None
+
+    particles = determinizations or [_legacy_hidden_cards(obs, your_deck)]
+    runs = [
+        _run_determinization(obs, your_deck, model, hidden, search_count, opponent_model)
+        for hidden in particles
+    ]
+    if len(runs) == 1:
+        return runs[0].selected, runs[0].sample
+
+    visits: dict[tuple[int, ...], int] = {}
+    priors: dict[tuple[int, ...], float] = {}
+    for run in runs:
+        for child in run.root.children:
+            key = tuple(child.select)
+            priors[key] = priors.get(key, 0.0) + child.prob
+            visits.setdefault(key, 0)
+            if child.node is not None:
+                visits[key] += child.node.visit
+
+    if not visits:
+        return runs[0].selected, runs[0].sample
+    selected_key = max(visits, key=lambda key: (visits[key], priors.get(key, 0.0)))
+    return list(selected_key), runs[0].sample

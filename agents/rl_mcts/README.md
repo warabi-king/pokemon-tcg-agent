@@ -19,17 +19,72 @@ agents/rl_mcts/
     rl_mcts/
       agent.py
       deck.py
+      deck_candidates_by_wins.jsonl
+      deck_reconstructor.py
       features.py
+      hand_model.pth
       mcts.py
       model.py
+      opponent_hand.py
   train/
     train.py
+    train_hand_model.py
+    test_opponent_hand.py
     plot_metrics.py
     checkpoints/
     logs/
 ```
 
 `src/` は提出対象です。`train/` は学習用で、提出アーカイブには含めません。
+
+## 相手手札の推定
+
+MCTS探索の開始時、相手の非公開カード(手札・山札・サイド・裏向きばけポケ)は固定IDではなく
+`rl_mcts.opponent_hand.OpponentBelief`が次の手順で具体化する(hidden-state粒子)。
+
+1. 公開された相手カードを`deck_candidates_by_wins.jsonl`収録の候補デッキと照合し、
+   最も一致する実在デッキ群を推定する(`deck_reconstructor.py`)。
+2. 対戦ログのcard ID/serialから、公開サーチ後も手札に残っているカードを追跡する
+   (`OpponentHandTracker`)。
+3. 候補デッキから公開領域・確定手札を引いた残りに対し、学習済み手札保持モデル
+   (`hand_model.pth`)で残存確率を補正して未知の手札を抽出する。
+4. 残余カードをサイド・山札へ無作為配置し、カード枚数の整合性を保つ。
+5. `belief_samples`個(既定3)のhidden-state粒子それぞれでMCTSを行い、root訪問数を
+   合算した多数決で最終手を選ぶ(`mcts.mcts_agent`の`determinizations`引数)。
+
+手札モデルはカードを直接生成せず、残存カードの抽出確率だけを補正する。そのため、
+候補デッキにないカードや残存枚数を超えるカードは生成されない。
+
+`RlMctsAgent`の`opponent_model_path`(自分/相手で別モデルを使うMCTS評価)とは独立した
+機能で、両方を同時に指定できる。
+
+### 手札予測モデルの学習
+
+```bash
+python agents/rl_mcts/train/train_hand_model.py \
+  --max-episodes 2000 \
+  --max-samples 50000 \
+  --epochs 5 \
+  --batch-size 128 \
+  --hidden-size 64 \
+  --device cpu
+```
+
+既定の入出力:
+
+```text
+入力: tools/deck_generator/daily_dataset/*/*.zip
+出力: agents/rl_mcts/src/rl_mcts/hand_model.pth
+```
+
+モデルが無い場合は保持スコアを0として、残存カード枚数だけに比例する制約付き
+サンプリングへフォールバックする(提出環境で決して落とさない)。
+
+単体テスト:
+
+```bash
+python -m unittest agents/rl_mcts/train/test_opponent_hand.py
+```
 
 ## 学習の流れ
 
