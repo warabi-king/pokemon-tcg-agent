@@ -16,6 +16,9 @@ from deck_database import load_records, select_diverse_records  # noqa: E402
 sys.path.insert(0, str(ROOT / "tools"))
 from search_deck_fixed_league import Opponent, aggregate_candidate, collect_candidate_decks, ranking_key  # noqa: E402
 
+sys.path.insert(0, str(ROOT / "agents" / "belief_puct" / "train"))
+from train_mixed_opponents import load_external_opponents  # noqa: E402
+
 
 def record(card_id: int, cluster_id: int, wins: int, games: int) -> dict:
     """60枚の単純なテスト用候補レコードを作る。"""
@@ -93,6 +96,42 @@ class FixedLeagueRankingTests(unittest.TestCase):
                 deck_path.write_text("1\n" * 60, encoding="utf-8")
             decks = collect_candidate_decks([], [candidates])
         self.assertEqual([deck.parent.name for deck in decks], ["candidate_002", "candidate_010"])
+
+
+class MixedOpponentConfigTests(unittest.TestCase):
+    """外部agent混合学習へ渡すPhase 2a相手JSONの読込を検証する。"""
+
+    def test_external_opponents_resolve_paths_relative_to_config(self) -> None:
+        """相対pathのPhase 2a JSONからagent・deck・modelを一意に読み込む。"""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            agent_src = root / "upsize" / "cluster_03" / "src"
+            agent_src.mkdir(parents=True)
+            (agent_src / "main.py").write_text("def agent(obs): return []\n", encoding="utf-8")
+            (agent_src / "deck.csv").write_text("1\n" * 60, encoding="utf-8")
+            (agent_src / "model.pth").write_bytes(b"test checkpoint")
+            config_path = root / "opponents.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "opponents": [
+                            {
+                                "name": "upsize2_cluster_03",
+                                "agent_src": "upsize/cluster_03/src",
+                                "deck": "upsize/cluster_03/src/deck.csv",
+                                "model": "upsize/cluster_03/src/model.pth",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            opponents = load_external_opponents(config_path)
+        self.assertEqual(len(opponents), 1)
+        self.assertEqual(opponents[0].name, "upsize2_cluster_03")
+        self.assertEqual(opponents[0].agent_src, agent_src.resolve())
+        self.assertEqual(opponents[0].deck_path, (agent_src / "deck.csv").resolve())
 
 
 if __name__ == "__main__":
