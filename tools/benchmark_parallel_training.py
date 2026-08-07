@@ -31,6 +31,11 @@ import sys
 import time
 import traceback
 
+try:
+    from tools.value_training import build_value_loss, forward_for_training
+except ModuleNotFoundError:  # ``python tools/benchmark_parallel_training.py``
+    from value_training import build_value_loss, forward_for_training
+
 
 @dataclass(frozen=True)
 class TrainingJob:
@@ -150,22 +155,22 @@ def _policy_target_mode() -> str:
 
 
 # SELFPLAY_VALUE_LOSS_PATCH_V1
-_VALUE_LOSS_KINDS = frozenset({"huber", "mse"})
+_VALUE_LOSS_KINDS = frozenset({"bce", "huber", "mse"})
 
 
 def _value_loss_config() -> tuple[str, float, float]:
-    """valueヘッドの損失(種類, Huberのdelta, 重み)を返す。既定は従来と同じ。
+    """valueヘッドの損失(種類, Huberのdelta, 重み)を返す。
 
     従来は ``HuberLoss(delta=0.2)`` を重み1.0で policy の cross entropy に足していた。
     Huberは |誤差|>delta で勾配が一定(=L1)になるので、教師が最終勝敗の±1しかない
     この設計では条件付き「中央値」に寄る。中央値は勝ち局面なら+1、負け局面なら-1に
     振り切れるため、「どのくらい有利か」という大きさの情報が落ちる。
     q tie-breakの採用で着手はrootの子のQ値(=valueヘッド)の大小比較で決まるように
-    なったので、この大きさの情報はそのまま着手の質になる。MSEなら条件付き平均
-    (=勝率の線形変換)に寄るため、比較したい量そのものを学習することになる。
-    実測ではvalue lossは全体の約7%(0.095 / 1.33)しかない。
+    なったので、この大きさの情報はそのまま着手の質になる。既定のbceはtanh前の
+    logitへproper lossを掛け、推論値tanh(logit)が条件付き平均(勝率の線形変換)に
+    一致するよう学習する。実測では旧value lossは全体の約7%(0.095 / 1.33)だった。
     """
-    kind = os.environ.get("SELFPLAY_VALUE_LOSS", "huber")
+    kind = os.environ.get("SELFPLAY_VALUE_LOSS", "bce")
     if kind not in _VALUE_LOSS_KINDS:
         raise ValueError(
             f"SELFPLAY_VALUE_LOSSが不正です: {kind!r} "
@@ -182,9 +187,11 @@ def _value_loss_config() -> tuple[str, float, float]:
 
 def _build_value_loss(torch_module: object) -> tuple[object, float]:
     kind, delta, weight = _value_loss_config()
-    if kind == "mse":
-        return torch_module.nn.MSELoss(), weight
-    return torch_module.nn.HuberLoss(delta=delta), weight
+    return build_value_loss(
+        torch_module,
+        kind=kind,
+        huber_delta=delta,
+    ), weight
 
 
 def _policy_target_zero_spread() -> str:
@@ -598,7 +605,7 @@ def _run_central_device_training(
     select_device = runtime["select_device"]
     max_actions = int(runtime["MAX_ACTIONS"])
     device = select_device(device_name)
-    # SELFPLAY_VALUE_LOSS_PATCH_V1: 既定は従来どおり HuberLoss(delta=0.2) の重み1.0。
+    # valueは既定でtanh前のlogitへBCEを掛け、飽和とHuberの中央値化を避ける。
     loss_fn_value, value_loss_weight = _build_value_loss(torch)
     # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1
     policy_loss_kind = _policy_loss_kind()
@@ -645,7 +652,7 @@ def _run_central_device_training(
             optimizer = state["optimizer"]
             tensors = [torch.from_numpy(array).to(device) for array in arrays]
             optimizer.zero_grad(set_to_none=True)
-            out_enc, out_dec = model(*tensors[:6])
+            out_enc, out_dec = forward_for_training(model, *tensors[:6])
             mask_tensor, label_value_tensor, chosen_index_tensor = tensors[6:9]
             policy_weight_tensor = tensors[9]
             soft_target_tensor = tensors[10] if len(tensors) > 10 else None

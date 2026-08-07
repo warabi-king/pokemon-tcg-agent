@@ -38,6 +38,7 @@ from typing import Iterator
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENT_ROOT = REPO_ROOT / "agents" / "rl_mcts"
 SRC_ROOT = AGENT_ROOT / "src"
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(SRC_ROOT))
 
 import torch  # noqa: E402
@@ -45,6 +46,10 @@ import torch.nn.functional as F  # noqa: E402
 
 from rl_mcts.mcts import MAX_ACTIONS, LearnInput  # noqa: E402
 from rl_mcts.model import create_model  # noqa: E402
+from tools.value_training import (  # noqa: E402
+    build_value_loss,
+    forward_for_training,
+)
 
 
 def load_shard(path: Path) -> list[tuple]:
@@ -240,7 +245,8 @@ def iter_batches(shard_paths: list[Path], batch_size: int, shuffle: bool) -> Ite
 
 def train_one_epoch(model, optimizer, shard_paths: list[Path], batch_size: int, device: torch.device) -> dict:
     model.train()
-    loss_fn_value = torch.nn.HuberLoss(delta=0.2)
+    value_loss_kind = os.environ.get("SELFPLAY_VALUE_LOSS", "bce")
+    loss_fn_value = build_value_loss(torch, kind=value_loss_kind)
 
     batch_count = 0
     total_loss = total_loss_value = total_loss_policy = 0.0
@@ -256,7 +262,7 @@ def train_one_epoch(model, optimizer, shard_paths: list[Path], batch_size: int, 
         ) = build_batch_tensors(batch, device)
 
         optimizer.zero_grad()
-        out_enc, out_dec = model(*tensors)
+        out_enc, out_dec = forward_for_training(model, *tensors)
 
         loss_value = loss_fn_value(out_enc, label_value_tensor)
         masked_logits = out_dec.masked_fill(mask_tensor == 0, float("-inf"))

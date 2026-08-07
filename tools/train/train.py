@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import random
 import sys
@@ -14,6 +15,7 @@ from typing import Iterator
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENT_ROOT = REPO_ROOT / "agents" / "rl_mcts"
 SRC_ROOT = AGENT_ROOT / "src"
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(SRC_ROOT))
 
 import torch  # noqa: E402
@@ -23,6 +25,7 @@ from cg.game import battle_finish, battle_select, battle_start  # noqa: E402
 from rl_mcts.deck import read_deck_csv  # noqa: E402
 from rl_mcts.mcts import LearnInput, LearnSample, MAX_ACTIONS, mcts_agent  # noqa: E402
 from rl_mcts.model import create_model  # noqa: E402
+from tools.value_training import build_value_loss, forward_for_training  # noqa: E402
 
 
 @dataclass
@@ -223,7 +226,8 @@ def train_one_iteration(
 
     model.train()
     random.shuffle(samples)
-    loss_fn_enc = torch.nn.HuberLoss(delta=0.2)
+    value_loss_kind = os.environ.get("SELFPLAY_VALUE_LOSS", "bce")
+    loss_fn_enc = build_value_loss(torch, kind=value_loss_kind)
     loss_fn_dec = torch.nn.HuberLoss(reduction="none", delta=0.1)
     batch_count = len(samples) // batch_size
     loss_total = 0.0
@@ -260,7 +264,8 @@ def train_one_iteration(
         )
 
         optimizer.zero_grad()
-        out_enc, out_dec = model(
+        out_enc, out_dec = forward_for_training(
+            model,
             torch.tensor(input_enc.index, dtype=torch.int32, device=device),
             torch.tensor(input_enc.value, dtype=torch.float32, device=device),
             torch.tensor(input_enc.offset, dtype=torch.int32, device=device),

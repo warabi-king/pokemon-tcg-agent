@@ -19,6 +19,7 @@ import itertools
 import importlib
 import importlib.util
 import json
+import os
 import random
 import shlex
 import sys
@@ -37,6 +38,11 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_ROOT = ROOT / "results" / "train_round_robin_central"
+
+try:
+    from tools.value_training import build_value_loss, forward_for_training
+except ModuleNotFoundError:  # ``python tools/run_train_round_robin.py``
+    from value_training import build_value_loss, forward_for_training
 
 
 @dataclass
@@ -354,7 +360,8 @@ def train_one_iteration_local(
 
     model.train()
     random.shuffle(samples)
-    loss_fn_enc = torch.nn.HuberLoss(delta=0.2)
+    value_loss_kind = os.environ.get("SELFPLAY_VALUE_LOSS", "bce")
+    loss_fn_enc = build_value_loss(torch, kind=value_loss_kind)
     loss_fn_dec = torch.nn.HuberLoss(reduction="none", delta=0.1)
     batch_count = len(samples) // batch_size
     loss_total = 0.0
@@ -387,7 +394,8 @@ def train_one_iteration_local(
         label_tensor_dec = torch.tensor(label_dec, dtype=torch.float32, device=device).view(batch_size, -1)
 
         optimizer.zero_grad()
-        out_enc, out_dec = model(
+        out_enc, out_dec = forward_for_training(
+            model,
             torch.tensor(input_enc.index, dtype=torch.int32, device=device),
             torch.tensor(input_enc.value, dtype=torch.float32, device=device),
             torch.tensor(input_enc.offset, dtype=torch.int32, device=device),
