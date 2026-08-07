@@ -24,6 +24,7 @@ from pathlib import Path
 import pickle
 import queue
 import random
+import re
 import runpy
 import subprocess
 import sys
@@ -134,6 +135,167 @@ def assign_training_jobs(
     return assignments
 
 
+# SELFPLAY_COMPLETED_Q_TARGET_PATCH_V1
+_POLICY_TARGET_MODES = frozenset({"hard", "completed_q"})
+
+
+def _policy_target_mode() -> str:
+    mode = os.environ.get("SELFPLAY_POLICY_TARGET", "hard")
+    if mode not in _POLICY_TARGET_MODES:
+        raise ValueError(
+            f"SELFPLAY_POLICY_TARGETが不正です: {mode!r} "
+            f"(有効値: {sorted(_POLICY_TARGET_MODES)})"
+        )
+    return mode
+
+
+# SELFPLAY_VALUE_LOSS_PATCH_V1
+_VALUE_LOSS_KINDS = frozenset({"huber", "mse"})
+
+
+def _value_loss_config() -> tuple[str, float, float]:
+    """valueヘッドの損失(種類, Huberのdelta, 重み)を返す。既定は従来と同じ。
+
+    従来は ``HuberLoss(delta=0.2)`` を重み1.0で policy の cross entropy に足していた。
+    Huberは |誤差|>delta で勾配が一定(=L1)になるので、教師が最終勝敗の±1しかない
+    この設計では条件付き「中央値」に寄る。中央値は勝ち局面なら+1、負け局面なら-1に
+    振り切れるため、「どのくらい有利か」という大きさの情報が落ちる。
+    q tie-breakの採用で着手はrootの子のQ値(=valueヘッド)の大小比較で決まるように
+    なったので、この大きさの情報はそのまま着手の質になる。MSEなら条件付き平均
+    (=勝率の線形変換)に寄るため、比較したい量そのものを学習することになる。
+    実測ではvalue lossは全体の約7%(0.095 / 1.33)しかない。
+    """
+    kind = os.environ.get("SELFPLAY_VALUE_LOSS", "huber")
+    if kind not in _VALUE_LOSS_KINDS:
+        raise ValueError(
+            f"SELFPLAY_VALUE_LOSSが不正です: {kind!r} "
+            f"(有効値: {sorted(_VALUE_LOSS_KINDS)})"
+        )
+    delta = float(os.environ.get("SELFPLAY_VALUE_HUBER_DELTA", "0.2"))
+    if delta <= 0.0:
+        raise ValueError(f"SELFPLAY_VALUE_HUBER_DELTAは正の値が必要です: {delta}")
+    weight = float(os.environ.get("SELFPLAY_VALUE_LOSS_WEIGHT", "1.0"))
+    if weight < 0.0:
+        raise ValueError(f"SELFPLAY_VALUE_LOSS_WEIGHTは0以上にしてください: {weight}")
+    return kind, delta, weight
+
+
+def _build_value_loss(torch_module: object) -> tuple[object, float]:
+    kind, delta, weight = _value_loss_config()
+    if kind == "mse":
+        return torch_module.nn.MSELoss(), weight
+    return torch_module.nn.HuberLoss(delta=delta), weight
+
+
+def _policy_target_zero_spread() -> str:
+    """Q優位度が全合法手で同値だった行の扱い(既定はhard labelへ退避)。
+
+    実測(2026-08-05, 実shard 107,997サンプル)で28.2%の行がこれに当たるため、
+    softmaxをそのまま当てると学習データの28%が「方策を平坦にせよ」という
+    勾配になる。既定では従来のhard labelのままにする。
+    """
+    mode = os.environ.get("SELFPLAY_POLICY_TARGET_ZERO_SPREAD", "hard")
+    if mode not in {"hard", "uniform"}:
+        raise ValueError(
+            f"SELFPLAY_POLICY_TARGET_ZERO_SPREADが不正です: {mode!r} "
+            "(有効値: ['hard', 'uniform'])"
+        )
+    return mode
+
+
+def _value_target_lambda() -> float:
+    """valueの教師を「最終勝敗」と「探索rootの評価値」で混ぜる比率。
+
+    既定1.0は従来どおり最終勝敗そのまま。1試合の全局面へ一律に±1を付ける教師は
+    分散が最大で、q tie-break採用後はQ値が着手を決めるためvalueヘッドの質が
+    直接効く。SELFPLAY_SEARCH_VALUE_TARGET_PATCH_V1
+    """
+    lam = float(os.environ.get("SELFPLAY_VALUE_TARGET_LAMBDA", "1.0"))
+    if not 0.0 <= lam <= 1.0:
+        raise ValueError(
+            f"SELFPLAY_VALUE_TARGET_LAMBDAは0.0〜1.0にしてください: {lam}"
+        )
+    return lam
+
+
+# SELFPLAY_VALUE_TARGET_DISCOUNT_PATCH_V1
+def _value_target_discount_final() -> float:
+    """valueの教師に掛ける割引の最終値。1.0で従来どおり全局面に最終勝敗そのまま。
+
+    従来の教師は試合中の全局面へ一律に±1を付けるため、終局から遠い局面にも
+    「勝ち確定」と教えている(実測: 予測+0.999の局面の実際の平均結果は+0.583)。
+    方策側と同じく 最終値^(残りターン数/総ターン数) を掛けると、序盤ほど0へ
+    寄る教師になる。序盤の局面は組み合わせが少なく学習データに繰り返し現れる
+    ので、頻度の偏りを抑える方向にも働く。
+    """
+    discount_final = float(
+        os.environ.get("SELFPLAY_VALUE_TARGET_DISCOUNT_FINAL", "1.0")
+    )
+    if not 0.0 < discount_final <= 1.0:
+        raise ValueError(
+            "SELFPLAY_VALUE_TARGET_DISCOUNT_FINALは0より大きく1以下にしてください: "
+            f"{discount_final}"
+        )
+    return discount_final
+
+
+# SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1
+_POLICY_LOSS_KINDS = frozenset({"cross_entropy", "outcome_weighted"})
+
+
+def _policy_loss_kind() -> str:
+    """方策損失の形。既定は従来どおり打った手への交差エントロピー。
+
+    outcome_weighted では、打った手の対数確率に
+    「その試合の最終結果 × 残りターン数に応じた割引」を掛ける。
+    勝った試合の手は確率を上げ、負けた試合の手は下げる。基準線は使わない。
+    """
+    kind = os.environ.get("SELFPLAY_POLICY_LOSS", "cross_entropy")
+    if kind not in _POLICY_LOSS_KINDS:
+        raise ValueError(
+            f"SELFPLAY_POLICY_LOSSが不正です: {kind!r} "
+            f"(有効値: {sorted(_POLICY_LOSS_KINDS)})"
+        )
+    return kind
+
+
+def _policy_discount_final() -> float:
+    """割引の最終値。1.0で割引なし(位置による差を付けない)。
+
+    重みは 割引の最終値^(終局までの残りターン数 / その試合の総ターン数)。
+    指数は最終ターンで0、初手で1に近づくので、割引は最終ターンで1.0(割引なし)、
+    初手でこの値まで下がる。試合ごとに総ターン数で正規化した割引なので、
+    固定の割引率と違って試合の長さで扱いが変わらない。0.3を指定すると
+    「初手は最終ターンの0.3倍まで割り引く」という意味になる。
+    """
+    discount_final = float(os.environ.get("SELFPLAY_POLICY_DISCOUNT_FINAL", "1.0"))
+    if not 0.0 < discount_final <= 1.0:
+        raise ValueError(
+            "SELFPLAY_POLICY_DISCOUNT_FINALは0より大きく1以下にしてください: "
+            f"{discount_final}"
+        )
+    return discount_final
+
+
+def _policy_weight_opponent_jobs() -> bool:
+    """相手モデルの学習にも結果重みを掛けるか。
+
+    相手モデルは「相手が実際に打つ手」を当てるための予測器であり、強さを
+    上げる対象ではない。結果で重み付けすると「勝つ手を予測する」方向へ
+    歪むため、既定では相手モデルは従来の交差エントロピーのままにする。
+    """
+    return os.environ.get("SELFPLAY_POLICY_LOSS_OPPONENT", "0") == "1"
+
+
+def _policy_target_temperature() -> float:
+    temperature = float(
+        os.environ.get("SELFPLAY_POLICY_TARGET_TEMPERATURE", "0.25")
+    )
+    if temperature <= 0.0:
+        raise ValueError("SELFPLAY_POLICY_TARGET_TEMPERATUREは正の値が必要です。")
+    return temperature
+
+
 def _build_batch_arrays(
     batch: list[tuple],
     max_actions: int,
@@ -150,6 +312,24 @@ def _build_batch_arrays(
     label_value: list[float] = []
     chosen_indices: list[int] = []
     mask = np.zeros((len(batch), max_actions), dtype=np.bool_)
+    # SELFPLAY_COMPLETED_Q_TARGET_PATCH_V1
+    # サンプルは (…, chosen_index, value) の8要素に加えて、合法手ごとのQ優位度を
+    # 9要素目として持つことがある(旧shardや探索なし局面では空)。
+    mode = _policy_target_mode()
+    temperature = _policy_target_temperature()
+    zero_spread = _policy_target_zero_spread()
+    value_lambda = _value_target_lambda()
+    soft_target = (
+        np.zeros((len(batch), max_actions), dtype=np.float32)
+        if mode == "completed_q"
+        else None
+    )
+    # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1
+    # 打った手ごとの重み = 最終結果 × 割引の最終値^(残りターン数 / 総ターン数)。
+    # 常に組み立てて配列の並びを固定する(cross_entropy時は使われない)。
+    discount_final = _policy_discount_final()
+    value_discount_final = _value_target_discount_final()
+    policy_weight = np.zeros(len(batch), dtype=np.float32)
 
     for row_index, sample in enumerate(batch):
         (
@@ -161,7 +341,18 @@ def _build_batch_arrays(
             dec_offset,
             chosen_index,
             value,
-        ) = sample
+        ) = sample[:8]
+        completed_q = sample[8] if len(sample) > 8 else ()
+        search_value = sample[9] if len(sample) > 9 else None
+        # 割引の基準は「その試合の最終結果」なので、value教師の混合より前に取る。
+        outcome = float(value)
+        remaining_fraction = float(sample[10]) if len(sample) > 10 else 0.0
+        policy_weight[row_index] = outcome * (discount_final**remaining_fraction)
+        # SELFPLAY_VALUE_TARGET_DISCOUNT_PATCH_V1: valueの教師も同じ形で割り引く。
+        if value_discount_final < 1.0:
+            value = outcome * (value_discount_final**remaining_fraction)
+        if value_lambda < 1.0 and search_value is not None:
+            value = value_lambda * value + (1.0 - value_lambda) * float(search_value)
         enc_count = len(encoder_index)
         encoder_index.extend(enc_index)
         encoder_value.extend(enc_value)
@@ -177,8 +368,26 @@ def _build_batch_arrays(
         mask[row_index, : len(dec_offset)] = True
         label_value.append(value)
         chosen_indices.append(chosen_index)
+        if soft_target is not None:
+            n_candidates = len(dec_offset)
+            flat = (
+                len(completed_q) > 0
+                and max(completed_q) == min(completed_q)
+                and zero_spread == "hard"
+            )
+            if len(completed_q) == n_candidates and n_candidates > 0 and not flat:
+                scaled = np.asarray(completed_q, dtype=np.float32) / temperature
+                weights = np.exp(scaled - scaled.max())
+                total = float(weights.sum())
+                if total > 0.0:
+                    soft_target[row_index, :n_candidates] = weights / total
+                else:
+                    soft_target[row_index, chosen_index] = 1.0
+            else:
+                # 探索が走らなかった局面や旧shardはhard labelへ退避する。
+                soft_target[row_index, chosen_index] = 1.0
 
-    return (
+    arrays = [
         np.asarray(encoder_index, dtype=np.int32),
         np.asarray(encoder_value, dtype=np.float32),
         np.asarray(encoder_offset, dtype=np.int32),
@@ -188,7 +397,11 @@ def _build_batch_arrays(
         mask,
         np.asarray(label_value, dtype=np.float32).reshape(-1, 1),
         np.asarray(chosen_indices, dtype=np.int64),
-    )
+        policy_weight,
+    ]
+    if soft_target is not None:
+        arrays.append(soft_target)
+    return tuple(arrays)
 
 
 def _central_loader_worker(
@@ -258,6 +471,109 @@ def _accumulate_tensor(
     return detached if current is None else current + detached
 
 
+def _training_state_path(
+    output_model: Path,
+    initial_model: Path,
+) -> Path | None:
+    """stateful版(train_imitation_stateful.py)と同じstateファイル位置を返す。
+
+    SELFPLAY_TRAINING_STATE_ROOTが未設定なら None を返し、従来どおり
+    optimizer状態を持ち越さない挙動のままにする(過去実験の再現用)。
+    """
+    state_root = os.environ.get("SELFPLAY_TRAINING_STATE_ROOT")
+    if not state_root:
+        return None
+    text = f"{output_model} {initial_model}"
+    match = re.search(r"cluster_\d+", text)
+    if not match:
+        return None
+    role = (
+        "opponent"
+        if "opponent_model" in text or "opponent" in Path(output_model).stem
+        else "self"
+    )
+    return Path(state_root) / match.group(0) / role / "training_state.pth"
+
+
+def _load_training_state(
+    torch,
+    optimizer,
+    *,
+    base_lr: float,
+    output_model: Path,
+    initial_model: Path,
+    device,
+    log_file: Path,
+) -> tuple[object, int, Path | None]:
+    """AdamW/schedulerの状態を前回更新から引き継ぐ。
+
+    AdamWのモーメントの引き継ぎと、学習率の減衰は独立している。既定の
+    SELFPLAY_LR_GAMMA=1.0では学習率は減衰せず、モーメントの引き継ぎだけが働く。
+    減衰は別セッションの実測で 3e-4→8.15e-5(73%減)まで動かしても
+    −2.33pt(p=0.20)と改善が出なかったため、既定では無効にしている。
+    """
+    gamma = float(os.environ.get("SELFPLAY_LR_GAMMA", "1.0"))
+    min_lr = float(os.environ.get("SELFPLAY_MIN_LR", "3e-5"))
+    min_factor = min_lr / base_lr if base_lr > 0 else 1.0
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        lr_lambda=lambda step: max(min_factor, gamma**step),
+    )
+    state_path = _training_state_path(output_model, initial_model)
+    global_step = 0
+    if state_path is not None and state_path.exists():
+        state = torch.load(state_path, map_location=device)
+        optimizer.load_state_dict(state["optimizer"])
+        scheduler.load_state_dict(state["scheduler"])
+        global_step = int(state.get("global_step", 0))
+        message = (
+            f"loaded training state: {state_path} global_step={global_step} "
+            f"lr={optimizer.param_groups[0]['lr']:.8g}\n"
+        )
+    elif state_path is not None:
+        message = f"new training state: {state_path}\n"
+    else:
+        message = "training state disabled (SELFPLAY_TRAINING_STATE_ROOT未設定)\n"
+    with log_file.open("a", encoding="utf-8") as file:
+        file.write(message)
+    return scheduler, global_step, state_path
+
+
+def _save_training_state(
+    torch,
+    state: dict,
+    *,
+    gamma: float | None = None,
+    min_lr: float | None = None,
+) -> None:
+    state_path = state.get("state_path")
+    if state_path is None:
+        return
+    payload = {
+        "optimizer": state["optimizer"].state_dict(),
+        "scheduler": state["scheduler"].state_dict(),
+        "global_step": int(state["global_step"]),
+        "base_lr": float(state["base_lr"]),
+        "gamma": (
+            gamma
+            if gamma is not None
+            else float(os.environ.get("SELFPLAY_LR_GAMMA", "1.0"))
+        ),
+        "min_lr": (
+            min_lr
+            if min_lr is not None
+            else float(os.environ.get("SELFPLAY_MIN_LR", "3e-5"))
+        ),
+    }
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = state_path.with_name(f".{state_path.name}.{os.getpid()}.tmp")
+    try:
+        torch.save(payload, temporary)
+        os.replace(temporary, state_path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _run_central_device_training(
     jobs: list[TrainingJob],
     *,
@@ -282,7 +598,17 @@ def _run_central_device_training(
     select_device = runtime["select_device"]
     max_actions = int(runtime["MAX_ACTIONS"])
     device = select_device(device_name)
-    loss_fn_value = torch.nn.HuberLoss(delta=0.2)
+    # SELFPLAY_VALUE_LOSS_PATCH_V1: 既定は従来どおり HuberLoss(delta=0.2) の重み1.0。
+    loss_fn_value, value_loss_weight = _build_value_loss(torch)
+    # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1
+    policy_loss_kind = _policy_loss_kind()
+    weight_opponent_jobs = _policy_weight_opponent_jobs()
+    if policy_loss_kind == "outcome_weighted":
+        print(
+            f"policy loss: outcome_weighted (discount_final={_policy_discount_final()}, "
+            f"opponent_jobs={'weighted' if weight_opponent_jobs else 'cross_entropy'})",
+            flush=True,
+        )
 
     worker_count = min(workers, len(jobs))
     assignments = assign_training_jobs(jobs, worker_count)
@@ -320,14 +646,39 @@ def _run_central_device_training(
             tensors = [torch.from_numpy(array).to(device) for array in arrays]
             optimizer.zero_grad(set_to_none=True)
             out_enc, out_dec = model(*tensors[:6])
-            mask_tensor, label_value_tensor, chosen_index_tensor = tensors[6:]
+            mask_tensor, label_value_tensor, chosen_index_tensor = tensors[6:9]
+            policy_weight_tensor = tensors[9]
+            soft_target_tensor = tensors[10] if len(tensors) > 10 else None
             loss_value = loss_fn_value(out_enc, label_value_tensor)
             masked_logits = out_dec.masked_fill(~mask_tensor, float("-inf"))
-            loss_policy = functional.cross_entropy(
-                masked_logits,
-                chosen_index_tensor,
-            )
-            loss = loss_value + loss_policy
+            if policy_loss_kind == "outcome_weighted" and (
+                weight_opponent_jobs or not str(job_name).endswith("_opponent")
+            ):
+                # SELFPLAY_OUTCOME_WEIGHTED_POLICY_PATCH_V1
+                # 打った手の対数確率に「最終結果 × 残りターン数に応じた割引」を掛ける。
+                # 重みが負(負け試合)なら、その手の確率を下げる勾配になる。
+                log_probabilities = torch.log_softmax(masked_logits, dim=1)
+                chosen_log_probability = log_probabilities.gather(
+                    1, chosen_index_tensor.unsqueeze(1)
+                ).squeeze(1)
+                loss_policy = -(
+                    policy_weight_tensor * chosen_log_probability
+                ).mean()
+            elif soft_target_tensor is None:
+                loss_policy = functional.cross_entropy(
+                    masked_logits,
+                    chosen_index_tensor,
+                )
+            else:
+                # maskされた位置のlog_probは-infなので 0*-inf=nan を避けて0で埋める。
+                log_probabilities = torch.log_softmax(masked_logits, dim=1)
+                log_probabilities = log_probabilities.masked_fill(
+                    ~mask_tensor, 0.0
+                )
+                loss_policy = -(
+                    soft_target_tensor * log_probabilities
+                ).sum(dim=1).mean()
+            loss = value_loss_weight * loss_value + loss_policy
             prepared.append(
                 (
                     state,
@@ -353,6 +704,8 @@ def _run_central_device_training(
         ) in prepared:
             loss.backward()
             state["optimizer"].step()
+            state["scheduler"].step()
+            state["global_step"] = int(state["global_step"]) + 1
             stats = state["stats"]
             stats["batches"] += 1
             stats["total_seen"] += int(chosen_index_tensor.shape[0])
@@ -396,6 +749,8 @@ def _run_central_device_training(
                     "loss_policy",
                     "train_accuracy",
                     "val_accuracy",
+                    "learning_rate",
+                    "global_step",
                     "elapsed_seconds",
                 ]
                 with metrics_file.open("w", newline="", encoding="utf-8") as file:
@@ -410,13 +765,32 @@ def _run_central_device_training(
                     torch.load(job.initial_model, map_location=device)
                 )
                 model.train()
+                optimizer = torch.optim.AdamW(
+                    model.parameters(),
+                    lr=learning_rate,
+                )
+                # SELFPLAY_TRAINING_STATE_PATCH_V1: この中央device経路は
+                # --train-script のmain()を実行しないため、stateful版が持つ
+                # AdamW state継続とlr schedulerが従来まったく効いていなかった
+                # (更新ごとに新しいoptimizer・lr固定)。stateful版と同じ
+                # 環境変数・同じstateファイル形式でここでも継続させる。
+                scheduler, global_step, state_path = _load_training_state(
+                    torch,
+                    optimizer,
+                    base_lr=learning_rate,
+                    output_model=output_model,
+                    initial_model=job.initial_model,
+                    device=device,
+                    log_file=log_file,
+                )
                 states[job.name] = {
                     "job": job,
                     "model": model,
-                    "optimizer": torch.optim.AdamW(
-                        model.parameters(),
-                        lr=learning_rate,
-                    ),
+                    "optimizer": optimizer,
+                    "scheduler": scheduler,
+                    "global_step": global_step,
+                    "state_path": state_path,
+                    "base_lr": learning_rate,
                     "output_model": output_model,
                     "metrics_file": metrics_file,
                     "log_file": log_file,
@@ -463,6 +837,9 @@ def _run_central_device_training(
                 else:
                     loss = loss_value = loss_policy = accuracy = 0.0
                 elapsed = time.perf_counter() - float(state["started"])
+                current_lr = float(
+                    state["optimizer"].param_groups[0]["lr"]
+                )
                 row = {
                     "epoch": epoch,
                     "batches": batches,
@@ -471,6 +848,8 @@ def _run_central_device_training(
                     "loss_policy": loss_policy,
                     "train_accuracy": accuracy,
                     "val_accuracy": 0.0,
+                    "learning_rate": current_lr,
+                    "global_step": int(state["global_step"]),
                     "elapsed_seconds": elapsed,
                 }
                 with state["metrics_file"].open(
@@ -485,7 +864,10 @@ def _run_central_device_training(
                         f"epoch={epoch} loss={loss:.4f} "
                         f"loss_value={loss_value:.4f} "
                         f"loss_policy={loss_policy:.4f} "
-                        f"train_acc={accuracy:.3f} elapsed={elapsed:.1f}s\n"
+                        f"train_acc={accuracy:.3f} "
+                        f"lr={current_lr:.8g} "
+                        f"global_step={int(state['global_step'])} "
+                        f"elapsed={elapsed:.1f}s\n"
                     )
                 state["trained_samples"] += int(stats["total_seen"])
                 state["stats"] = _empty_epoch_stats()
@@ -500,6 +882,9 @@ def _run_central_device_training(
                 )
                 if keep_models:
                     torch.save(model.state_dict(), state["output_model"])
+                # 重み保存後にoptimizer/schedulerを保存する。次の更新は
+                # このstateから続き、lrは全更新を通して減衰し続ける。
+                _save_training_state(torch, state)
                 elapsed = time.perf_counter() - float(state["started"])
                 results.append(
                     {
