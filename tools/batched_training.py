@@ -37,6 +37,10 @@ class BatchedTrainingAgent:
     deck: list[int]
     # 探索木の相手ノード評価に使うモデル（self/opp 二重運用）。None なら model を流用。
     opponent_model: torch.nn.Module | None = None
+    # policy(raw logits)をprior確率へ変換するsoftmax温度。呼び出し側がmodel/opponent_model
+    # 読み込み時にrl_mcts.checkpointから取得した値を渡す(未指定なら自己対戦系の既定10.0)。
+    policy_temperature: float = 10.0
+    opponent_policy_temperature: float | None = None
 
 
 @dataclass
@@ -125,6 +129,8 @@ def collect_batched_training_samples(
             random_policy=False,
             opponent_model=opp_model,
             opponent_model_key=opp_key,
+            policy_temperature=agent.policy_temperature,
+            opponent_policy_temperature=agent.opponent_policy_temperature,
         )
         samples[agent.name] = []
         opp_samples[agent.name] = []

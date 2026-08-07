@@ -59,8 +59,15 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
+from rl_mcts.checkpoint import load_state_dict_and_temperature, save_checkpoint  # noqa: E402
 from rl_mcts.mcts import MAX_ACTIONS  # noqa: E402
 from rl_mcts.model import create_model  # noqa: E402
+
+# このスクリプトはpolicyをcross_entropy分類で学習する(模倣学習regime)。
+# 推論側(rl_mcts.mcts)がpolicy(raw logits)をprior確率へ変換するsoftmax温度は
+# 自己対戦学習(HuberLoss回帰)向けの既定値(10.0)とは別に、この分類regimeに
+# 合った値を保存済み重みへ埋め込む(rl_mcts.checkpoint参照)。
+POLICY_TEMPERATURE = 1.0
 
 
 def load_shard(path: Path) -> list[tuple]:
@@ -348,7 +355,8 @@ def main() -> None:
 
     model = create_model().to(device)
     if args.initial_model and args.initial_model.exists():
-        model.load_state_dict(torch.load(args.initial_model, map_location=device))
+        state_dict, _ = load_state_dict_and_temperature(args.initial_model, map_location=device)
+        model.load_state_dict(state_dict)
         print(f"loaded initial weights: {args.initial_model}")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
@@ -401,9 +409,9 @@ def main() -> None:
                 }
             )
 
-        torch.save(model.state_dict(), args.output_model)
+        save_checkpoint(model, args.output_model, policy_temperature=POLICY_TEMPERATURE)
 
-    print(f"saved model: {args.output_model}")
+    print(f"saved model: {args.output_model} (policy_temperature={POLICY_TEMPERATURE})")
 
 
 if __name__ == "__main__":

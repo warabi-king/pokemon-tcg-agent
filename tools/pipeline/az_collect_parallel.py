@@ -22,6 +22,7 @@ def _worker(args):
         if p not in sys.path:
             sys.path.insert(0, p)
     import torch
+    from rl_mcts.checkpoint import load_state_dict_and_temperature
     from rl_mcts.model import create_model
     from batched_training import BatchedTrainingAgent, collect_batched_training_samples
 
@@ -33,16 +34,23 @@ def _worker(args):
 
     def _load(pth):
         m = create_model()
-        m.load_state_dict(torch.load(pth, map_location=device))
-        return m
+        state, temperature = load_state_dict_and_temperature(pth, map_location=device)
+        m.load_state_dict(state)
+        # 埋め込み温度が無い(旧形式)重みは自己対戦系の既定値10.0にフォールバック。
+        return m, (10.0 if temperature is None else temperature)
 
-    agents = [
-        BatchedTrainingAgent(
-            name=name, deck=deck,
-            model=_load(self_pth), opponent_model=_load(opp_pth),
+    agents = []
+    for name, self_pth, opp_pth, deck in agent_specs:
+        model, policy_temperature = _load(self_pth)
+        opponent_model, opponent_policy_temperature = _load(opp_pth)
+        agents.append(
+            BatchedTrainingAgent(
+                name=name, deck=deck,
+                model=model, opponent_model=opponent_model,
+                policy_temperature=policy_temperature,
+                opponent_policy_temperature=opponent_policy_temperature,
+            )
         )
-        for (name, self_pth, opp_pth, deck) in agent_specs
-    ]
     out = collect_batched_training_samples(
         agents, pairings, games=params["games"],
         canonical_src=Path(canonical_src), device=device,

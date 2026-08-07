@@ -34,8 +34,13 @@ def preprocess(
     label: str = "",
     max_episodes: int | None = None,
     verbose: bool = True,
+    value_decay: float = 1.0,
 ) -> int:
-    """episodes（ディレクトリ or .zip の列）を前処理して output_dir にシャードを書く。"""
+    """episodes（ディレクトリ or .zip の列）を前処理して output_dir にシャードを書く。
+
+    value_decayはimitation_data.extract_samples_from_episode参照
+    (終局からの距離に応じてvalue教師を指数減衰させる。既定1.0=無効)。
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     buffer: list = []
@@ -59,7 +64,7 @@ def preprocess(
         if max_episodes is not None and episode_count >= max_episodes:
             break
         try:
-            samples = extract_samples_from_episode(data, deck_filter=deck_filter)
+            samples = extract_samples_from_episode(data, deck_filter=deck_filter, value_decay=value_decay)
         except Exception:
             samples = []
         buffer.extend(samples)

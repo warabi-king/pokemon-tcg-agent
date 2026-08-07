@@ -270,6 +270,9 @@ class _Runtime:
     get_decoder_input: Any
     create_model: Any
     search_step_timing: Any
+    # rl_mcts.checkpoint.load_state_dict_and_temperature (agents/rl_mcts向けに
+    # 追加したモジュール)。他agentの独立コピーには無い場合があるためNoneもありうる。
+    load_state_dict_and_temperature: Any = None
 
 
 @dataclass
@@ -316,6 +319,11 @@ class _Participant:
     random_policy: bool
     opponent_model: torch.nn.Module | None = None
     opponent_model_key: str | None = None
+    # policy(raw logits)をprior確率へ変換するsoftmax温度。学習regime(模倣=1.0付近,
+    # 自己対戦=既定10.0)ごとに重みファイルへ埋め込まれた値(rl_mcts.checkpoint)を使う。
+    # 埋め込みが無い旧形式チェックポイントは自己対戦系の既定値10.0にフォールバックする。
+    policy_temperature: float = 10.0
+    opponent_policy_temperature: float | None = None
 
 
 @dataclass
@@ -709,8 +717,13 @@ def _load_runtime(agent_src: Path) -> _Runtime:
         from rl_mcts.features import get_decoder_input, get_encoder_input
         if torch is None:
             create_model = None
+            load_state_dict_and_temperature = None
         else:
             from rl_mcts.model import create_model
+            try:
+                from rl_mcts.checkpoint import load_state_dict_and_temperature
+            except ImportError:
+                load_state_dict_and_temperature = None
     finally:
         try:
             sys.path.remove(str(resolved))
@@ -775,6 +788,7 @@ def _load_runtime(agent_src: Path) -> _Runtime:
         get_decoder_input=get_decoder_input,
         create_model=create_model,
         search_step_timing=timing,
+        load_state_dict_and_temperature=load_state_dict_and_temperature,
     )
 
 
@@ -798,18 +812,27 @@ def _load_participants(
 ) -> dict[str, _Participant]:
     participants: dict[str, _Participant] = {}
     model_cache: dict[str, torch.nn.Module] = {}
+    temperature_cache: dict[str, float] = {}
 
-    def load_model(model_path: Path) -> tuple[str, torch.nn.Module | None]:
+    def load_model(model_path: Path) -> tuple[str, torch.nn.Module | None, float]:
         model_key = str(model_path.resolve())
         model = model_cache.get(model_key) if load_models else None
         if load_models and model is None:
             model = runtime.create_model()
-            state = torch.load(model_path, map_location=torch.device("cpu"))
+            temperature = None
+            if runtime.load_state_dict_and_temperature is not None:
+                state, temperature = runtime.load_state_dict_and_temperature(
+                    model_path, map_location=torch.device("cpu")
+                )
+            else:
+                state = torch.load(model_path, map_location=torch.device("cpu"))
             model.load_state_dict(state)
             model.eval()
             model.to(device)
             model_cache[model_key] = model
-        return model_key, model
+            # 埋め込み温度が無い(旧形式)重みは自己対戦系の既定値10.0にフォールバック。
+            temperature_cache[model_key] = 10.0 if temperature is None else temperature
+        return model_key, model, temperature_cache.get(model_key, 10.0)
 
     for spec in specs:
         agent_path = Path(spec.agent_path).resolve()
@@ -819,13 +842,16 @@ def _load_participants(
         model_path = agent_path.parent / "model.pth"
 
         if model_path.exists():
-            model_key, model = load_model(model_path)
+            model_key, model, policy_temperature = load_model(model_path)
             opponent_model_path = agent_path.parent / "opponent_model.pth"
             if opponent_model_path.exists():
-                opponent_model_key, opponent_model = load_model(opponent_model_path)
+                opponent_model_key, opponent_model, opponent_policy_temperature = load_model(
+                    opponent_model_path
+                )
             else:
                 # 別学習済みcheckpointが用意されるまでは従来modelへfallbackする。
                 opponent_model_key, opponent_model = model_key, model
+                opponent_policy_temperature = policy_temperature
             participants[spec.name] = _Participant(
                 name=spec.name,
                 deck=deck,
@@ -834,6 +860,8 @@ def _load_participants(
                 random_policy=False,
                 opponent_model=opponent_model,
                 opponent_model_key=opponent_model_key,
+                policy_temperature=policy_temperature,
+                opponent_policy_temperature=opponent_policy_temperature,
             )
         elif _is_random_agent(agent_path):
             participants[spec.name] = _Participant(
@@ -1104,6 +1132,19 @@ def _evaluation_model(request: _EvalRequest) -> torch.nn.Module:
     return model
 
 
+def _evaluation_temperature(request: _EvalRequest) -> float:
+    """このリクエストを評価したモデル(_evaluation_modelと同じ判定)に対応する
+    policy_temperatureを選ぶ(_evaluation_modelと選択ロジックを揃えること)。"""
+    participant = request.context.participant
+    if request.model_key == participant.opponent_model_key:
+        return (
+            participant.policy_temperature
+            if participant.opponent_policy_temperature is None
+            else participant.opponent_policy_temperature
+        )
+    return participant.policy_temperature
+
+
 def _prepare_node(
     runtime: _Runtime,
     context: _SearchContext,
@@ -1354,8 +1395,16 @@ def _commit_evaluation_rows(
         request.node.value = propagated
         request.node.backprop(propagated)
 
+        # tanhで±1に制限されなくなったためlogitのスケールが理論上無限になりうる。
+        # expのオーバーフローを避けるため最大値を引いてから指数化する
+        # (正規化するprobability_sumに対しては定数シフトなので結果は変わらない)。
+        temperature = _evaluation_temperature(request)
+        max_logit = max(
+            (float(policy_row[index]) for index in range(len(request.actions))),
+            default=0.0,
+        )
         probabilities = [
-            math.exp(float(policy_row[index]) * 10.0)
+            math.exp((float(policy_row[index]) - max_logit) * temperature)
             for index in range(len(request.actions))
         ]
         probability_sum = sum(probabilities)

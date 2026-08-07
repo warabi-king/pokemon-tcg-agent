@@ -92,7 +92,7 @@ def run_phase0(root: Path | None = None) -> Path:
         preprocess_all(
             sources, shards_root, reps=agents,
             threshold=config.SIM_THRESHOLD, shard_size=config.SHARD_SIZE,
-            workers=config.WORKERS,
+            workers=config.WORKERS, value_decay=config.VALUE_DECAY,
         )
         preprocess_done.write_text(
             json.dumps({

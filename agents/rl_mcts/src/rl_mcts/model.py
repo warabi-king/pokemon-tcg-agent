@@ -118,7 +118,13 @@ class MyModel(torch.nn.Module):
             p = layer(p, encoder_out)
         p = self.decoder_fc(p)
         p = p.transpose(0, 1).view(batch_size, -1)
-        p = torch.tanh(p)
+        # policyは意図的にtanhをかけない(raw logits)。
+        # 模倣学習(cross_entropy)は非有界logitを前提とする分類損失であり、
+        # tanhで±1に制限すると上位候補手が容易に飽和して同値化し、
+        # 手同士の優劣情報が消える(推論側のexp(policy*temperature)が
+        # 実質one-hotになりMCTSのPUCT探索項を無効化する)。
+        # 自己対戦(Huber回帰、教師はclamp(±1)された小さいQ優位度)側は
+        # 目標値自体が小さいため、tanhが無くても実質的な挙動は変わらない。
         return v, p
 
 

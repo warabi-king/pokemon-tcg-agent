@@ -20,9 +20,15 @@ import torch  # noqa: E402
 
 from cg.api import to_observation_class  # noqa: E402
 from cg.game import battle_finish, battle_select, battle_start  # noqa: E402
+from rl_mcts.checkpoint import load_state_dict_and_temperature, save_checkpoint  # noqa: E402
 from rl_mcts.deck import read_deck_csv  # noqa: E402
-from rl_mcts.mcts import LearnInput, LearnSample, MAX_ACTIONS, mcts_agent  # noqa: E402
+from rl_mcts.mcts import DEFAULT_POLICY_TEMPERATURE, LearnInput, LearnSample, MAX_ACTIONS, mcts_agent  # noqa: E402
 from rl_mcts.model import create_model  # noqa: E402
+
+# このスクリプトはpolicyをHuberLossでMCTSのQ優位度(clamp±1)に回帰する
+# (自己対戦学習regime)。DEFAULT_POLICY_TEMPERATURE(=10.0)がこのregime向けの
+# 既定値なので、そのまま埋め込んで保存する(rl_mcts.checkpoint参照)。
+POLICY_TEMPERATURE = DEFAULT_POLICY_TEMPERATURE
 
 
 @dataclass
@@ -405,10 +411,10 @@ def main() -> None:
         model_b = create_model().to(device)
         # load initial weights if provided
         if args.init_model and args.init_model.exists():
-            state = torch.load(args.init_model, map_location=device)
+            state, _ = load_state_dict_and_temperature(args.init_model, map_location=device)
             model_a.load_state_dict(state)
         if args.opponent_model and args.opponent_model.exists():
-            state = torch.load(args.opponent_model, map_location=device)
+            state, _ = load_state_dict_and_temperature(args.opponent_model, map_location=device)
             model_b.load_state_dict(state)
 
         opt_a = torch.optim.AdamW(model_a.parameters(), lr=args.lr)
@@ -431,8 +437,8 @@ def main() -> None:
             # save checkpoints
             cp_a = ckpt_a / f"model_{iteration}.pth"
             cp_b = ckpt_b / f"model_{iteration}.pth"
-            torch.save(model_a.state_dict(), cp_a)
-            torch.save(model_b.state_dict(), cp_b)
+            save_checkpoint(model_a, cp_a, policy_temperature=POLICY_TEMPERATURE)
+            save_checkpoint(model_b, cp_b, policy_temperature=POLICY_TEMPERATURE)
             print(f"Checkpoint saved: {cp_a}, {cp_b}")
 
             # evaluation vs random
@@ -514,8 +520,8 @@ def main() -> None:
             )
 
         # save final models
-        torch.save(model_a.state_dict(), args.output_model)
-        torch.save(model_b.state_dict(), args.opponent_output)
+        save_checkpoint(model_a, args.output_model, policy_temperature=POLICY_TEMPERATURE)
+        save_checkpoint(model_b, args.opponent_output, policy_temperature=POLICY_TEMPERATURE)
         print(f"Final models saved: {args.output_model}, {args.opponent_output}")
         return
     metrics_path = args.metrics_file or args.log_dir / "train_metrics.csv"
@@ -523,7 +529,7 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = create_model().to(device)
     if args.init_model and args.init_model.exists():
-        state = torch.load(args.init_model, map_location=device)
+        state, _ = load_state_dict_and_temperature(args.init_model, map_location=device)
         model.load_state_dict(state)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
@@ -534,7 +540,7 @@ def main() -> None:
     for iteration in range(args.iterations):
         started = time.time()
         checkpoint_path = args.checkpoint_dir / f"model_{iteration}.pth"
-        torch.save(model.state_dict(), checkpoint_path)
+        save_checkpoint(model, checkpoint_path, policy_temperature=POLICY_TEMPERATURE)
         print(f"Checkpoint saved: {checkpoint_path}")
 
         win = lose = draw = 0
@@ -590,7 +596,7 @@ def main() -> None:
         )
         print(f"Metrics appended: {metrics_path}")
 
-    torch.save(model.state_dict(), args.output_model)
+    save_checkpoint(model, args.output_model, policy_temperature=POLICY_TEMPERATURE)
     print(f"Final model saved: {args.output_model}")
 
     if args.plot:

@@ -30,18 +30,24 @@ import torch
 import config
 from deck_utils import load_agents, read_deck_csv, write_deck_csv
 
+from rl_mcts.checkpoint import load_state_dict_and_temperature, save_checkpoint  # noqa: E402
 from rl_mcts.model import create_model  # noqa: E402
-from rl_mcts.mcts import LearnInput, MAX_ACTIONS  # noqa: E402
+from rl_mcts.mcts import DEFAULT_POLICY_TEMPERATURE, LearnInput, MAX_ACTIONS  # noqa: E402
 from run_train_round_robin import train_one_iteration_local  # noqa: E402
 from az_collect_parallel import collect_parallel  # noqa: E402
 
 _API_MOD = {"LearnInput": LearnInput, "MAX_ACTIONS": MAX_ACTIONS}
 
+# train_one_iteration_local はHuberLossでMCTSのQ優位度(clamp±1)に回帰する
+# 自己対戦学習regime。DEFAULT_POLICY_TEMPERATURE(=10.0)がこのregime向けの既定値。
+POLICY_TEMPERATURE = DEFAULT_POLICY_TEMPERATURE
+
 
 def _load_model(path: Path, device: torch.device):
     model = create_model()
     if Path(path).exists():
-        model.load_state_dict(torch.load(path, map_location=device))
+        state_dict, _ = load_state_dict_and_temperature(path, map_location=device)
+        model.load_state_dict(state_dict)
     return model.to(device)
 
 
@@ -75,7 +81,7 @@ def _train_side(model, samples, out_path: Path, device: torch.device,
             f.write(f"{ep},{stats.batches},{stats.loss:.6f},"
                     f"{stats.loss_value:.6f},{stats.loss_policy:.6f}\n")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), out_path)
+    save_checkpoint(model, out_path, policy_temperature=POLICY_TEMPERATURE)
     return True
 
 

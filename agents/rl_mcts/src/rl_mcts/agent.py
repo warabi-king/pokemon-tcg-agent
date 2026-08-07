@@ -5,8 +5,9 @@ from pathlib import Path
 import torch
 
 from cg.api import Observation, to_observation_class
+from rl_mcts.checkpoint import load_state_dict_and_temperature
 from rl_mcts.deck import read_deck_csv
-from rl_mcts.mcts import mcts_agent
+from rl_mcts.mcts import DEFAULT_POLICY_TEMPERATURE, mcts_agent
 from rl_mcts.model import MyModel, create_model
 from rl_mcts.opponent_hand import OpponentBelief
 
@@ -23,6 +24,15 @@ class RlMctsAgent:
     残存確率を補正したbelief_samples個のhidden-state粒子として具体化する
     (rl_mcts.opponent_hand.OpponentBelief)。粒子ごとに独立した完全情報MCTSを
     行い、root訪問数を合算して最終手を選ぶ。
+
+    policy_temperature/opponent_policy_temperatureは、model/opponent_modelの
+    policy出力をPUCTのprior確率へ変換するsoftmax温度(学習regimeで出力スケールが
+    異なるため必要)。省略時(None)は、rl_mcts.checkpoint.save_checkpoint()で
+    重みファイルに埋め込まれた値を自動で使う。埋め込みが無い旧形式の重み
+    (gen_000〜gen_010等、このパラメータ導入前に保存された全チェックポイント)は
+    すべて自己対戦学習(HuberLoss回帰)由来なので、DEFAULT_POLICY_TEMPERATURE
+    (=10.0)へフォールバックする。模倣学習(cross_entropy)由来の重みを
+    旧形式のまま使う場合は、policy_temperature=1.0を明示すること。
     """
 
     def __init__(
@@ -31,12 +41,18 @@ class RlMctsAgent:
         search_count: int = 50,
         opponent_model_path: Path | None = None,
         belief_samples: int = 3,
+        policy_temperature: float | None = None,
+        opponent_policy_temperature: float | None = None,
     ) -> None:
         src_root = Path(__file__).resolve().parents[1]
         self.model_path = model_path or src_root / "model.pth"
         self.opponent_model_path = opponent_model_path
         self.search_count = search_count
         self.belief_samples = belief_samples
+        self._policy_temperature_override = policy_temperature
+        self._opponent_policy_temperature_override = opponent_policy_temperature
+        self.policy_temperature: float = DEFAULT_POLICY_TEMPERATURE
+        self.opponent_policy_temperature: float | None = None
         self.model: MyModel | None = None
         self.opponent_model: MyModel | None = None
         self.belief: OpponentBelief | None = None
@@ -67,6 +83,8 @@ class RlMctsAgent:
                 search_count=self.search_count,
                 opponent_model=opponent_model,
                 determinizations=determinizations,
+                policy_temperature=self.policy_temperature,
+                opponent_policy_temperature=self.opponent_policy_temperature,
             )
         return selected
 
@@ -77,7 +95,10 @@ class RlMctsAgent:
         return self.belief
 
     def get_model(self) -> MyModel:
-        """学習済みモデルを遅延読み込みする。"""
+        """学習済みモデルを遅延読み込みする。あわせてpolicy_temperatureを確定する
+        (明示指定があればそれを優先、無ければ重みファイルに埋め込まれた値、
+        それも無ければDEFAULT_POLICY_TEMPERATUREへフォールバック)。
+        """
         if self.model is not None:
             return self.model
         if not self.model_path.exists():
@@ -86,15 +107,26 @@ class RlMctsAgent:
                 f"{self.model_path}"
             )
 
+        state_dict, embedded_temperature = load_state_dict_and_temperature(self.model_path)
         model = create_model()
-        state = torch.load(self.model_path, map_location=torch.device("cpu"))
-        model.load_state_dict(state)
+        model.load_state_dict(state_dict)
         model.eval()
         self.model = model
+        if self._policy_temperature_override is not None:
+            self.policy_temperature = self._policy_temperature_override
+        elif embedded_temperature is not None:
+            self.policy_temperature = embedded_temperature
+        else:
+            self.policy_temperature = DEFAULT_POLICY_TEMPERATURE
         return self.model
 
     def get_opponent_model(self) -> MyModel | None:
-        """相手用モデルを遅延読み込みする。未指定ならNone(=自分のモデルを使う)を返す。"""
+        """相手用モデルを遅延読み込みする。未指定ならNone(=自分のモデルを使う)を返す。
+
+        opponent_policy_temperatureの確定規則はget_model()のpolicy_temperatureと同じ。
+        ただし明示指定も埋め込みも無い場合はNoneのままにし、mcts_agent側で
+        policy_temperature(自分用)と同じ値へフォールバックさせる。
+        """
         if self.opponent_model_path is None:
             return None
         if self.opponent_model is not None:
@@ -102,9 +134,15 @@ class RlMctsAgent:
         if not self.opponent_model_path.exists():
             raise FileNotFoundError(f"opponent_model_path が見つかりません: {self.opponent_model_path}")
 
+        state_dict, embedded_temperature = load_state_dict_and_temperature(self.opponent_model_path)
         model = create_model()
-        state = torch.load(self.opponent_model_path, map_location=torch.device("cpu"))
-        model.load_state_dict(state)
+        model.load_state_dict(state_dict)
         model.eval()
         self.opponent_model = model
+        if self._opponent_policy_temperature_override is not None:
+            self.opponent_policy_temperature = self._opponent_policy_temperature_override
+        elif embedded_temperature is not None:
+            self.opponent_policy_temperature = embedded_temperature
+        else:
+            self.opponent_policy_temperature = None
         return self.opponent_model

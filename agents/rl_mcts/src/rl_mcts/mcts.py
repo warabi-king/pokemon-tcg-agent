@@ -15,6 +15,15 @@ from rl_mcts.opponent_hand import HiddenCards
 SEARCH_COUNT = 10
 MAX_ACTIONS = 64
 
+# policyヘッド(raw logits)をPUCTのprior確率へ変換するsoftmax温度の既定値。
+# 自己対戦学習(HuberLossでMCTSのQ優位度=clamp(±1)された小さい値を回帰)が
+# 出力するlogitのスケールに合わせた値。模倣学習(cross_entropy分類)の重みは
+# スケールが大きく異なるため、rl_mcts.checkpoint に温度を埋め込んで保存し
+# (policy_temperature=1.0)、RlMctsAgentが読み込み時に自動で切り替える。
+# 温度が埋め込まれていない旧形式チェックポイント(gen_000〜gen_010等)は
+# すべて自己対戦系の重みなので、この既定値へフォールバックする。
+DEFAULT_POLICY_TEMPERATURE = 10.0
+
 
 class LearnSample:
     """学習データ1件。"""
@@ -133,12 +142,19 @@ def create_node(
     your_deck: list[int],
     model: MyModel,
     opponent_model: MyModel | None = None,
+    policy_temperature: float = DEFAULT_POLICY_TEMPERATURE,
+    opponent_policy_temperature: float | None = None,
 ) -> tuple[Node, LearnSample | None]:
     """探索状態からMCTSノードを作り、必要ならNN評価と学習サンプルを作る。
 
     opponent_modelを指定すると、相手の手番のノード評価にはmodelの代わりに
     opponent_modelを使う(「相手はこう指すはず」という専用モデルで相手の応手を
     シミュレートする)。省略時(None)はmodelを両者に使う、これまでと同じ挙動になる。
+
+    policy_temperature/opponent_policy_temperatureは、それぞれmodel/opponent_model
+    が出力するpolicy(raw logits)をprior確率へ変換するsoftmax温度。学習regimeが
+    違えばlogitのスケールも違うため、評価に使ったモデル(active_model)に対応する
+    温度を選ぶ。opponent_policy_temperature省略時はpolicy_temperatureと同じ値を使う。
     """
     node = Node(parent, search_state)
 
@@ -160,7 +176,17 @@ def create_node(
         node.backprop(node.value)
         return node, None
 
-    active_model = model if state.yourIndex == your_index else (opponent_model or model)
+    if state.yourIndex == your_index:
+        active_model = model
+        active_temperature = policy_temperature
+    elif opponent_model is not None:
+        active_model = opponent_model
+        active_temperature = (
+            policy_temperature if opponent_policy_temperature is None else opponent_policy_temperature
+        )
+    else:
+        active_model = model
+        active_temperature = policy_temperature
 
     sv_enc = get_encoder_input(obs, your_deck)
     sv_dec = get_decoder_input(obs, actions)
@@ -171,9 +197,13 @@ def create_node(
     node.value = v
     node.backprop(v)
 
+    # tanhで±1に制限されなくなったためlogitのスケールが理論上無限になりうる。
+    # expのオーバーフローを避けるため、通常のsoftmaxと同様に最大値を引いてから指数化する
+    # (正規化するprob_sumに対しては定数シフトなので結果は変わらない)。
+    max_logit = max(policy) if policy else 0.0
     prob_sum = 0.0
     for i in range(len(policy)):
-        p = math.exp(policy[i] * 10.0)
+        p = math.exp((policy[i] - max_logit) * active_temperature)
         node.children.append(Child(actions[i], p))
         prob_sum += p
     if prob_sum > 0:
@@ -209,6 +239,8 @@ def _run_determinization(
     hidden: HiddenCards,
     search_count: int,
     opponent_model: MyModel | None,
+    policy_temperature: float = DEFAULT_POLICY_TEMPERATURE,
+    opponent_policy_temperature: float | None = None,
 ) -> MctsRun:
     """1つの具体化されたhidden state(粒子)について、通常の完全情報MCTSを行う。"""
     your_index = obs.current.yourIndex
@@ -223,7 +255,10 @@ def _run_determinization(
     )
 
     try:
-        root, sample = create_node(None, search_state, your_index, your_deck, model, opponent_model)
+        root, sample = create_node(
+            None, search_state, your_index, your_deck, model, opponent_model,
+            policy_temperature, opponent_policy_temperature,
+        )
         if not root.children:
             selected = random.sample(list(range(len(obs.select.option))), obs.select.maxCount)
             return MctsRun(sample, root, selected)
@@ -254,7 +289,8 @@ def _run_determinization(
                 if best_child.node is None:
                     next_state = search_step(current.state.searchId, best_child.select)
                     best_child.node, _ = create_node(
-                        current, next_state, your_index, your_deck, model, opponent_model
+                        current, next_state, your_index, your_deck, model, opponent_model,
+                        policy_temperature, opponent_policy_temperature,
                     )
                     break
 
@@ -302,6 +338,8 @@ def mcts_agent(
     search_count: int = SEARCH_COUNT,
     opponent_model: MyModel | None = None,
     determinizations: list[HiddenCards] | None = None,
+    policy_temperature: float = DEFAULT_POLICY_TEMPERATURE,
+    opponent_policy_temperature: float | None = None,
 ) -> tuple[list[int], LearnSample | None]:
     """MCTSで手を選び、root局面の学習サンプルを返す。
 
@@ -313,6 +351,12 @@ def mcts_agent(
     opponent_modelを指定すると、探索木の中で相手の手番のノードだけ
     opponent_modelで評価する(「相手はこう指すはず」という専用モデルを使った
     シミュレーション)。省略時(None)はmodelを両者に使う、これまでと同じ挙動。
+
+    policy_temperature/opponent_policy_temperatureは、それぞれmodel/opponent_model
+    が出力するpolicy(raw logits)をPUCTのprior確率へ変換するsoftmax温度。学習regime
+    (模倣学習=1.0付近、自己対戦学習=既定10.0)によって出力スケールが異なるため、
+    重みを読み込んだ側(RlMctsAgent)がrl_mcts.checkpointに埋め込まれた値から
+    自動で決めて渡すのが基本(手動で呼ぶ場合は明示すること)。
     """
     obs = to_observation_class(obs_dict)
     if obs.select is None:
@@ -320,7 +364,10 @@ def mcts_agent(
 
     particles = determinizations or [_legacy_hidden_cards(obs, your_deck)]
     runs = [
-        _run_determinization(obs, your_deck, model, hidden, search_count, opponent_model)
+        _run_determinization(
+            obs, your_deck, model, hidden, search_count, opponent_model,
+            policy_temperature, opponent_policy_temperature,
+        )
         for hidden in particles
     ]
     if len(runs) == 1:

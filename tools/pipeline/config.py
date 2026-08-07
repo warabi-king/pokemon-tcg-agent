@@ -51,6 +51,11 @@ LR = _float("PIPE_LR", 3e-4)                       # 学習率
 BATCH_SIZE = _int("PIPE_BATCH_SIZE", 128)          # バッチサイズ
 SEARCH_COUNT = _int("PIPE_SEARCH_COUNT", 50)       # 梱包エージェントの MCTS 探索回数
 SIM_THRESHOLD = _float("PIPE_SIM_THRESHOLD", 0.75) # 近いデッキ判定 & Phase0 クラスタ割当のしきい値
+# 模倣学習(Phase0・leagueバックエンド)のvalue教師を、終局からの距離に応じて指数減衰
+# させる係数(imitation_data.extract_samples_from_episode参照)。全局面へ一律で
+# 最終結果(±1)を貼るとvalueヘッドが序盤局面でも飽和しやすいため、既定で
+# PIPE_LAMBDA_VALUE(自己対戦側のTD-λ係数)と同じ0.9を使う。1.0で無効化(旧挙動)。
+VALUE_DECAY = _float("PIPE_VALUE_DECAY", 0.9)
 WARM_START = _int("PIPE_WARM_START", 1)            # 1: 世代間で前世代重みから継続学習
 KEEP_INTERMEDIATE = bool(_int("PIPE_KEEP_INTERMEDIATE", 1))  # 0で中間世代とshards/episodesを消費後に削除
 SHARD_SIZE = _int("PIPE_SHARD_SIZE", 20000)        # 前処理シャードあたりサンプル数

@@ -91,6 +91,14 @@ def parse_args() -> argparse.Namespace:
         help="own: 対象グループのデッキを使うプレイヤーの手を集める(既定)。"
         "opponent: 対象グループのデッキと対戦した相手プレイヤーの手を集める。",
     )
+    parser.add_argument(
+        "--value-decay",
+        type=float,
+        default=1.0,
+        help="終局からの距離に応じてvalue教師を指数減衰させる係数(既定1.0=無効=従来通り"
+        "全局面に最終結果をそのまま付与)。1未満にすると序盤局面ほど0に近い値になる"
+        "(pipelineのPIPE_VALUE_DECAY既定は0.9)。",
+    )
     return parser.parse_args()
 
 
@@ -136,7 +144,9 @@ def main() -> None:
             break
 
         try:
-            samples = extract_samples_from_episode(data, deck_filter=deck_filter)
+            samples = extract_samples_from_episode(
+                data, deck_filter=deck_filter, value_decay=args.value_decay
+            )
         except Exception:
             samples = []
 

@@ -15,6 +15,7 @@ json.loads ＋特徴抽出し直していた。しかし各プレイヤー p の
 
 from __future__ import annotations
 
+import functools
 import gc
 import json
 import pickle
@@ -40,11 +41,16 @@ from imitation_data import (  # noqa: E402
 PlayerBlock = tuple[list[int], list[int], float, list[tuple]]
 
 
-def extract_player_blocks(data: bytes) -> list[PlayerBlock]:
+def extract_player_blocks(data: bytes, value_decay: float = 1.0) -> list[PlayerBlock]:
     """1エピソードから、各プレイヤーの (自デッキ, 相手デッキ, value, サンプル列) を返す。
 
     extract_samples_from_episode と同じ特徴量を作るが、deck_filter で捨てず、
     後段のクラスタ振り分けのために自/相手デッキを保持したまま返す。
+
+    value_decay(既定1.0=無効)を1未満にすると、imitation_data.extract_samples_from_episode
+    と同様に、終局から遠い(序盤の)局面ほどvalue教師を0へ指数減衰させる
+    (全局面へ一律で最終結果を貼るとvalueヘッドが序盤局面でも飽和しやすいため)。
+    戻り値のPlayerBlock.valueは互換性のため引き続き最終結果(減衰前)を返す。
     """
     try:
         j = json.loads(data)
@@ -64,8 +70,8 @@ def extract_player_blocks(data: bytes) -> list[PlayerBlock]:
     for player in range(2):
         your_deck = decks[player]
         opponent_deck = decks[1 - player]
-        value = float(rewards[player])
-        samples: list[tuple] = []
+        final_value = float(rewards[player])
+        raw_samples: list[tuple] = []
         for i in range(1, len(steps) - 1):
             sel = steps[i][player]["observation"].get("select")
             if sel is None:
@@ -86,10 +92,7 @@ def extract_player_blocks(data: bytes) -> list[PlayerBlock]:
                 continue
             sv_enc = get_encoder_input(obs, your_deck)
             sv_dec = get_decoder_input(obs, actions)
-            # Python list のままだと int 1個あたり数十バイト消費するため、
-            # numpy int32/float32 へ圧縮してから返す（IPC・メインのバッファ・
-            # シャードファイルすべてが小さくなり、学習側の読み込みも速くなる）。
-            samples.append(
+            raw_samples.append(
                 (
                     np.asarray(sv_enc.index, dtype=np.int32),
                     np.asarray(sv_enc.value, dtype=np.float32),
@@ -97,16 +100,28 @@ def extract_player_blocks(data: bytes) -> list[PlayerBlock]:
                     np.asarray(sv_dec.index, dtype=np.int32),
                     np.asarray(sv_dec.value, dtype=np.float32),
                     np.asarray(sv_dec.offset, dtype=np.int32),
-                    chosen_index, value,
+                    chosen_index,
                 )
             )
+
+        # 終局に一番近い局面(末尾)にfinal_valueをそのまま付与し、そこから遡るほど
+        # value_decay倍ずつ0へ近づける。value_decay=1.0なら全局面が従来通りfinal_value。
+        # Python list のままだと int 1個あたり数十バイト消費するため、
+        # numpy int32/float32 へ圧縮してから返す（IPC・メインのバッファ・
+        # シャードファイルすべてが小さくなり、学習側の読み込みも速くなる）。
+        n = len(raw_samples)
+        samples: list[tuple] = []
+        for offset, sample in enumerate(raw_samples):
+            distance_from_end = n - 1 - offset
+            decayed_value = final_value * (value_decay**distance_from_end)
+            samples.append((*sample, np.float32(decayed_value)))
         if samples:
-            blocks.append((your_deck, opponent_deck, value, samples))
+            blocks.append((your_deck, opponent_deck, final_value, samples))
     return blocks
 
 
-def _worker(data: bytes) -> list[PlayerBlock]:
-    return extract_player_blocks(data)
+def _worker(data: bytes, value_decay: float = 1.0) -> list[PlayerBlock]:
+    return extract_player_blocks(data, value_decay=value_decay)
 
 
 class _ShardWriter:
@@ -161,8 +176,11 @@ def preprocess_all(
     workers: int = 1,
     roles: tuple[str, ...] = ("own", "opp"),
     verbose: bool = True,
+    value_decay: float = 1.0,
 ) -> dict[str, dict[str, int]]:
     """全エピソードを1回走査し、reps 各クラスタの own/opp シャードを同時生成する。
+
+    value_decayはextract_player_blocks参照(既定1.0=無効)。
 
     戻り値: {cluster_name: {"own": shards, "opp": shards}}
     """
@@ -252,8 +270,9 @@ def preprocess_all(
         gc.freeze()
         # maxtasksperchild でワーカーを定期的に再起動し、長時間実行時の
         # プロセス単位メモリ増加（CoWドリフト等）を上限内に抑える。
+        worker = functools.partial(_worker, value_decay=value_decay)
         with Pool(workers, maxtasksperchild=2000) as pool:
-            for blocks in pool.imap_unordered(_worker, stream, chunksize=8):
+            for blocks in pool.imap_unordered(worker, stream, chunksize=8):
                 route(blocks)
                 episode_count += 1
                 if episode_count % 2000 == 0:
@@ -263,7 +282,7 @@ def preprocess_all(
                               f"elapsed={time.time()-t0:.1f}s workers={workers}{_rss_mb()}", flush=True)
     else:
         for data in stream:
-            route(extract_player_blocks(data))
+            route(extract_player_blocks(data, value_decay=value_decay))
             episode_count += 1
             if episode_count % 2000 == 0:
                 _memory_guard()

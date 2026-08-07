@@ -236,6 +236,32 @@ def load_module_from_path(name: str, path: Path):
     return mod
 
 
+# このスクリプトが行う学習(train_one_iteration_local)はHuberLossでMCTSのQ優位度
+# (clamp±1)に回帰する自己対戦学習regime。rl_mcts.mctsのDEFAULT_POLICY_TEMPERATURE
+# (=10.0)がこのregime向けの既定値。
+POLICY_TEMPERATURE = 10.0
+
+
+def save_model_checkpoint(api: dict, model, path: Path, policy_temperature: float = POLICY_TEMPERATURE) -> None:
+    """api経由でrl_mcts.checkpointが使えればpolicy_temperatureを埋め込んで保存し、
+    無ければ従来通り生のstate_dictを保存する(checkpoint.pyを持たない他agentコピー向け
+    フォールバック)。"""
+    save_fn = api.get("save_checkpoint")
+    if save_fn is not None:
+        save_fn(model, path, policy_temperature=policy_temperature)
+    else:
+        torch.save(model.state_dict(), path)
+
+
+def load_model_state(api: dict, path: Path, map_location) -> dict:
+    """api経由でrl_mcts.checkpointが使えればそれで読み、無ければ生state_dictとして読む。"""
+    load_fn = api.get("load_state_dict_and_temperature")
+    if load_fn is not None:
+        state_dict, _ = load_fn(path, map_location=map_location)
+        return state_dict
+    return torch.load(path, map_location=map_location)
+
+
 def load_agent_api(spec: TrainSpec) -> dict:
     """Import agent packages by temporarily inserting agent/src into sys.path.
 
@@ -274,6 +300,19 @@ def load_agent_api(spec: TrainSpec) -> dict:
         api["battle_start"] = getattr(cg_game_mod, "battle_start")
         api["battle_select"] = getattr(cg_game_mod, "battle_select")
         api["battle_finish"] = getattr(cg_game_mod, "battle_finish")
+
+        # rl_mcts.checkpoint はagents/rl_mcts向けに追加したモジュール(重みに
+        # policy_temperatureを埋め込んで保存/読込する)。他agentの独立コピーには
+        # 無い場合があるため、無ければNoneのままにしてフォールバック(生state_dict)を使う。
+        try:
+            checkpoint_mod = importlib.import_module("rl_mcts.checkpoint")
+            api["save_checkpoint"] = getattr(checkpoint_mod, "save_checkpoint")
+            api["load_state_dict_and_temperature"] = getattr(
+                checkpoint_mod, "load_state_dict_and_temperature"
+            )
+        except ImportError:
+            api["save_checkpoint"] = None
+            api["load_state_dict_and_temperature"] = None
         return api
     finally:
         if inserted:
@@ -738,7 +777,7 @@ def main() -> None:
 
         persistent = spec.agent_dir / "src" / "model.pth"
         if persistent.exists():
-            state = torch.load(persistent, map_location=device)
+            state = load_model_state(api, persistent, device)
             model.load_state_dict(state)
 
         ckpt_dir = run_dir / spec.name / "checkpoints"
@@ -858,7 +897,7 @@ def main() -> None:
                 )
 
             before_cp = info["ckpt_dir"] / f"model_{iteration}_before.pth"
-            torch.save(model.state_dict(), before_cp)
+            save_model_checkpoint(api, model, before_cp)
 
             if args.eval_games > 0:
                 wa, la, da = evaluate_agent(api, model, info["deck"], args.eval_games, args.search_count)
@@ -899,7 +938,7 @@ def main() -> None:
             iteration_losses[name] = stats.loss
             iteration_batches[name] = stats.batches
             cp = info["ckpt_dir"] / f"model_{iteration}.pth"
-            torch.save(model.state_dict(), cp)
+            save_model_checkpoint(api, model, cp)
             elapsed = time.time() - iter_start
 
             metrics_path = info["log_dir"] / "train_metrics.csv"
@@ -940,7 +979,7 @@ def main() -> None:
 
             if not args.no_persist:
                 info["persistent"].parent.mkdir(parents=True, exist_ok=True)
-                torch.save(model.state_dict(), info["persistent"])
+                save_model_checkpoint(api, model, info["persistent"])
 
         for name in agents:
             loss_history[name].append(iteration_losses[name])
