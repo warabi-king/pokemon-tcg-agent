@@ -4,14 +4,17 @@
 それに対する実際の回答は steps[i+1][player]["action"] に入っている
 (kaggle_environmentsの一般的な規約: action[i]はobservation[i-1]への回答)。
 
-policyは実際に選ばれた手を正解クラスとした分類(交差エントロピーで学習)、
-valueはMCTS探索を使わず、そのエピソードの実際の勝敗(rewards)を教師にする。
+policyは実際に選ばれた手を正解クラスとした分類、valueはMCTS探索を使わず、
+そのエピソードの実際の勝敗(rewards, 勝+1/負-1/分0)から計算した割引リターンを教師にする。
 
-value_decay(既定1.0=無効)を1未満にすると、終局に近い局面ほど勝敗(±1)そのものを、
-終局から遠い(序盤の)局面ほど0に近い値を教師にする(指数減衰)。全局面へ一律で
-最終結果を貼ると、五分の序盤局面までvalueヘッドが±1へ過学習し飽和しやすいため
-(実測: 経路依存の弱い模倣学習の重みで root_value が同一デッキのミラー戦3ターン目でも
-+0.9台に張り付く現象を確認)、経過ターン(終局からの距離)に応じて教師を緩和する。
+割引リターン G_t = r_終局 * x^d (d = その局面から終局までの、そのプレイヤー自身の手数)。
+割引率 x は「対局ごと」に決め、その対局の最初の手の割引が first_move_discount(既定0.3)
+になるよう x = first_move_discount^(1/(N-1)) とする(N = そのプレイヤーの決断回数)。
+これにより、対局の長さに依らず「終局直前の手 = full ±1、最初の手 ≈ 0.3」に揃う。
+first_move_discount=1.0 なら全局面が full ±1(=割引なし)。
+
+この G_t は value ヘッドの回帰教師であると同時に、train_imitation.py の AWR
+(advantage-weighted imitation)における advantage A_t = G_t - V(s_t) のベースにもなる。
 """
 
 from __future__ import annotations
@@ -36,10 +39,31 @@ SampleTuple = tuple[list[int], list[float], list[int], list[int], list[float], l
 DeckFilter = Callable[[list[int], list[int]], bool]
 
 
+def discounted_return_series(
+    final_value: float, n: int, first_move_discount: float = 0.3
+) -> list[float]:
+    """1プレイヤーのn個の決断局面(index 0=最初の手 〜 n-1=終局直前の手)について、
+    割引リターン G_t = final_value * x^d の列を返す(d = 終局までの残り手数 = n-1-index)。
+
+    割引率 x はこの対局のNから x = first_move_discount^(1/(n-1)) と決める。これにより
+    最後の手(d=0)は full な final_value、最初の手(d=n-1)は final_value*first_move_discount
+    になり、対局の長さに依らず「最初の手の割引 ≈ first_move_discount」に揃う。
+
+    n<=1(決断が1回以下)は割引を定義できないので final_value をそのまま返す。
+    first_move_discount=1.0 なら x=1 で全局面 full(=割引なし・後方互換)。
+    """
+    if n <= 0:
+        return []
+    if n == 1:
+        return [final_value]
+    x = first_move_discount ** (1.0 / (n - 1))
+    return [final_value * (x ** (n - 1 - index)) for index in range(n)]
+
+
 def extract_samples_from_episode(
     data: bytes,
     deck_filter: DeckFilter | None = None,
-    value_decay: float = 1.0,
+    first_move_discount: float = 1.0,
 ) -> list[SampleTuple]:
     """1エピソード分のJSONから学習サンプルを取り出す。
 
@@ -48,8 +72,8 @@ def extract_samples_from_episode(
     (デッキグループでの絞り込みに使う。自分のデッキ基準・相手のデッキ基準の
     どちらでも絞り込めるように両方を渡す)。
 
-    value_decayはモジュールdocstring参照。1.0なら従来通り全局面に
-    最終結果をそのまま付与する(既定、後方互換)。
+    first_move_discountはモジュールdocstring/ discounted_return_series 参照。
+    1.0なら従来通り全局面に最終結果をそのまま付与する(既定、後方互換)。
     """
     j = json.loads(data)
     rewards = j.get("rewards")
@@ -112,12 +136,9 @@ def extract_samples_from_episode(
                 )
             )
 
-        # 終局に一番近い局面(末尾)にfinal_valueをそのまま付与し、そこから遡るほど
-        # value_decay倍ずつ0へ近づける。value_decay=1.0なら全局面が従来通りfinal_value。
-        n = len(player_samples)
-        for offset, sample in enumerate(player_samples):
-            distance_from_end = n - 1 - offset
-            decayed_value = final_value * (value_decay**distance_from_end)
-            samples.append((*sample, decayed_value))
+        # 対局ごとの割引率で G_t を計算(末尾=full±1、最初の手≈first_move_discount)。
+        returns = discounted_return_series(final_value, len(player_samples), first_move_discount)
+        for sample, g_t in zip(player_samples, returns):
+            samples.append((*sample, g_t))
 
     return samples

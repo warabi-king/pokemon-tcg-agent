@@ -49,7 +49,7 @@ def _learn_side(
     """role(own/opponent) の履歴を前処理→継続学習。データ無しなら前世代をコピー。"""
     n = preprocess(sources, shards_dir, exact_deck_filter(deck, role),
                    config.SHARD_SIZE, role=role, label=f"{out_model.parent.name}/{role}",
-                   value_decay=config.VALUE_DECAY) if sources else 0
+                   first_move_discount=config.FIRST_MOVE_DISCOUNT) if sources else 0
     initial = prev_model if config.WARM_START else None
     trained = train_model(shards_dir, out_model, config.EPOCHS_PER_GEN,
                           initial_model=initial, metrics_file=metrics_file) if n else False

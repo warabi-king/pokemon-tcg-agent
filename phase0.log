@@ -1,424 +1,427 @@
-nohup: ignoring input
 === pipeline config ===
   GENERATIONS=5 EPOCHS_PER_GEN=3 PHASE0_EPOCHS=5
   LR=0.0003 BATCH_SIZE=128 SEARCH_COUNT=50
-  SIM_THRESHOLD=0.75 WARM_START=1 SHARD_SIZE=6000 WORKERS=3
+  SIM_THRESHOLD=0.75 WARM_START=1 SHARD_SIZE=20000 WORKERS=8
   ROOT=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline
   OFFICIAL_EPISODES=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/episodes/official
   DECKGEN_JSONL=/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/tools/deck_generator/generated/deck_candidates_by_wins.jsonl
   LEAGUE_CMD=(stub)
 
-[phase0] 前処理（単一パス）: clusters=16 workers=3
-  [preprocess_all] episodes=2000 elapsed=45.4s workers=3 rss_total=1903MB
-  [preprocess_all] episodes=4000 elapsed=92.1s workers=3 rss_total=1927MB
-  [preprocess_all] episodes=6000 elapsed=138.5s workers=3 rss_total=1992MB
-  [preprocess_all] episodes=8000 elapsed=191.2s workers=3 rss_total=2020MB
-  [preprocess_all] episodes=10000 elapsed=237.9s workers=3 rss_total=2036MB
-  [preprocess_all] episodes=12000 elapsed=284.2s workers=3 rss_total=2016MB
-  [preprocess_all] episodes=14000 elapsed=331.2s workers=3 rss_total=2000MB
-  [preprocess_all] episodes=16000 elapsed=378.2s workers=3 rss_total=2028MB
-  [preprocess_all] episodes=18000 elapsed=424.9s workers=3 rss_total=2008MB
-  [preprocess_all] episodes=20000 elapsed=473.9s workers=3 rss_total=2021MB
-  [preprocess_all] episodes=22000 elapsed=522.0s workers=3 rss_total=2043MB
-  [preprocess_all] episodes=24000 elapsed=568.3s workers=3 rss_total=2035MB
-  [preprocess_all] episodes=26000 elapsed=615.1s workers=3 rss_total=2048MB
-  [preprocess_all] episodes=28000 elapsed=660.3s workers=3 rss_total=2041MB
-  [preprocess_all] episodes=30000 elapsed=703.8s workers=3 rss_total=2045MB
-  [preprocess_all] episodes=32000 elapsed=746.9s workers=3 rss_total=2055MB
-  [preprocess_all] episodes=34000 elapsed=792.3s workers=3 rss_total=2030MB
-  [preprocess_all] episodes=36000 elapsed=839.5s workers=3 rss_total=2103MB
-  [preprocess_all] episodes=38000 elapsed=885.6s workers=3 rss_total=2059MB
-  [preprocess_all] episodes=40000 elapsed=932.6s workers=3 rss_total=2063MB
-  [preprocess_all] episodes=42000 elapsed=977.9s workers=3 rss_total=2053MB
-  [preprocess_all] episodes=44000 elapsed=1028.8s workers=3 rss_total=2082MB
-  [preprocess_all] episodes=46000 elapsed=1079.7s workers=3 rss_total=2068MB
-  [preprocess_all] episodes=48000 elapsed=1124.8s workers=3 rss_total=2896MB
-  [preprocess_all] episodes=50000 elapsed=1177.2s workers=3 rss_total=3355MB
-  [preprocess_all] episodes=52000 elapsed=1229.3s workers=3 rss_total=3345MB
-  [preprocess_all] episodes=54000 elapsed=1281.7s workers=3 rss_total=3369MB
-  [preprocess_all] episodes=56000 elapsed=1336.8s workers=3 rss_total=3379MB
-  [preprocess_all] episodes=58000 elapsed=1390.1s workers=3 rss_total=3365MB
-  [preprocess_all] episodes=60000 elapsed=1444.0s workers=3 rss_total=3351MB
-  [preprocess_all] episodes=62000 elapsed=1499.1s workers=3 rss_total=3343MB
-  [preprocess_all] episodes=64000 elapsed=1552.8s workers=3 rss_total=3349MB
-  [preprocess_all] episodes=66000 elapsed=1605.8s workers=3 rss_total=3342MB
-  [preprocess_all] episodes=68000 elapsed=1660.8s workers=3 rss_total=3353MB
-  [preprocess_all] episodes=70000 elapsed=1716.2s workers=3 rss_total=3354MB
-  [preprocess_all] episodes=72000 elapsed=1773.2s workers=3 rss_total=3364MB
-  [preprocess_all] episodes=74000 elapsed=1827.6s workers=3 rss_total=3385MB
-  [preprocess_all] episodes=76000 elapsed=1884.7s workers=3 rss_total=3358MB
-  [preprocess_all] episodes=78000 elapsed=1938.3s workers=3 rss_total=3372MB
-  [preprocess_all] episodes=80000 elapsed=2000.8s workers=3 rss_total=3342MB
-  [preprocess_all] episodes=82000 elapsed=2057.2s workers=3 rss_total=3646MB
-  [preprocess_all] episodes=84000 elapsed=2115.8s workers=3 rss_total=3377MB
-  [preprocess_all] episodes=86000 elapsed=2173.7s workers=3 rss_total=3379MB
-  [preprocess_all] episodes=88000 elapsed=2231.7s workers=3 rss_total=3377MB
-  [preprocess_all] episodes=90000 elapsed=2286.4s workers=3 rss_total=3393MB
-  [preprocess_all] episodes=92000 elapsed=2345.2s workers=3 rss_total=3377MB
-  [preprocess_all] episodes=94000 elapsed=2402.6s workers=3 rss_total=4837MB
-  [preprocess_all] episodes=96000 elapsed=2463.7s workers=3 rss_total=3522MB
-  [preprocess_all] episodes=98000 elapsed=2522.8s workers=3 rss_total=3634MB
-  [preprocess_all] episodes=100000 elapsed=2583.2s workers=3 rss_total=3633MB
-  [preprocess_all] episodes=102000 elapsed=2644.2s workers=3 rss_total=3634MB
-  [preprocess_all] episodes=104000 elapsed=2702.9s workers=3 rss_total=3631MB
-  [preprocess_all] episodes=106000 elapsed=2760.2s workers=3 rss_total=3635MB
-  [preprocess_all] episodes=108000 elapsed=2818.9s workers=3 rss_total=3634MB
-  [preprocess_all] episodes=110000 elapsed=2877.3s workers=3 rss_total=3636MB
-  [preprocess_all] episodes=112000 elapsed=2936.4s workers=3 rss_total=3636MB
-  [preprocess_all] episodes=114000 elapsed=2997.9s workers=3 rss_total=3607MB
-  [preprocess_all] episodes=116000 elapsed=3059.0s workers=3 rss_total=3607MB
+[phase0] PIPE_PHASE0_WARMSTART=0: PRETRAINEDを使わず全クラスタをランダム初期化から学習
+[phase0] 前処理（単一パス）: clusters=16 workers=8
+  [preprocess_all] episodes=2000 elapsed=25.8s workers=8 rss_total=3909MB
+  [preprocess_all] episodes=4000 elapsed=54.2s workers=8 rss_total=4078MB
+  [preprocess_all] episodes=6000 elapsed=83.8s workers=8 rss_total=4027MB
+  [preprocess_all] 空きメモリ958MB < 1200MB: 全バッファをフラッシュしました
+  [preprocess_all] episodes=8000 elapsed=117.1s workers=8 rss_total=4139MB
+  [preprocess_all] episodes=10000 elapsed=144.2s workers=8 rss_total=4042MB
+  [preprocess_all] episodes=12000 elapsed=174.8s workers=8 rss_total=4032MB
+  [preprocess_all] episodes=14000 elapsed=205.6s workers=8 rss_total=4051MB
+  [preprocess_all] episodes=16000 elapsed=237.6s workers=8 rss_total=4086MB
+  [preprocess_all] episodes=18000 elapsed=270.2s workers=8 rss_total=4221MB
+  [preprocess_all] episodes=20000 elapsed=302.5s workers=8 rss_total=4207MB
+  [preprocess_all] episodes=22000 elapsed=338.8s workers=8 rss_total=4230MB
+  [preprocess_all] episodes=24000 elapsed=372.6s workers=8 rss_total=4224MB
+  [preprocess_all] episodes=26000 elapsed=408.5s workers=8 rss_total=4244MB
+  [preprocess_all] episodes=28000 elapsed=442.1s workers=8 rss_total=4303MB
+  [preprocess_all] episodes=30000 elapsed=473.7s workers=8 rss_total=4231MB
+  [preprocess_all] episodes=32000 elapsed=504.6s workers=8 rss_total=4218MB
+  [preprocess_all] episodes=34000 elapsed=537.3s workers=8 rss_total=4154MB
+  [preprocess_all] episodes=36000 elapsed=570.1s workers=8 rss_total=4382MB
+  [preprocess_all] episodes=38000 elapsed=601.8s workers=8 rss_total=4320MB
+  [preprocess_all] episodes=40000 elapsed=634.0s workers=8 rss_total=4348MB
+  [preprocess_all] episodes=42000 elapsed=665.8s workers=8 rss_total=4390MB
+  [preprocess_all] episodes=44000 elapsed=701.6s workers=8 rss_total=4344MB
+  [preprocess_all] episodes=46000 elapsed=735.2s workers=8 rss_total=4361MB
+  [preprocess_all] episodes=48000 elapsed=766.9s workers=8 rss_total=4586MB
+  [preprocess_all] episodes=50000 elapsed=800.3s workers=8 rss_total=4309MB
+  [preprocess_all] episodes=52000 elapsed=832.0s workers=8 rss_total=4346MB
+  [preprocess_all] episodes=54000 elapsed=865.9s workers=8 rss_total=4335MB
+  [preprocess_all] episodes=56000 elapsed=899.0s workers=8 rss_total=4410MB
+  [preprocess_all] episodes=58000 elapsed=932.2s workers=8 rss_total=4416MB
+  [preprocess_all] episodes=60000 elapsed=980.4s workers=8 rss_total=4445MB
+  [preprocess_all] episodes=62000 elapsed=1026.2s workers=8 rss_total=4403MB
+  [preprocess_all] episodes=64000 elapsed=1068.5s workers=8 rss_total=4486MB
+  [preprocess_all] episodes=66000 elapsed=1109.3s workers=8 rss_total=4498MB
+  [preprocess_all] episodes=68000 elapsed=1154.0s workers=8 rss_total=4505MB
+  [preprocess_all] episodes=70000 elapsed=1196.3s workers=8 rss_total=4481MB
+  [preprocess_all] episodes=72000 elapsed=1234.1s workers=8 rss_total=4546MB
+  [preprocess_all] episodes=74000 elapsed=1269.4s workers=8 rss_total=4508MB
+  [preprocess_all] episodes=76000 elapsed=1309.7s workers=8 rss_total=4535MB
+  [preprocess_all] episodes=78000 elapsed=1346.2s workers=8 rss_total=4551MB
+  [preprocess_all] episodes=80000 elapsed=1386.0s workers=8 rss_total=3213MB
+  [preprocess_all] episodes=82000 elapsed=1424.5s workers=8 rss_total=4189MB
+  [preprocess_all] episodes=84000 elapsed=1464.4s workers=8 rss_total=3256MB
+  [preprocess_all] episodes=86000 elapsed=1502.6s workers=8 rss_total=3268MB
+  [preprocess_all] episodes=88000 elapsed=1542.0s workers=8 rss_total=3285MB
+  [preprocess_all] episodes=90000 elapsed=1578.0s workers=8 rss_total=3284MB
+  [preprocess_all] episodes=92000 elapsed=1617.6s workers=8 rss_total=3171MB
+  [preprocess_all] episodes=94000 elapsed=1654.7s workers=8 rss_total=4076MB
+  [preprocess_all] episodes=96000 elapsed=1695.8s workers=8 rss_total=3140MB
+  [preprocess_all] episodes=98000 elapsed=1734.4s workers=8 rss_total=3147MB
+  [preprocess_all] episodes=100000 elapsed=1773.8s workers=8 rss_total=3151MB
+  [preprocess_all] episodes=102000 elapsed=1813.8s workers=8 rss_total=3034MB
+  [preprocess_all] episodes=104000 elapsed=1851.6s workers=8 rss_total=3066MB
+  [preprocess_all] episodes=106000 elapsed=1889.5s workers=8 rss_total=3070MB
+  [preprocess_all] episodes=108000 elapsed=1928.7s workers=8 rss_total=3080MB
+  [preprocess_all] episodes=110000 elapsed=1966.5s workers=8 rss_total=3083MB
+  [preprocess_all] episodes=112000 elapsed=2006.3s workers=8 rss_total=3082MB
+  [preprocess_all] episodes=114000 elapsed=2046.1s workers=8 rss_total=3027MB
+  [preprocess_all] episodes=116000 elapsed=2085.6s workers=8 rss_total=3006MB
+  [preprocess_all] done: episodes=117798 elapsed=2127.3s clusters=16 roles=('own', 'opp')
+  [train] self.pth <- cl00_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl00/opp', 'role': 'opp', 'episodes': 117798, 'samples': 5353910, 'shards': 887, 'shard_size': 6000}
-train shards=886 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group0/opponent_model.pth
-epoch=0 loss=1.1906 loss_value=0.0877 loss_policy=1.1029 train_acc=0.702 val_acc=0.718 elapsed=349.0s
-epoch=1 loss=1.1842 loss_value=0.0870 loss_policy=1.0972 train_acc=0.706 val_acc=0.731 elapsed=697.5s
-epoch=2 loss=1.1780 loss_value=0.0860 loss_policy=1.0920 train_acc=0.709 val_acc=0.738 elapsed=1047.7s
-epoch=3 loss=1.1741 loss_value=0.0857 loss_policy=1.0883 train_acc=0.711 val_acc=0.733 elapsed=1396.8s
-epoch=4 loss=1.1701 loss_value=0.0851 loss_policy=1.0850 train_acc=0.714 val_acc=0.731 elapsed=1746.5s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl00/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl00/own', 'role': 'own', 'episodes': 117798, 'samples': 5897867, 'shards': 296, 'shard_size': 20000}
+train shards=295 val shards=1
+epoch=0 loss=1.8165 loss_value=0.0582 loss_policy=1.7583 train_acc=0.688 val_acc=0.696 elapsed=413.0s
+epoch=1 loss=1.6963 loss_value=0.0544 loss_policy=1.6420 train_acc=0.710 val_acc=0.712 elapsed=836.8s
+epoch=2 loss=1.6520 loss_value=0.0532 loss_policy=1.5988 train_acc=0.720 val_acc=0.716 elapsed=1257.3s
+epoch=3 loss=1.6243 loss_value=0.0524 loss_policy=1.5719 train_acc=0.725 val_acc=0.714 elapsed=1678.6s
+epoch=4 loss=1.6073 loss_value=0.0518 loss_policy=1.5555 train_acc=0.728 val_acc=0.731 elapsed=2099.5s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl00/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl00_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl01/opp', 'role': 'opp', 'episodes': 117798, 'samples': 3492794, 'shards': 579, 'shard_size': 6000}
-train shards=578 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/opponent_model.pth
-epoch=0 loss=1.1798 loss_value=0.0858 loss_policy=1.0940 train_acc=0.699 val_acc=0.724 elapsed=225.5s
-epoch=1 loss=1.1709 loss_value=0.0851 loss_policy=1.0859 train_acc=0.705 val_acc=0.726 elapsed=450.2s
-epoch=2 loss=1.1633 loss_value=0.0842 loss_policy=1.0791 train_acc=0.708 val_acc=0.732 elapsed=674.3s
-epoch=3 loss=1.1571 loss_value=0.0832 loss_policy=1.0739 train_acc=0.711 val_acc=0.727 elapsed=898.7s
-epoch=4 loss=1.1522 loss_value=0.0828 loss_policy=1.0695 train_acc=0.714 val_acc=0.732 elapsed=1123.4s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl01/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl00/opp', 'role': 'opp', 'episodes': 117798, 'samples': 5353910, 'shards': 268, 'shard_size': 20000}
+train shards=267 val shards=1
+epoch=0 loss=1.7573 loss_value=0.0561 loss_policy=1.7012 train_acc=0.675 val_acc=0.662 elapsed=380.9s
+epoch=1 loss=1.6164 loss_value=0.0530 loss_policy=1.5634 train_acc=0.705 val_acc=0.694 elapsed=759.3s
+epoch=2 loss=1.5615 loss_value=0.0521 loss_policy=1.5094 train_acc=0.716 val_acc=0.701 elapsed=1139.7s
+epoch=3 loss=1.5224 loss_value=0.0516 loss_policy=1.4707 train_acc=0.724 val_acc=0.702 elapsed=1517.3s
+epoch=4 loss=1.4968 loss_value=0.0512 loss_policy=1.4456 train_acc=0.729 val_acc=0.694 elapsed=1897.8s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl00/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl01_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl02/opp', 'role': 'opp', 'episodes': 117798, 'samples': 2025102, 'shards': 335, 'shard_size': 6000}
-train shards=334 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/opponent_model.pth
-epoch=0 loss=1.1916 loss_value=0.0767 loss_policy=1.1149 train_acc=0.686 val_acc=0.671 elapsed=131.3s
-epoch=1 loss=1.1835 loss_value=0.0757 loss_policy=1.1078 train_acc=0.690 val_acc=0.672 elapsed=261.8s
-epoch=2 loss=1.1769 loss_value=0.0748 loss_policy=1.1020 train_acc=0.694 val_acc=0.673 elapsed=392.1s
-epoch=3 loss=1.1703 loss_value=0.0736 loss_policy=1.0967 train_acc=0.697 val_acc=0.669 elapsed=522.4s
-epoch=4 loss=1.1657 loss_value=0.0734 loss_policy=1.0923 train_acc=0.699 val_acc=0.680 elapsed=652.9s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl02/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl01/own', 'role': 'own', 'episodes': 117798, 'samples': 4191551, 'shards': 211, 'shard_size': 20000}
+train shards=210 val shards=1
+epoch=0 loss=1.3466 loss_value=0.0535 loss_policy=1.2931 train_acc=0.736 val_acc=0.727 elapsed=294.5s
+epoch=1 loss=1.2446 loss_value=0.0501 loss_policy=1.1945 train_acc=0.761 val_acc=0.699 elapsed=590.5s
+epoch=2 loss=1.1990 loss_value=0.0491 loss_policy=1.1498 train_acc=0.771 val_acc=0.731 elapsed=886.0s
+epoch=3 loss=1.1763 loss_value=0.0485 loss_policy=1.1278 train_acc=0.776 val_acc=0.717 elapsed=1179.9s
+epoch=4 loss=1.1564 loss_value=0.0481 loss_policy=1.1083 train_acc=0.780 val_acc=0.736 elapsed=1476.3s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl01/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl01_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl03/own', 'role': 'own', 'episodes': 117798, 'samples': 206314, 'shards': 35, 'shard_size': 6000}
-train shards=34 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/model.pth
-epoch=0 loss=1.2525 loss_value=0.0984 loss_policy=1.1541 train_acc=0.730 val_acc=0.774 elapsed=13.8s
-epoch=1 loss=1.1467 loss_value=0.0855 loss_policy=1.0612 train_acc=0.791 val_acc=0.793 elapsed=26.9s
-epoch=2 loss=1.1133 loss_value=0.0829 loss_policy=1.0304 train_acc=0.808 val_acc=0.803 elapsed=39.9s
-epoch=3 loss=1.0896 loss_value=0.0794 loss_policy=1.0102 train_acc=0.819 val_acc=0.814 elapsed=52.9s
-epoch=4 loss=1.0725 loss_value=0.0769 loss_policy=0.9955 train_acc=0.828 val_acc=0.829 elapsed=65.9s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl03/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl01/opp', 'role': 'opp', 'episodes': 117798, 'samples': 3492794, 'shards': 175, 'shard_size': 20000}
+train shards=174 val shards=1
+epoch=0 loss=1.7312 loss_value=0.0562 loss_policy=1.6750 train_acc=0.676 val_acc=0.708 elapsed=257.1s
+epoch=1 loss=1.5889 loss_value=0.0529 loss_policy=1.5360 train_acc=0.708 val_acc=0.699 elapsed=512.5s
+epoch=2 loss=1.5372 loss_value=0.0517 loss_policy=1.4855 train_acc=0.719 val_acc=0.721 elapsed=760.9s
+epoch=3 loss=1.4967 loss_value=0.0512 loss_policy=1.4455 train_acc=0.726 val_acc=0.724 elapsed=1005.3s
+epoch=4 loss=1.4661 loss_value=0.0507 loss_policy=1.4154 train_acc=0.732 val_acc=0.719 elapsed=1250.2s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl01/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl02_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl03/opp', 'role': 'opp', 'episodes': 117798, 'samples': 292056, 'shards': 49, 'shard_size': 6000}
-train shards=48 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/opponent_model.pth
-epoch=0 loss=1.2002 loss_value=0.0848 loss_policy=1.1154 train_acc=0.681 val_acc=0.676 elapsed=19.1s
-epoch=1 loss=1.1658 loss_value=0.0745 loss_policy=1.0912 train_acc=0.691 val_acc=0.674 elapsed=37.6s
-epoch=2 loss=1.1494 loss_value=0.0713 loss_policy=1.0782 train_acc=0.697 val_acc=0.674 elapsed=56.1s
-epoch=3 loss=1.1378 loss_value=0.0683 loss_policy=1.0695 train_acc=0.702 val_acc=0.673 elapsed=74.5s
-epoch=4 loss=1.1262 loss_value=0.0656 loss_policy=1.0606 train_acc=0.707 val_acc=0.684 elapsed=93.0s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl03/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl02/own', 'role': 'own', 'episodes': 117798, 'samples': 1288681, 'shards': 66, 'shard_size': 20000}
+train shards=65 val shards=1
+epoch=0 loss=1.7597 loss_value=0.0590 loss_policy=1.7007 train_acc=0.645 val_acc=0.610 elapsed=89.8s
+epoch=1 loss=1.6472 loss_value=0.0557 loss_policy=1.5915 train_acc=0.675 val_acc=0.648 elapsed=178.6s
+epoch=2 loss=1.5984 loss_value=0.0542 loss_policy=1.5442 train_acc=0.686 val_acc=0.640 elapsed=267.6s
+epoch=3 loss=1.5722 loss_value=0.0531 loss_policy=1.5191 train_acc=0.691 val_acc=0.661 elapsed=358.1s
+epoch=4 loss=1.5532 loss_value=0.0523 loss_policy=1.5009 train_acc=0.696 val_acc=0.711 elapsed=446.7s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl02/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl02_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl04/own', 'role': 'own', 'episodes': 117798, 'samples': 1003201, 'shards': 167, 'shard_size': 6000}
-train shards=166 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/model.pth
-epoch=0 loss=1.3223 loss_value=0.0959 loss_policy=1.2264 train_acc=0.641 val_acc=0.645 elapsed=64.9s
-epoch=1 loss=1.2642 loss_value=0.0892 loss_policy=1.1750 train_acc=0.667 val_acc=0.669 elapsed=129.0s
-epoch=2 loss=1.2401 loss_value=0.0868 loss_policy=1.1533 train_acc=0.681 val_acc=0.664 elapsed=193.1s
-epoch=3 loss=1.2222 loss_value=0.0844 loss_policy=1.1378 train_acc=0.690 val_acc=0.702 elapsed=257.3s
-epoch=4 loss=1.2113 loss_value=0.0825 loss_policy=1.1288 train_acc=0.695 val_acc=0.707 elapsed=321.2s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl04/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl02/opp', 'role': 'opp', 'episodes': 117798, 'samples': 2025102, 'shards': 102, 'shard_size': 20000}
+train shards=101 val shards=1
+epoch=0 loss=1.8844 loss_value=0.0568 loss_policy=1.8276 train_acc=0.651 val_acc=0.661 elapsed=141.4s
+epoch=1 loss=1.7320 loss_value=0.0521 loss_policy=1.6800 train_acc=0.681 val_acc=0.689 elapsed=281.7s
+epoch=2 loss=1.6690 loss_value=0.0507 loss_policy=1.6183 train_acc=0.693 val_acc=0.693 elapsed=423.2s
+epoch=3 loss=1.6278 loss_value=0.0496 loss_policy=1.5782 train_acc=0.701 val_acc=0.702 elapsed=563.9s
+epoch=4 loss=1.5932 loss_value=0.0489 loss_policy=1.5444 train_acc=0.707 val_acc=0.709 elapsed=705.6s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl02/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl03_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl04/opp', 'role': 'opp', 'episodes': 117798, 'samples': 980381, 'shards': 163, 'shard_size': 6000}
-train shards=162 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/opponent_model.pth
-epoch=0 loss=1.2384 loss_value=0.0925 loss_policy=1.1459 train_acc=0.674 val_acc=0.663 elapsed=63.4s
-epoch=1 loss=1.2111 loss_value=0.0881 loss_policy=1.1230 train_acc=0.688 val_acc=0.674 elapsed=126.2s
-epoch=2 loss=1.1979 loss_value=0.0855 loss_policy=1.1124 train_acc=0.693 val_acc=0.673 elapsed=189.1s
-epoch=3 loss=1.1871 loss_value=0.0830 loss_policy=1.1042 train_acc=0.697 val_acc=0.678 elapsed=251.7s
-epoch=4 loss=1.1791 loss_value=0.0818 loss_policy=1.0974 train_acc=0.700 val_acc=0.683 elapsed=314.6s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl04/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl03/own', 'role': 'own', 'episodes': 117798, 'samples': 206314, 'shards': 12, 'shard_size': 20000}
+train shards=11 val shards=1
+epoch=0 loss=1.6864 loss_value=0.0615 loss_policy=1.6249 train_acc=0.735 val_acc=0.788 elapsed=14.1s
+epoch=1 loss=1.4229 loss_value=0.0558 loss_policy=1.3671 train_acc=0.806 val_acc=0.816 elapsed=28.0s
+epoch=2 loss=1.3276 loss_value=0.0536 loss_policy=1.2740 train_acc=0.827 val_acc=0.828 elapsed=41.6s
+epoch=3 loss=1.2572 loss_value=0.0528 loss_policy=1.2044 train_acc=0.841 val_acc=0.815 elapsed=56.1s
+epoch=4 loss=1.2149 loss_value=0.0523 loss_policy=1.1626 train_acc=0.847 val_acc=0.841 elapsed=70.3s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl03/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl03_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl05/own', 'role': 'own', 'episodes': 117798, 'samples': 921341, 'shards': 153, 'shard_size': 6000}
-train shards=152 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/model.pth
-epoch=0 loss=1.3902 loss_value=0.0957 loss_policy=1.2946 train_acc=0.622 val_acc=0.596 elapsed=59.8s
-epoch=1 loss=1.3141 loss_value=0.0867 loss_policy=1.2273 train_acc=0.661 val_acc=0.624 elapsed=119.1s
-epoch=2 loss=1.2827 loss_value=0.0832 loss_policy=1.1995 train_acc=0.677 val_acc=0.618 elapsed=178.3s
-epoch=3 loss=1.2560 loss_value=0.0809 loss_policy=1.1751 train_acc=0.695 val_acc=0.636 elapsed=237.3s
-epoch=4 loss=1.2420 loss_value=0.0794 loss_policy=1.1626 train_acc=0.701 val_acc=0.637 elapsed=296.3s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl05/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl03/opp', 'role': 'opp', 'episodes': 117798, 'samples': 292056, 'shards': 16, 'shard_size': 20000}
+train shards=15 val shards=1
+epoch=0 loss=1.8279 loss_value=0.0562 loss_policy=1.7717 train_acc=0.651 val_acc=0.641 elapsed=20.9s
+epoch=1 loss=1.7090 loss_value=0.0505 loss_policy=1.6585 train_acc=0.686 val_acc=0.628 elapsed=40.1s
+epoch=2 loss=1.6424 loss_value=0.0486 loss_policy=1.5937 train_acc=0.700 val_acc=0.641 elapsed=59.5s
+epoch=3 loss=1.6038 loss_value=0.0475 loss_policy=1.5563 train_acc=0.708 val_acc=0.643 elapsed=78.8s
+epoch=4 loss=1.5608 loss_value=0.0466 loss_policy=1.5142 train_acc=0.716 val_acc=0.667 elapsed=98.0s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl03/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl04_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl05/opp', 'role': 'opp', 'episodes': 117798, 'samples': 1158844, 'shards': 192, 'shard_size': 6000}
-train shards=191 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/opponent_model.pth
-epoch=0 loss=1.3203 loss_value=0.0829 loss_policy=1.2374 train_acc=0.654 val_acc=0.678 elapsed=74.9s
-epoch=1 loss=1.2826 loss_value=0.0759 loss_policy=1.2066 train_acc=0.677 val_acc=0.679 elapsed=148.8s
-epoch=2 loss=1.2686 loss_value=0.0743 loss_policy=1.1944 train_acc=0.684 val_acc=0.689 elapsed=222.8s
-epoch=3 loss=1.2582 loss_value=0.0719 loss_policy=1.1863 train_acc=0.687 val_acc=0.684 elapsed=296.7s
-epoch=4 loss=1.2496 loss_value=0.0699 loss_policy=1.1797 train_acc=0.691 val_acc=0.696 elapsed=370.8s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl05/opp.pth
-device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl06/own', 'role': 'own', 'episodes': 117798, 'samples': 306117, 'shards': 51, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl04/own', 'role': 'own', 'episodes': 117798, 'samples': 1003201, 'shards': 51, 'shard_size': 20000}
 train shards=50 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/model.pth
-epoch=0 loss=1.2950 loss_value=0.1006 loss_policy=1.1944 train_acc=0.697 val_acc=0.707 elapsed=19.9s
-epoch=1 loss=1.2119 loss_value=0.0918 loss_policy=1.1201 train_acc=0.731 val_acc=0.746 elapsed=39.3s
-epoch=2 loss=1.1798 loss_value=0.0888 loss_policy=1.0910 train_acc=0.750 val_acc=0.735 elapsed=58.8s
-epoch=3 loss=1.1577 loss_value=0.0849 loss_policy=1.0729 train_acc=0.760 val_acc=0.768 elapsed=78.2s
-epoch=4 loss=1.1388 loss_value=0.0823 loss_policy=1.0565 train_acc=0.769 val_acc=0.765 elapsed=97.6s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl06/self.pth
+epoch=0 loss=1.5960 loss_value=0.0592 loss_policy=1.5368 train_acc=0.684 val_acc=0.543 elapsed=74.8s
+epoch=1 loss=1.4571 loss_value=0.0554 loss_policy=1.4017 train_acc=0.716 val_acc=0.548 elapsed=144.2s
+epoch=2 loss=1.4095 loss_value=0.0541 loss_policy=1.3554 train_acc=0.726 val_acc=0.629 elapsed=213.1s
+epoch=3 loss=1.3826 loss_value=0.0533 loss_policy=1.3293 train_acc=0.731 val_acc=0.558 elapsed=282.2s
+epoch=4 loss=1.3509 loss_value=0.0524 loss_policy=1.2985 train_acc=0.736 val_acc=0.649 elapsed=351.4s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl04/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl04_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl06/opp', 'role': 'opp', 'episodes': 117798, 'samples': 294635, 'shards': 49, 'shard_size': 6000}
-train shards=48 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/opponent_model.pth
-epoch=0 loss=1.2552 loss_value=0.0953 loss_policy=1.1599 train_acc=0.667 val_acc=0.666 elapsed=19.2s
-epoch=1 loss=1.2200 loss_value=0.0872 loss_policy=1.1328 train_acc=0.680 val_acc=0.664 elapsed=37.8s
-epoch=2 loss=1.1995 loss_value=0.0806 loss_policy=1.1189 train_acc=0.688 val_acc=0.683 elapsed=56.4s
-epoch=3 loss=1.1829 loss_value=0.0765 loss_policy=1.1064 train_acc=0.694 val_acc=0.691 elapsed=75.1s
-epoch=4 loss=1.1689 loss_value=0.0713 loss_policy=1.0976 train_acc=0.699 val_acc=0.682 elapsed=93.7s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl06/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl04/opp', 'role': 'opp', 'episodes': 117798, 'samples': 980381, 'shards': 50, 'shard_size': 20000}
+train shards=49 val shards=1
+epoch=0 loss=1.9182 loss_value=0.0587 loss_policy=1.8595 train_acc=0.643 val_acc=0.667 elapsed=67.9s
+epoch=1 loss=1.7681 loss_value=0.0544 loss_policy=1.7137 train_acc=0.675 val_acc=0.669 elapsed=135.2s
+epoch=2 loss=1.6974 loss_value=0.0530 loss_policy=1.6444 train_acc=0.687 val_acc=0.710 elapsed=202.7s
+epoch=3 loss=1.6576 loss_value=0.0519 loss_policy=1.6057 train_acc=0.695 val_acc=0.709 elapsed=270.1s
+epoch=4 loss=1.6184 loss_value=0.0515 loss_policy=1.5669 train_acc=0.701 val_acc=0.713 elapsed=337.6s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl04/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl05_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl07/own', 'role': 'own', 'episodes': 117798, 'samples': 686328, 'shards': 114, 'shard_size': 6000}
-train shards=113 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/model.pth
-epoch=0 loss=1.3050 loss_value=0.0933 loss_policy=1.2117 train_acc=0.646 val_acc=0.700 elapsed=43.7s
-epoch=1 loss=1.2342 loss_value=0.0849 loss_policy=1.1493 train_acc=0.679 val_acc=0.707 elapsed=87.1s
-epoch=2 loss=1.2055 loss_value=0.0805 loss_policy=1.1251 train_acc=0.690 val_acc=0.704 elapsed=130.4s
-epoch=3 loss=1.1857 loss_value=0.0762 loss_policy=1.1095 train_acc=0.700 val_acc=0.711 elapsed=173.6s
-epoch=4 loss=1.1705 loss_value=0.0731 loss_policy=1.0974 train_acc=0.706 val_acc=0.710 elapsed=217.0s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl07/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl05/own', 'role': 'own', 'episodes': 117798, 'samples': 921341, 'shards': 47, 'shard_size': 20000}
+train shards=46 val shards=1
+epoch=0 loss=1.7682 loss_value=0.0590 loss_policy=1.7092 train_acc=0.670 val_acc=0.702 elapsed=63.3s
+epoch=1 loss=1.6299 loss_value=0.0539 loss_policy=1.5760 train_acc=0.706 val_acc=0.678 elapsed=126.6s
+epoch=2 loss=1.5570 loss_value=0.0521 loss_policy=1.5049 train_acc=0.719 val_acc=0.729 elapsed=189.7s
+epoch=3 loss=1.5087 loss_value=0.0510 loss_policy=1.4577 train_acc=0.728 val_acc=0.733 elapsed=252.2s
+epoch=4 loss=1.4784 loss_value=0.0501 loss_policy=1.4283 train_acc=0.734 val_acc=0.707 elapsed=315.5s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl05/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl05_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl07/opp', 'role': 'opp', 'episodes': 117798, 'samples': 455765, 'shards': 76, 'shard_size': 6000}
-train shards=75 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/opponent_model.pth
-epoch=0 loss=1.2097 loss_value=0.1002 loss_policy=1.1094 train_acc=0.677 val_acc=0.680 elapsed=29.4s
-epoch=1 loss=1.1834 loss_value=0.0927 loss_policy=1.0907 train_acc=0.687 val_acc=0.687 elapsed=57.9s
-epoch=2 loss=1.1704 loss_value=0.0890 loss_policy=1.0814 train_acc=0.692 val_acc=0.691 elapsed=86.6s
-epoch=3 loss=1.1578 loss_value=0.0848 loss_policy=1.0730 train_acc=0.696 val_acc=0.696 elapsed=115.2s
-epoch=4 loss=1.1471 loss_value=0.0806 loss_policy=1.0665 train_acc=0.700 val_acc=0.700 elapsed=143.8s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl07/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl05/opp', 'role': 'opp', 'episodes': 117798, 'samples': 1158844, 'shards': 59, 'shard_size': 20000}
+train shards=58 val shards=1
+epoch=0 loss=1.9316 loss_value=0.0543 loss_policy=1.8773 train_acc=0.641 val_acc=0.672 elapsed=81.3s
+epoch=1 loss=1.7498 loss_value=0.0500 loss_policy=1.6997 train_acc=0.672 val_acc=0.679 elapsed=161.8s
+epoch=2 loss=1.6794 loss_value=0.0484 loss_policy=1.6310 train_acc=0.686 val_acc=0.680 elapsed=242.9s
+epoch=3 loss=1.6346 loss_value=0.0469 loss_policy=1.5877 train_acc=0.694 val_acc=0.687 elapsed=322.8s
+epoch=4 loss=1.6036 loss_value=0.0461 loss_policy=1.5574 train_acc=0.700 val_acc=0.663 elapsed=402.6s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl05/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl06_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl08/own', 'role': 'own', 'episodes': 117798, 'samples': 380291, 'shards': 63, 'shard_size': 6000}
-train shards=62 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/model.pth
-epoch=0 loss=1.2264 loss_value=0.1016 loss_policy=1.1248 train_acc=0.705 val_acc=0.744 elapsed=24.5s
-epoch=1 loss=1.1366 loss_value=0.0901 loss_policy=1.0466 train_acc=0.754 val_acc=0.766 elapsed=48.4s
-epoch=2 loss=1.1069 loss_value=0.0861 loss_policy=1.0208 train_acc=0.770 val_acc=0.779 elapsed=72.3s
-epoch=3 loss=1.0882 loss_value=0.0821 loss_policy=1.0061 train_acc=0.781 val_acc=0.795 elapsed=96.2s
-epoch=4 loss=1.0761 loss_value=0.0802 loss_policy=0.9959 train_acc=0.787 val_acc=0.794 elapsed=120.1s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl08/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl06/own', 'role': 'own', 'episodes': 117798, 'samples': 306117, 'shards': 17, 'shard_size': 20000}
+train shards=16 val shards=1
+epoch=0 loss=1.5829 loss_value=0.0660 loss_policy=1.5169 train_acc=0.758 val_acc=0.768 elapsed=20.8s
+epoch=1 loss=1.3164 loss_value=0.0591 loss_policy=1.2573 train_acc=0.816 val_acc=0.835 elapsed=41.2s
+epoch=2 loss=1.2350 loss_value=0.0564 loss_policy=1.1786 train_acc=0.831 val_acc=0.843 elapsed=61.8s
+epoch=3 loss=1.1776 loss_value=0.0550 loss_policy=1.1226 train_acc=0.842 val_acc=0.857 elapsed=83.1s
+epoch=4 loss=1.1446 loss_value=0.0537 loss_policy=1.0909 train_acc=0.848 val_acc=0.831 elapsed=104.5s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl06/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl06_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl08/opp', 'role': 'opp', 'episodes': 117798, 'samples': 492024, 'shards': 82, 'shard_size': 6000}
-train shards=81 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/opponent_model.pth
-epoch=0 loss=1.2947 loss_value=0.0903 loss_policy=1.2044 train_acc=0.658 val_acc=0.644 elapsed=31.7s
-epoch=1 loss=1.2521 loss_value=0.0820 loss_policy=1.1700 train_acc=0.676 val_acc=0.645 elapsed=62.8s
-epoch=2 loss=1.2299 loss_value=0.0779 loss_policy=1.1521 train_acc=0.685 val_acc=0.617 elapsed=93.8s
-epoch=3 loss=1.2170 loss_value=0.0751 loss_policy=1.1419 train_acc=0.689 val_acc=0.643 elapsed=124.8s
-epoch=4 loss=1.2048 loss_value=0.0725 loss_policy=1.1322 train_acc=0.695 val_acc=0.645 elapsed=155.8s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl08/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl06/opp', 'role': 'opp', 'episodes': 117798, 'samples': 294635, 'shards': 16, 'shard_size': 20000}
+train shards=15 val shards=1
+epoch=0 loss=1.9057 loss_value=0.0619 loss_policy=1.8438 train_acc=0.629 val_acc=0.634 elapsed=21.3s
+epoch=1 loss=1.8003 loss_value=0.0558 loss_policy=1.7445 train_acc=0.667 val_acc=0.665 elapsed=42.2s
+epoch=2 loss=1.7264 loss_value=0.0537 loss_policy=1.6727 train_acc=0.681 val_acc=0.649 elapsed=62.2s
+epoch=3 loss=1.6939 loss_value=0.0527 loss_policy=1.6412 train_acc=0.690 val_acc=0.671 elapsed=81.9s
+epoch=4 loss=1.6347 loss_value=0.0518 loss_policy=1.5829 train_acc=0.697 val_acc=0.662 elapsed=101.1s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl06/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl07_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl09/own', 'role': 'own', 'episodes': 117798, 'samples': 195792, 'shards': 33, 'shard_size': 6000}
-train shards=32 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/model.pth
-epoch=0 loss=1.4981 loss_value=0.0789 loss_policy=1.4192 train_acc=0.588 val_acc=0.617 elapsed=12.8s
-epoch=1 loss=1.3896 loss_value=0.0683 loss_policy=1.3213 train_acc=0.642 val_acc=0.653 elapsed=25.0s
-epoch=2 loss=1.3449 loss_value=0.0646 loss_policy=1.2802 train_acc=0.664 val_acc=0.651 elapsed=37.2s
-epoch=3 loss=1.3133 loss_value=0.0605 loss_policy=1.2529 train_acc=0.676 val_acc=0.661 elapsed=49.4s
-epoch=4 loss=1.2911 loss_value=0.0594 loss_policy=1.2317 train_acc=0.689 val_acc=0.671 elapsed=61.6s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl09/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl07/own', 'role': 'own', 'episodes': 117798, 'samples': 686328, 'shards': 35, 'shard_size': 20000}
+train shards=34 val shards=1
+epoch=0 loss=1.7818 loss_value=0.0599 loss_policy=1.7219 train_acc=0.658 val_acc=0.659 elapsed=46.9s
+epoch=1 loss=1.6305 loss_value=0.0561 loss_policy=1.5744 train_acc=0.694 val_acc=0.683 elapsed=93.4s
+epoch=2 loss=1.5515 loss_value=0.0546 loss_policy=1.4969 train_acc=0.711 val_acc=0.690 elapsed=140.2s
+epoch=3 loss=1.4887 loss_value=0.0535 loss_policy=1.4352 train_acc=0.724 val_acc=0.705 elapsed=186.4s
+epoch=4 loss=1.4385 loss_value=0.0527 loss_policy=1.3858 train_acc=0.733 val_acc=0.707 elapsed=232.8s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl07/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl07_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl09/opp', 'role': 'opp', 'episodes': 117798, 'samples': 163803, 'shards': 28, 'shard_size': 6000}
-train shards=27 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/opponent_model.pth
-epoch=0 loss=1.2605 loss_value=0.0809 loss_policy=1.1796 train_acc=0.668 val_acc=0.679 elapsed=10.7s
-epoch=1 loss=1.2248 loss_value=0.0739 loss_policy=1.1509 train_acc=0.681 val_acc=0.674 elapsed=20.9s
-epoch=2 loss=1.2018 loss_value=0.0670 loss_policy=1.1349 train_acc=0.689 val_acc=0.673 elapsed=31.0s
-epoch=3 loss=1.1866 loss_value=0.0640 loss_policy=1.1226 train_acc=0.695 val_acc=0.671 elapsed=41.2s
-epoch=4 loss=1.1720 loss_value=0.0606 loss_policy=1.1114 train_acc=0.699 val_acc=0.679 elapsed=51.4s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl09/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl07/opp', 'role': 'opp', 'episodes': 117798, 'samples': 455765, 'shards': 24, 'shard_size': 20000}
+train shards=23 val shards=1
+epoch=0 loss=1.9280 loss_value=0.0633 loss_policy=1.8647 train_acc=0.625 val_acc=0.658 elapsed=32.1s
+epoch=1 loss=1.7684 loss_value=0.0588 loss_policy=1.7096 train_acc=0.658 val_acc=0.643 elapsed=63.6s
+epoch=2 loss=1.7100 loss_value=0.0571 loss_policy=1.6529 train_acc=0.670 val_acc=0.651 elapsed=96.4s
+epoch=3 loss=1.6613 loss_value=0.0561 loss_policy=1.6052 train_acc=0.680 val_acc=0.647 elapsed=129.0s
+epoch=4 loss=1.6196 loss_value=0.0552 loss_policy=1.5644 train_acc=0.687 val_acc=0.685 elapsed=160.9s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl07/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl08_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl10/own', 'role': 'own', 'episodes': 117798, 'samples': 153675, 'shards': 26, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl08/own', 'role': 'own', 'episodes': 117798, 'samples': 380291, 'shards': 20, 'shard_size': 20000}
+train shards=19 val shards=1
+epoch=0 loss=1.6248 loss_value=0.0666 loss_policy=1.5582 train_acc=0.728 val_acc=0.736 elapsed=26.3s
+epoch=1 loss=1.4880 loss_value=0.0610 loss_policy=1.4269 train_acc=0.768 val_acc=0.764 elapsed=52.2s
+epoch=2 loss=1.4334 loss_value=0.0590 loss_policy=1.3744 train_acc=0.780 val_acc=0.753 elapsed=78.9s
+epoch=3 loss=1.3923 loss_value=0.0576 loss_policy=1.3347 train_acc=0.790 val_acc=0.768 elapsed=104.3s
+epoch=4 loss=1.3554 loss_value=0.0564 loss_policy=1.2990 train_acc=0.797 val_acc=0.771 elapsed=129.5s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl08/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl08_opp (epochs=5)
+device: cuda amp=bf16+tf32 prefetch=4
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl08/opp', 'role': 'opp', 'episodes': 117798, 'samples': 492024, 'shards': 26, 'shard_size': 20000}
 train shards=25 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/model.pth
-epoch=0 loss=1.3137 loss_value=0.0935 loss_policy=1.2202 train_acc=0.688 val_acc=0.722 elapsed=10.0s
-epoch=1 loss=1.2015 loss_value=0.0777 loss_policy=1.1238 train_acc=0.745 val_acc=0.762 elapsed=19.6s
-epoch=2 loss=1.1577 loss_value=0.0711 loss_policy=1.0866 train_acc=0.769 val_acc=0.781 elapsed=29.2s
-epoch=3 loss=1.1308 loss_value=0.0657 loss_policy=1.0651 train_acc=0.782 val_acc=0.791 elapsed=38.7s
-epoch=4 loss=1.1103 loss_value=0.0620 loss_policy=1.0483 train_acc=0.792 val_acc=0.801 elapsed=48.2s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl10/self.pth
+epoch=0 loss=1.8829 loss_value=0.0615 loss_policy=1.8214 train_acc=0.644 val_acc=0.597 elapsed=33.6s
+epoch=1 loss=1.7248 loss_value=0.0550 loss_policy=1.6698 train_acc=0.683 val_acc=0.615 elapsed=68.9s
+epoch=2 loss=1.6539 loss_value=0.0528 loss_policy=1.6011 train_acc=0.698 val_acc=0.637 elapsed=104.1s
+epoch=3 loss=1.6222 loss_value=0.0509 loss_policy=1.5713 train_acc=0.706 val_acc=0.636 elapsed=141.5s
+epoch=4 loss=1.5724 loss_value=0.0495 loss_policy=1.5229 train_acc=0.714 val_acc=0.633 elapsed=175.9s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl08/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl09_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl10/opp', 'role': 'opp', 'episodes': 117798, 'samples': 133595, 'shards': 23, 'shard_size': 6000}
-train shards=22 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/opponent_model.pth
-epoch=0 loss=1.2294 loss_value=0.0841 loss_policy=1.1453 train_acc=0.671 val_acc=0.659 elapsed=8.8s
-epoch=1 loss=1.1892 loss_value=0.0718 loss_policy=1.1174 train_acc=0.685 val_acc=0.659 elapsed=17.0s
-epoch=2 loss=1.1688 loss_value=0.0677 loss_policy=1.1010 train_acc=0.689 val_acc=0.654 elapsed=25.3s
-epoch=3 loss=1.1516 loss_value=0.0619 loss_policy=1.0897 train_acc=0.694 val_acc=0.664 elapsed=33.5s
-epoch=4 loss=1.1359 loss_value=0.0569 loss_policy=1.0790 train_acc=0.697 val_acc=0.657 elapsed=41.8s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl10/opp.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl09/own', 'role': 'own', 'episodes': 117798, 'samples': 195792, 'shards': 10, 'shard_size': 20000}
+train shards=9 val shards=1
+epoch=0 loss=1.9275 loss_value=0.0560 loss_policy=1.8715 train_acc=0.621 val_acc=0.659 elapsed=13.4s
+epoch=1 loss=1.6471 loss_value=0.0493 loss_policy=1.5979 train_acc=0.681 val_acc=0.679 elapsed=26.1s
+epoch=2 loss=1.5187 loss_value=0.0471 loss_policy=1.4716 train_acc=0.708 val_acc=0.705 elapsed=38.9s
+epoch=3 loss=1.4243 loss_value=0.0456 loss_policy=1.3787 train_acc=0.726 val_acc=0.707 elapsed=51.9s
+epoch=4 loss=1.3478 loss_value=0.0448 loss_policy=1.3030 train_acc=0.738 val_acc=0.729 elapsed=65.0s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl09/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl09_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl11/own', 'role': 'own', 'episodes': 117798, 'samples': 32965, 'shards': 6, 'shard_size': 6000}
-train shards=5 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/model.pth
-epoch=0 loss=1.4963 loss_value=0.0863 loss_policy=1.4100 train_acc=0.554 val_acc=0.603 elapsed=2.4s
-epoch=1 loss=1.3771 loss_value=0.0656 loss_policy=1.3115 train_acc=0.612 val_acc=0.626 elapsed=4.3s
-epoch=2 loss=1.3345 loss_value=0.0580 loss_policy=1.2766 train_acc=0.628 val_acc=0.627 elapsed=6.3s
-epoch=3 loss=1.3064 loss_value=0.0546 loss_policy=1.2518 train_acc=0.641 val_acc=0.631 elapsed=8.3s
-epoch=4 loss=1.2795 loss_value=0.0501 loss_policy=1.2294 train_acc=0.650 val_acc=0.625 elapsed=10.2s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl11/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl09/opp', 'role': 'opp', 'episodes': 117798, 'samples': 163803, 'shards': 9, 'shard_size': 20000}
+train shards=8 val shards=1
+epoch=0 loss=1.9543 loss_value=0.0553 loss_policy=1.8990 train_acc=0.623 val_acc=0.586 elapsed=12.0s
+epoch=1 loss=1.7773 loss_value=0.0498 loss_policy=1.7275 train_acc=0.669 val_acc=0.585 elapsed=23.2s
+epoch=2 loss=1.7218 loss_value=0.0479 loss_policy=1.6739 train_acc=0.682 val_acc=0.599 elapsed=34.8s
+epoch=3 loss=1.6533 loss_value=0.0470 loss_policy=1.6064 train_acc=0.691 val_acc=0.608 elapsed=46.8s
+epoch=4 loss=1.6129 loss_value=0.0461 loss_policy=1.5669 train_acc=0.700 val_acc=0.593 elapsed=58.7s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl09/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl10_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl11/opp', 'role': 'opp', 'episodes': 117798, 'samples': 46794, 'shards': 8, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl10/own', 'role': 'own', 'episodes': 117798, 'samples': 153675, 'shards': 9, 'shard_size': 20000}
+train shards=8 val shards=1
+epoch=0 loss=1.6123 loss_value=0.0661 loss_policy=1.5461 train_acc=0.736 val_acc=0.732 elapsed=10.6s
+epoch=1 loss=1.3336 loss_value=0.0578 loss_policy=1.2758 train_acc=0.791 val_acc=0.775 elapsed=21.2s
+epoch=2 loss=1.2294 loss_value=0.0543 loss_policy=1.1751 train_acc=0.810 val_acc=0.776 elapsed=31.1s
+epoch=3 loss=1.1503 loss_value=0.0516 loss_policy=1.0987 train_acc=0.824 val_acc=0.833 elapsed=40.8s
+epoch=4 loss=1.0962 loss_value=0.0504 loss_policy=1.0458 train_acc=0.834 val_acc=0.816 elapsed=50.6s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl10/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl10_opp (epochs=5)
+device: cuda amp=bf16+tf32 prefetch=4
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl10/opp', 'role': 'opp', 'episodes': 117798, 'samples': 133595, 'shards': 8, 'shard_size': 20000}
 train shards=7 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group2/opponent_model.pth
-epoch=0 loss=1.3015 loss_value=0.0674 loss_policy=1.2341 train_acc=0.647 val_acc=0.655 elapsed=3.3s
-epoch=1 loss=1.2376 loss_value=0.0548 loss_policy=1.1828 train_acc=0.669 val_acc=0.658 elapsed=6.1s
-epoch=2 loss=1.2034 loss_value=0.0473 loss_policy=1.1560 train_acc=0.682 val_acc=0.659 elapsed=8.9s
-epoch=3 loss=1.1791 loss_value=0.0435 loss_policy=1.1356 train_acc=0.686 val_acc=0.658 elapsed=11.8s
-epoch=4 loss=1.1576 loss_value=0.0381 loss_policy=1.1196 train_acc=0.693 val_acc=0.659 elapsed=14.6s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl11/opp.pth
+epoch=0 loss=1.9833 loss_value=0.0622 loss_policy=1.9211 train_acc=0.598 val_acc=0.633 elapsed=9.0s
+epoch=1 loss=1.8583 loss_value=0.0543 loss_policy=1.8040 train_acc=0.637 val_acc=0.639 elapsed=17.3s
+epoch=2 loss=1.7843 loss_value=0.0516 loss_policy=1.7326 train_acc=0.652 val_acc=0.647 elapsed=25.7s
+epoch=3 loss=1.7378 loss_value=0.0502 loss_policy=1.6876 train_acc=0.662 val_acc=0.654 elapsed=34.0s
+epoch=4 loss=1.6787 loss_value=0.0490 loss_policy=1.6297 train_acc=0.669 val_acc=0.661 elapsed=42.5s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl10/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl11_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl12/own', 'role': 'own', 'episodes': 117798, 'samples': 18632, 'shards': 4, 'shard_size': 6000}
-train shards=3 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group0/model.pth
-epoch=0 loss=1.5274 loss_value=0.1262 loss_policy=1.4012 train_acc=0.560 val_acc=0.689 elapsed=1.6s
-epoch=1 loss=1.3439 loss_value=0.0956 loss_policy=1.2484 train_acc=0.652 val_acc=0.707 elapsed=2.9s
-epoch=2 loss=1.2875 loss_value=0.0822 loss_policy=1.2053 train_acc=0.664 val_acc=0.701 elapsed=4.1s
-epoch=3 loss=1.2554 loss_value=0.0752 loss_policy=1.1802 train_acc=0.683 val_acc=0.721 elapsed=5.3s
-epoch=4 loss=1.2294 loss_value=0.0681 loss_policy=1.1613 train_acc=0.701 val_acc=0.746 elapsed=6.6s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl12/self.pth
-device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl12/opp', 'role': 'opp', 'episodes': 117798, 'samples': 16967, 'shards': 3, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl11/own', 'role': 'own', 'episodes': 117798, 'samples': 32965, 'shards': 3, 'shard_size': 20000}
 train shards=2 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group0/opponent_model.pth
-epoch=0 loss=1.3028 loss_value=0.0988 loss_policy=1.2041 train_acc=0.666 val_acc=0.688 elapsed=1.4s
-epoch=1 loss=1.2149 loss_value=0.0810 loss_policy=1.1339 train_acc=0.700 val_acc=0.685 elapsed=2.4s
-epoch=2 loss=1.1701 loss_value=0.0716 loss_policy=1.0985 train_acc=0.714 val_acc=0.681 elapsed=3.3s
-epoch=3 loss=1.1314 loss_value=0.0618 loss_policy=1.0696 train_acc=0.724 val_acc=0.681 elapsed=4.3s
-epoch=4 loss=1.1039 loss_value=0.0551 loss_policy=1.0488 train_acc=0.730 val_acc=0.674 elapsed=5.2s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl12/opp.pth
+epoch=0 loss=2.2312 loss_value=0.0583 loss_policy=2.1729 train_acc=0.579 val_acc=0.600 elapsed=2.5s
+epoch=1 loss=2.0163 loss_value=0.0485 loss_policy=1.9678 train_acc=0.624 val_acc=0.641 elapsed=4.4s
+epoch=2 loss=1.8429 loss_value=0.0464 loss_policy=1.7965 train_acc=0.647 val_acc=0.641 elapsed=6.3s
+epoch=3 loss=1.7371 loss_value=0.0454 loss_policy=1.6917 train_acc=0.667 val_acc=0.658 elapsed=8.2s
+epoch=4 loss=1.6374 loss_value=0.0446 loss_policy=1.5928 train_acc=0.682 val_acc=0.662 elapsed=10.2s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl11/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl11_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl13/own', 'role': 'own', 'episodes': 117798, 'samples': 9405, 'shards': 2, 'shard_size': 6000}
-train shards=1 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group0/model.pth
-epoch=0 loss=1.7139 loss_value=0.1235 loss_policy=1.5904 train_acc=0.461 val_acc=0.540 elapsed=1.0s
-epoch=1 loss=1.4848 loss_value=0.0777 loss_policy=1.4071 train_acc=0.578 val_acc=0.575 elapsed=1.6s
-epoch=2 loss=1.3912 loss_value=0.0587 loss_policy=1.3324 train_acc=0.631 val_acc=0.598 elapsed=2.2s
-epoch=3 loss=1.3223 loss_value=0.0455 loss_policy=1.2768 train_acc=0.658 val_acc=0.584 elapsed=2.7s
-epoch=4 loss=1.2750 loss_value=0.0350 loss_policy=1.2400 train_acc=0.677 val_acc=0.586 elapsed=3.3s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl13/self.pth
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl11/opp', 'role': 'opp', 'episodes': 117798, 'samples': 46794, 'shards': 4, 'shard_size': 20000}
+train shards=3 val shards=1
+epoch=0 loss=2.4989 loss_value=0.0473 loss_policy=2.4515 train_acc=0.546 val_acc=0.579 elapsed=3.2s
+epoch=1 loss=2.2041 loss_value=0.0410 loss_policy=2.1631 train_acc=0.618 val_acc=0.604 elapsed=5.6s
+epoch=2 loss=2.0847 loss_value=0.0393 loss_policy=2.0454 train_acc=0.639 val_acc=0.611 elapsed=8.1s
+epoch=3 loss=2.0003 loss_value=0.0377 loss_policy=1.9625 train_acc=0.655 val_acc=0.630 elapsed=10.7s
+epoch=4 loss=1.8705 loss_value=0.0376 loss_policy=1.8329 train_acc=0.665 val_acc=0.627 elapsed=13.3s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl11/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl12_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl13/opp', 'role': 'opp', 'episodes': 117798, 'samples': 11359, 'shards': 2, 'shard_size': 6000}
-train shards=1 val shards=1
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group0/opponent_model.pth
-epoch=0 loss=1.4205 loss_value=0.1135 loss_policy=1.3070 train_acc=0.608 val_acc=0.589 elapsed=1.0s
-epoch=1 loss=1.3010 loss_value=0.0782 loss_policy=1.2228 train_acc=0.645 val_acc=0.578 elapsed=1.6s
-epoch=2 loss=1.2328 loss_value=0.0563 loss_policy=1.1765 train_acc=0.679 val_acc=0.580 elapsed=2.3s
-epoch=3 loss=1.1857 loss_value=0.0462 loss_policy=1.1395 train_acc=0.696 val_acc=0.579 elapsed=2.9s
-epoch=4 loss=1.1604 loss_value=0.0415 loss_policy=1.1189 train_acc=0.699 val_acc=0.556 elapsed=3.5s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl13/opp.pth
-device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl14/own', 'role': 'own', 'episodes': 117798, 'samples': 4010, 'shards': 1, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl12/own', 'role': 'own', 'episodes': 117798, 'samples': 18632, 'shards': 1, 'shard_size': 20000}
 train shards=1 val shards=0
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/model.pth
-epoch=0 loss=1.4567 loss_value=0.1389 loss_policy=1.3178 train_acc=0.631 val_acc=0.000 elapsed=0.8s
-epoch=1 loss=1.3151 loss_value=0.1284 loss_policy=1.1868 train_acc=0.704 val_acc=0.000 elapsed=1.1s
-epoch=2 loss=1.2595 loss_value=0.1246 loss_policy=1.1349 train_acc=0.738 val_acc=0.000 elapsed=1.4s
-epoch=3 loss=1.2205 loss_value=0.1210 loss_policy=1.0995 train_acc=0.758 val_acc=0.000 elapsed=1.7s
-epoch=4 loss=1.1665 loss_value=0.0871 loss_policy=1.0795 train_acc=0.767 val_acc=0.000 elapsed=2.1s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl14/self.pth
+epoch=0 loss=1.8667 loss_value=0.0686 loss_policy=1.7980 train_acc=0.595 val_acc=0.000 elapsed=1.9s
+epoch=1 loss=1.4647 loss_value=0.0622 loss_policy=1.4025 train_acc=0.707 val_acc=0.000 elapsed=3.4s
+epoch=2 loss=1.3442 loss_value=0.0574 loss_policy=1.2868 train_acc=0.741 val_acc=0.000 elapsed=4.7s
+epoch=3 loss=1.2311 loss_value=0.0541 loss_policy=1.1770 train_acc=0.767 val_acc=0.000 elapsed=6.0s
+epoch=4 loss=1.1449 loss_value=0.0519 loss_policy=1.0930 train_acc=0.784 val_acc=0.000 elapsed=7.4s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl12/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl12_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl14/opp', 'role': 'opp', 'episodes': 117798, 'samples': 2247, 'shards': 1, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl12/opp', 'role': 'opp', 'episodes': 117798, 'samples': 16967, 'shards': 1, 'shard_size': 20000}
 train shards=1 val shards=0
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/opponent_model.pth
-epoch=0 loss=1.3185 loss_value=0.0916 loss_policy=1.2269 train_acc=0.648 val_acc=0.000 elapsed=0.6s
-epoch=1 loss=1.1914 loss_value=0.0338 loss_policy=1.1577 train_acc=0.670 val_acc=0.000 elapsed=0.8s
-epoch=2 loss=1.1600 loss_value=0.0242 loss_policy=1.1358 train_acc=0.679 val_acc=0.000 elapsed=1.0s
-epoch=3 loss=1.1200 loss_value=0.0204 loss_policy=1.0995 train_acc=0.695 val_acc=0.000 elapsed=1.2s
-epoch=4 loss=1.0931 loss_value=0.0199 loss_policy=1.0732 train_acc=0.700 val_acc=0.000 elapsed=1.4s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl14/opp.pth
+epoch=0 loss=2.3168 loss_value=0.0738 loss_policy=2.2430 train_acc=0.553 val_acc=0.000 elapsed=1.8s
+epoch=1 loss=1.9346 loss_value=0.0635 loss_policy=1.8711 train_acc=0.637 val_acc=0.000 elapsed=3.0s
+epoch=2 loss=1.8182 loss_value=0.0597 loss_policy=1.7585 train_acc=0.654 val_acc=0.000 elapsed=4.3s
+epoch=3 loss=1.7172 loss_value=0.0572 loss_policy=1.6601 train_acc=0.676 val_acc=0.000 elapsed=5.6s
+epoch=4 loss=1.6594 loss_value=0.0553 loss_policy=1.6042 train_acc=0.687 val_acc=0.000 elapsed=6.7s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl12/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl13_own (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl15/own', 'role': 'own', 'episodes': 117798, 'samples': 655, 'shards': 1, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl13/own', 'role': 'own', 'episodes': 117798, 'samples': 9405, 'shards': 1, 'shard_size': 20000}
 train shards=1 val shards=0
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/model.pth
-epoch=0 loss=1.6568 loss_value=0.1618 loss_policy=1.4950 train_acc=0.475 val_acc=0.000 elapsed=0.5s
-epoch=1 loss=1.4652 loss_value=0.0881 loss_policy=1.3771 train_acc=0.506 val_acc=0.000 elapsed=0.6s
-epoch=2 loss=1.3830 loss_value=0.0595 loss_policy=1.3235 train_acc=0.520 val_acc=0.000 elapsed=0.7s
-epoch=3 loss=1.3219 loss_value=0.0366 loss_policy=1.2853 train_acc=0.542 val_acc=0.000 elapsed=0.8s
-epoch=4 loss=1.2754 loss_value=0.0343 loss_policy=1.2411 train_acc=0.570 val_acc=0.000 elapsed=0.9s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl15/self.pth
+epoch=0 loss=2.1350 loss_value=0.0811 loss_policy=2.0539 train_acc=0.550 val_acc=0.000 elapsed=1.2s
+epoch=1 loss=1.8308 loss_value=0.0712 loss_policy=1.7596 train_acc=0.639 val_acc=0.000 elapsed=2.1s
+epoch=2 loss=1.6912 loss_value=0.0667 loss_policy=1.6245 train_acc=0.667 val_acc=0.000 elapsed=2.9s
+epoch=3 loss=1.5693 loss_value=0.0636 loss_policy=1.5056 train_acc=0.682 val_acc=0.000 elapsed=3.7s
+epoch=4 loss=1.4857 loss_value=0.0618 loss_policy=1.4240 train_acc=0.705 val_acc=0.000 elapsed=4.5s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl13/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl13_opp (epochs=5)
 device: cuda amp=bf16+tf32 prefetch=4
-manifest: {'label': 'cl15/opp', 'role': 'opp', 'episodes': 117798, 'samples': 742, 'shards': 1, 'shard_size': 6000}
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl13/opp', 'role': 'opp', 'episodes': 117798, 'samples': 11359, 'shards': 1, 'shard_size': 20000}
 train shards=1 val shards=0
-loaded initial weights: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/agents/match_agents/imitation_group1/opponent_model.pth
-epoch=0 loss=1.2208 loss_value=0.1361 loss_policy=1.0848 train_acc=0.669 val_acc=0.000 elapsed=0.5s
-epoch=1 loss=1.0927 loss_value=0.0629 loss_policy=1.0298 train_acc=0.700 val_acc=0.000 elapsed=0.6s
-epoch=2 loss=1.0468 loss_value=0.0341 loss_policy=1.0127 train_acc=0.711 val_acc=0.000 elapsed=0.7s
-epoch=3 loss=1.0048 loss_value=0.0213 loss_policy=0.9835 train_acc=0.703 val_acc=0.000 elapsed=0.8s
-epoch=4 loss=0.9995 loss_value=0.0217 loss_policy=0.9778 train_acc=0.723 val_acc=0.000 elapsed=0.9s
-saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl15/opp.pth
-  [preprocess_all] done: episodes=117798 elapsed=3115.0s clusters=16 roles=('own', 'opp')
-[phase0] cl00: self <- コピー imitation_group0 (sim=1.000)
-[phase0] cl00: opp  <- warm-start imitation_group0 (sim=1.000)
-  [train] opp.pth <- cl00_opp (epochs=5, warm-start)
-[phase0] cl01: self <- コピー imitation_group1 (sim=1.000)
-[phase0] cl01: opp  <- warm-start imitation_group1 (sim=1.000)
-  [train] opp.pth <- cl01_opp (epochs=5, warm-start)
-[phase0] cl02: self <- コピー imitation_group2 (sim=1.000)
-[phase0] cl02: opp  <- warm-start imitation_group2 (sim=1.000)
-  [train] opp.pth <- cl02_opp (epochs=5, warm-start)
-[phase0] cl03: self <- warm-start imitation_group2 (sim=0.250)
-  [train] self.pth <- cl03_own (epochs=5, warm-start)
-[phase0] cl03: opp  <- warm-start imitation_group2 (sim=0.250)
-  [train] opp.pth <- cl03_opp (epochs=5, warm-start)
-[phase0] cl04: self <- warm-start imitation_group1 (sim=0.283)
-  [train] self.pth <- cl04_own (epochs=5, warm-start)
-[phase0] cl04: opp  <- warm-start imitation_group1 (sim=0.283)
-  [train] opp.pth <- cl04_opp (epochs=5, warm-start)
-[phase0] cl05: self <- warm-start imitation_group1 (sim=0.117)
-  [train] self.pth <- cl05_own (epochs=5, warm-start)
-[phase0] cl05: opp  <- warm-start imitation_group1 (sim=0.117)
-  [train] opp.pth <- cl05_opp (epochs=5, warm-start)
-[phase0] cl06: self <- warm-start imitation_group2 (sim=0.200)
-  [train] self.pth <- cl06_own (epochs=5, warm-start)
-[phase0] cl06: opp  <- warm-start imitation_group2 (sim=0.200)
-  [train] opp.pth <- cl06_opp (epochs=5, warm-start)
-[phase0] cl07: self <- warm-start imitation_group1 (sim=0.367)
-  [train] self.pth <- cl07_own (epochs=5, warm-start)
-[phase0] cl07: opp  <- warm-start imitation_group1 (sim=0.367)
-  [train] opp.pth <- cl07_opp (epochs=5, warm-start)
-[phase0] cl08: self <- warm-start imitation_group2 (sim=0.250)
-  [train] self.pth <- cl08_own (epochs=5, warm-start)
-[phase0] cl08: opp  <- warm-start imitation_group2 (sim=0.250)
-  [train] opp.pth <- cl08_opp (epochs=5, warm-start)
-[phase0] cl09: self <- warm-start imitation_group2 (sim=0.133)
-  [train] self.pth <- cl09_own (epochs=5, warm-start)
-[phase0] cl09: opp  <- warm-start imitation_group2 (sim=0.133)
-  [train] opp.pth <- cl09_opp (epochs=5, warm-start)
-[phase0] cl10: self <- warm-start imitation_group1 (sim=0.283)
-  [train] self.pth <- cl10_own (epochs=5, warm-start)
-[phase0] cl10: opp  <- warm-start imitation_group1 (sim=0.283)
-  [train] opp.pth <- cl10_opp (epochs=5, warm-start)
-[phase0] cl11: self <- warm-start imitation_group2 (sim=0.317)
-  [train] self.pth <- cl11_own (epochs=5, warm-start)
-[phase0] cl11: opp  <- warm-start imitation_group2 (sim=0.317)
-  [train] opp.pth <- cl11_opp (epochs=5, warm-start)
-[phase0] cl12: self <- warm-start imitation_group0 (sim=0.200)
-  [train] self.pth <- cl12_own (epochs=5, warm-start)
-[phase0] cl12: opp  <- warm-start imitation_group0 (sim=0.200)
-  [train] opp.pth <- cl12_opp (epochs=5, warm-start)
-[phase0] cl13: self <- warm-start imitation_group0 (sim=0.317)
-  [train] self.pth <- cl13_own (epochs=5, warm-start)
-[phase0] cl13: opp  <- warm-start imitation_group0 (sim=0.317)
-  [train] opp.pth <- cl13_opp (epochs=5, warm-start)
-[phase0] cl14: self <- warm-start imitation_group1 (sim=0.183)
-  [train] self.pth <- cl14_own (epochs=5, warm-start)
-[phase0] cl14: opp  <- warm-start imitation_group1 (sim=0.183)
-  [train] opp.pth <- cl14_opp (epochs=5, warm-start)
-[phase0] cl15: self <- warm-start imitation_group1 (sim=0.217)
-  [train] self.pth <- cl15_own (epochs=5, warm-start)
-[phase0] cl15: opp  <- warm-start imitation_group1 (sim=0.217)
-  [train] opp.pth <- cl15_opp (epochs=5, warm-start)
+epoch=0 loss=2.4693 loss_value=0.0798 loss_policy=2.3895 train_acc=0.489 val_acc=0.000 elapsed=1.5s
+epoch=1 loss=2.1493 loss_value=0.0704 loss_policy=2.0789 train_acc=0.554 val_acc=0.000 elapsed=2.4s
+epoch=2 loss=2.0469 loss_value=0.0623 loss_policy=1.9846 train_acc=0.580 val_acc=0.000 elapsed=3.4s
+epoch=3 loss=1.9509 loss_value=0.0547 loss_policy=1.8962 train_acc=0.594 val_acc=0.000 elapsed=4.5s
+epoch=4 loss=1.9019 loss_value=0.0485 loss_policy=1.8534 train_acc=0.612 val_acc=0.000 elapsed=5.4s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl13/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl14_own (epochs=5)
+device: cuda amp=bf16+tf32 prefetch=4
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl14/own', 'role': 'own', 'episodes': 117798, 'samples': 4010, 'shards': 1, 'shard_size': 20000}
+train shards=1 val shards=0
+epoch=0 loss=2.1898 loss_value=0.0816 loss_policy=2.1082 train_acc=0.620 val_acc=0.000 elapsed=0.9s
+epoch=1 loss=1.8858 loss_value=0.0677 loss_policy=1.8182 train_acc=0.680 val_acc=0.000 elapsed=1.2s
+epoch=2 loss=1.8735 loss_value=0.0543 loss_policy=1.8192 train_acc=0.709 val_acc=0.000 elapsed=1.6s
+epoch=3 loss=1.8533 loss_value=0.0424 loss_policy=1.8109 train_acc=0.712 val_acc=0.000 elapsed=1.9s
+epoch=4 loss=1.7414 loss_value=0.0373 loss_policy=1.7041 train_acc=0.723 val_acc=0.000 elapsed=2.3s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl14/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl14_opp (epochs=5)
+device: cuda amp=bf16+tf32 prefetch=4
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl14/opp', 'role': 'opp', 'episodes': 117798, 'samples': 2247, 'shards': 1, 'shard_size': 20000}
+train shards=1 val shards=0
+epoch=0 loss=2.2835 loss_value=0.0680 loss_policy=2.2154 train_acc=0.446 val_acc=0.000 elapsed=0.7s
+epoch=1 loss=1.9962 loss_value=0.0484 loss_policy=1.9477 train_acc=0.534 val_acc=0.000 elapsed=1.0s
+epoch=2 loss=1.8883 loss_value=0.0389 loss_policy=1.8494 train_acc=0.570 val_acc=0.000 elapsed=1.3s
+epoch=3 loss=1.8502 loss_value=0.0332 loss_policy=1.8169 train_acc=0.606 val_acc=0.000 elapsed=1.5s
+epoch=4 loss=1.7081 loss_value=0.0306 loss_policy=1.6775 train_acc=0.623 val_acc=0.000 elapsed=1.8s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl14/opp.pth (policy_temperature=1.0)
+  [train] self.pth <- cl15_own (epochs=5)
+device: cuda amp=bf16+tf32 prefetch=4
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl15/own', 'role': 'own', 'episodes': 117798, 'samples': 655, 'shards': 1, 'shard_size': 20000}
+train shards=1 val shards=0
+epoch=0 loss=2.5276 loss_value=0.0905 loss_policy=2.4370 train_acc=0.392 val_acc=0.000 elapsed=0.6s
+epoch=1 loss=2.2642 loss_value=0.0778 loss_policy=2.1864 train_acc=0.463 val_acc=0.000 elapsed=0.7s
+epoch=2 loss=2.0759 loss_value=0.0644 loss_policy=2.0115 train_acc=0.530 val_acc=0.000 elapsed=0.8s
+epoch=3 loss=1.9974 loss_value=0.0547 loss_policy=1.9427 train_acc=0.570 val_acc=0.000 elapsed=0.9s
+epoch=4 loss=1.8800 loss_value=0.0489 loss_policy=1.8312 train_acc=0.583 val_acc=0.000 elapsed=1.0s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl15/self.pth (policy_temperature=1.0)
+  [train] opp.pth <- cl15_opp (epochs=5)
+device: cuda amp=bf16+tf32 prefetch=4
+policy objective: AWR (β=1.0, weight_clip=20.0)
+manifest: {'label': 'cl15/opp', 'role': 'opp', 'episodes': 117798, 'samples': 742, 'shards': 1, 'shard_size': 20000}
+train shards=1 val shards=0
+epoch=0 loss=2.4570 loss_value=0.0753 loss_policy=2.3817 train_acc=0.416 val_acc=0.000 elapsed=0.6s
+epoch=1 loss=2.3179 loss_value=0.0557 loss_policy=2.2622 train_acc=0.461 val_acc=0.000 elapsed=0.7s
+epoch=2 loss=2.0306 loss_value=0.0454 loss_policy=1.9852 train_acc=0.509 val_acc=0.000 elapsed=0.8s
+epoch=3 loss=1.9431 loss_value=0.0390 loss_policy=1.9041 train_acc=0.553 val_acc=0.000 elapsed=0.9s
+epoch=4 loss=1.7547 loss_value=0.0344 loss_policy=1.7203 train_acc=0.564 val_acc=0.000 elapsed=1.1s
+saved model: /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents/cl15/opp.pth (policy_temperature=1.0)
 [phase0] 完了 -> /home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline/gen_000/agents
+[orchestrate] 世代バックエンド=league（梱包→棋譜→模倣学習）
 
 完了: 最終世代 = gen_000（/home/kotat/pokemon-tgc-abc/pokemon-tcg-agent/pipeline）

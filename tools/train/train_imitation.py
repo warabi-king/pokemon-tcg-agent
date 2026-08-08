@@ -4,8 +4,13 @@
 (常時メモリ上に持つのは1シャード分のサンプルだけ)。毎エポック、シャードの読み込み順と
 シャード内のサンプル順をシャッフルする。
 
-policyはHuberLoss回帰ではなく、実際に選ばれた手を正解クラスとした交差エントロピー、
-valueはMCTS探索を使わず、そのエピソードの実際の勝敗(rewards)をそのまま使う。
+valueはMCTS探索を使わず、そのエピソードの勝敗(勝+1/負-1/分0)から計算した
+割引リターン G_t を教師にする(対局ごとに最初の手の割引がPIPE_FIRST_MOVE_DISCOUNT
+になる割引率を使う。imitation_data.discounted_return_series参照)。
+
+policyは既定でAWR(advantage-weighted imitation, --policy-objective awr):
+advantage A_t = G_t - V(s_t) を重みにして、勝ち筋の手ほど強く、負け筋の手ほど弱く
+模倣する。--policy-objective bc で従来の交差エントロピー(勝敗非依存の一律模倣)にも戻せる。
 
 使い方:
     事前に tools/train/preprocess_episodes.py（または pipeline の preprocess_multi.py）で
@@ -207,6 +212,37 @@ def _autocast(device: torch.device, enabled: bool):
     return torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use)
 
 
+def _policy_loss(
+    masked_logits: torch.Tensor,
+    chosen_index_tensor: torch.Tensor,
+    label_value_tensor: torch.Tensor,
+    value_pred: torch.Tensor,
+    policy_objective: str,
+    awr_beta: float,
+    awr_weight_clip: float,
+) -> torch.Tensor:
+    """policy損失を計算する。
+
+    policy_objective="bc": 従来の交差エントロピー(打たれた手を勝敗に依らず一律模倣)。
+    policy_objective="awr": advantage-weighted imitation。
+        割引リターン G_t(=label_value_tensor) と価値予測 V(s_t)(=value_pred, detach)から
+        advantage A_t = G_t - V(s_t) を作り、weight = exp(A_norm/β) で打たれた手の
+        対数尤度を重み付けする(A_normはバッチ内で平均0・標準偏差1に正規化。
+        weightは常に正でawr_weight_clipで上限クリップ)。良い手(A>0)ほど強く模倣し、
+        悪い手ほどほぼ学習しない。valueヘッドへはweight経由で逆伝播させない(detach)。
+    """
+    if policy_objective == "bc":
+        return F.cross_entropy(masked_logits, chosen_index_tensor)
+
+    log_probs = F.log_softmax(masked_logits, dim=1)
+    chosen_logp = log_probs.gather(1, chosen_index_tensor.view(-1, 1)).squeeze(1)
+    with torch.no_grad():
+        advantage = label_value_tensor.squeeze(1) - value_pred.squeeze(1)
+        adv_norm = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
+        weight = torch.exp(adv_norm / awr_beta).clamp(max=awr_weight_clip)
+    return -(weight * chosen_logp).mean()
+
+
 def train_one_epoch(
     model,
     optimizer,
@@ -215,6 +251,9 @@ def train_one_epoch(
     device: torch.device,
     amp: bool = False,
     prefetch: int = 4,
+    policy_objective: str = "awr",
+    awr_beta: float = 1.0,
+    awr_weight_clip: float = 20.0,
 ) -> dict:
     model.train()
     loss_fn_value = torch.nn.HuberLoss(delta=0.2)
@@ -235,9 +274,13 @@ def train_one_epoch(
         optimizer.zero_grad()
         with _autocast(device, amp):
             out_enc, out_dec = model(*tensors)
-            loss_value = loss_fn_value(out_enc.float(), label_value_tensor)
+            value_pred = out_enc.float()
+            loss_value = loss_fn_value(value_pred, label_value_tensor)
             masked_logits = out_dec.float().masked_fill(mask_tensor == 0, float("-inf"))
-            loss_policy = F.cross_entropy(masked_logits, chosen_index_tensor)
+            loss_policy = _policy_loss(
+                masked_logits, chosen_index_tensor, label_value_tensor, value_pred,
+                policy_objective, awr_beta, awr_weight_clip,
+            )
             loss = loss_value + loss_policy
 
         loss.backward()
@@ -323,6 +366,27 @@ def parse_args() -> argparse.Namespace:
         default=4,
         help="バックグラウンドで先読み構築するバッチ数（0で同期実行）",
     )
+    parser.add_argument(
+        "--policy-objective",
+        choices=["awr", "bc"],
+        default="awr",
+        help="awr(既定): advantage-weighted imitation。割引リターンG_tと価値予測から"
+        "advantage A=G_t-V(s)を作り、良い手ほど強く模倣する。"
+        "bc: 従来の交差エントロピー(勝敗に依らず打たれた手を一律模倣)。",
+    )
+    parser.add_argument(
+        "--awr-beta",
+        type=float,
+        default=1.0,
+        help="AWRの温度。weight=exp(A_norm/β)。小さいほど良手だけを尖って学習、"
+        "大きいほど一様(bcに近づく)。A_normはバッチ内で平均0・std1に正規化(既定1.0)。",
+    )
+    parser.add_argument(
+        "--awr-weight-clip",
+        type=float,
+        default=20.0,
+        help="AWRのweight上限クリップ(外れ値のadvantageで重みが爆発するのを防ぐ。既定20)。",
+    )
     return parser.parse_args()
 
 
@@ -338,6 +402,10 @@ def main() -> None:
         # TF32(行列演算)とbf16 autocastを併用。--no-ampで従来のfp32厳密計算に戻せる。
         torch.set_float32_matmul_precision("high")
     print(f"device: {device} amp={'bf16+tf32' if use_amp else 'off'} prefetch={args.prefetch_batches}")
+    if args.policy_objective == "awr":
+        print(f"policy objective: AWR (β={args.awr_beta}, weight_clip={args.awr_weight_clip})")
+    else:
+        print("policy objective: BC (cross_entropy, 勝敗非依存)")
 
     shard_paths = sorted(args.shards.glob("shard_*.pkl"))
     if not shard_paths:
@@ -382,6 +450,8 @@ def main() -> None:
         stats = train_one_epoch(
             model, optimizer, train_shards, args.batch_size, device,
             amp=use_amp, prefetch=args.prefetch_batches,
+            policy_objective=args.policy_objective,
+            awr_beta=args.awr_beta, awr_weight_clip=args.awr_weight_clip,
         )
         val_acc = evaluate(
             model, val_shards, args.batch_size, device,

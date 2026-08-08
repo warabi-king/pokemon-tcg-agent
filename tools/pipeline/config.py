@@ -47,15 +47,20 @@ def _str(name: str, default: str) -> str:
 GENERATIONS = _int("PIPE_GENERATIONS", 5)          # 世代ループ回数 G（固定・途中評価なし）
 EPOCHS_PER_GEN = _int("PIPE_EPOCHS_PER_GEN", 3)    # 各世代の train_imitation epochs
 PHASE0_EPOCHS = _int("PIPE_PHASE0_EPOCHS", 5)      # Phase0 模倣学習 epochs
+# 1: Phase0で近いデッキのPRETRAINED(imitation_group0-2)からself完全コピー/warm-startを使う。
+# 0: PRETRAINEDを無視し、全クラスタをランダム初期化から学習する(近いデッキのコピーもしない)。
+# 旧PRETRAINEDはtanh/温度/AWR/割引の各修正より前の重みなので、新方式を素で検証したい時は0。
+PHASE0_WARMSTART = bool(_int("PIPE_PHASE0_WARMSTART", 1))
 LR = _float("PIPE_LR", 3e-4)                       # 学習率
 BATCH_SIZE = _int("PIPE_BATCH_SIZE", 128)          # バッチサイズ
 SEARCH_COUNT = _int("PIPE_SEARCH_COUNT", 50)       # 梱包エージェントの MCTS 探索回数
 SIM_THRESHOLD = _float("PIPE_SIM_THRESHOLD", 0.75) # 近いデッキ判定 & Phase0 クラスタ割当のしきい値
-# 模倣学習(Phase0・leagueバックエンド)のvalue教師を、終局からの距離に応じて指数減衰
-# させる係数(imitation_data.extract_samples_from_episode参照)。全局面へ一律で
-# 最終結果(±1)を貼るとvalueヘッドが序盤局面でも飽和しやすいため、既定で
-# PIPE_LAMBDA_VALUE(自己対戦側のTD-λ係数)と同じ0.9を使う。1.0で無効化(旧挙動)。
-VALUE_DECAY = _float("PIPE_VALUE_DECAY", 0.9)
+# 模倣学習(Phase0・leagueバックエンド)のvalue教師=割引リターンで、対局ごとに
+# 「最初の手の割引がこの値になる」よう割引率を決める(imitation_data.
+# discounted_return_series参照)。対局長に依らず 最初の手≈この値・終局直前=full±1 に揃う。
+# この G_t は AWR(advantage-weighted imitation)の advantage のベースにもなる。
+# 1.0で割引なし(全局面full±1)。
+FIRST_MOVE_DISCOUNT = _float("PIPE_FIRST_MOVE_DISCOUNT", 0.3)
 WARM_START = _int("PIPE_WARM_START", 1)            # 1: 世代間で前世代重みから継続学習
 KEEP_INTERMEDIATE = bool(_int("PIPE_KEEP_INTERMEDIATE", 1))  # 0で中間世代とshards/episodesを消費後に削除
 SHARD_SIZE = _int("PIPE_SHARD_SIZE", 20000)        # 前処理シャードあたりサンプル数

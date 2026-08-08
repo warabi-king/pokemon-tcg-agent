@@ -92,12 +92,13 @@ def parse_args() -> argparse.Namespace:
         "opponent: 対象グループのデッキと対戦した相手プレイヤーの手を集める。",
     )
     parser.add_argument(
-        "--value-decay",
+        "--first-move-discount",
         type=float,
         default=1.0,
-        help="終局からの距離に応じてvalue教師を指数減衰させる係数(既定1.0=無効=従来通り"
-        "全局面に最終結果をそのまま付与)。1未満にすると序盤局面ほど0に近い値になる"
-        "(pipelineのPIPE_VALUE_DECAY既定は0.9)。",
+        help="value教師=割引リターンで、対局ごとに『最初の手の割引がこの値』になるよう"
+        "割引率を決める(既定1.0=割引なし=全局面に最終結果をそのまま付与)。0.3にすると"
+        "対局長に依らず最初の手≈0.3・終局直前=full±1になる(pipelineのPIPE_FIRST_MOVE_DISCOUNT"
+        "既定は0.3)。",
     )
     return parser.parse_args()
 
@@ -145,7 +146,7 @@ def main() -> None:
 
         try:
             samples = extract_samples_from_episode(
-                data, deck_filter=deck_filter, value_decay=args.value_decay
+                data, deck_filter=deck_filter, first_move_discount=args.first_move_discount
             )
         except Exception:
             samples = []

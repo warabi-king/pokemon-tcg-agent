@@ -31,6 +31,7 @@ from episode_io import iter_multi_source
 
 # imitation_data と同一の特徴抽出コードを流用（重複実装で挙動がズレるのを避ける）
 from imitation_data import (  # noqa: E402
+    discounted_return_series,
     enumerate_actions,
     get_decoder_input,
     get_encoder_input,
@@ -41,16 +42,16 @@ from imitation_data import (  # noqa: E402
 PlayerBlock = tuple[list[int], list[int], float, list[tuple]]
 
 
-def extract_player_blocks(data: bytes, value_decay: float = 1.0) -> list[PlayerBlock]:
+def extract_player_blocks(data: bytes, first_move_discount: float = 1.0) -> list[PlayerBlock]:
     """1エピソードから、各プレイヤーの (自デッキ, 相手デッキ, value, サンプル列) を返す。
 
     extract_samples_from_episode と同じ特徴量を作るが、deck_filter で捨てず、
     後段のクラスタ振り分けのために自/相手デッキを保持したまま返す。
 
-    value_decay(既定1.0=無効)を1未満にすると、imitation_data.extract_samples_from_episode
-    と同様に、終局から遠い(序盤の)局面ほどvalue教師を0へ指数減衰させる
-    (全局面へ一律で最終結果を貼るとvalueヘッドが序盤局面でも飽和しやすいため)。
-    戻り値のPlayerBlock.valueは互換性のため引き続き最終結果(減衰前)を返す。
+    first_move_discount は imitation_data.discounted_return_series と同一(対局ごとに
+    x=first_move_discount^(1/(N-1))を決め、末尾=full±1・最初の手≈first_move_discountの
+    割引リターンをvalue教師にする)。1.0なら割引なし(既定)。
+    戻り値のPlayerBlock.valueは互換性のため引き続き最終結果(割引前)を返す。
     """
     try:
         j = json.loads(data)
@@ -104,24 +105,22 @@ def extract_player_blocks(data: bytes, value_decay: float = 1.0) -> list[PlayerB
                 )
             )
 
-        # 終局に一番近い局面(末尾)にfinal_valueをそのまま付与し、そこから遡るほど
-        # value_decay倍ずつ0へ近づける。value_decay=1.0なら全局面が従来通りfinal_value。
+        # 対局ごとの割引率で G_t を計算(末尾=full±1、最初の手≈first_move_discount)。
+        # imitation_data.discounted_return_series と同一ロジックで挙動ズレを防ぐ。
         # Python list のままだと int 1個あたり数十バイト消費するため、
         # numpy int32/float32 へ圧縮してから返す（IPC・メインのバッファ・
         # シャードファイルすべてが小さくなり、学習側の読み込みも速くなる）。
-        n = len(raw_samples)
-        samples: list[tuple] = []
-        for offset, sample in enumerate(raw_samples):
-            distance_from_end = n - 1 - offset
-            decayed_value = final_value * (value_decay**distance_from_end)
-            samples.append((*sample, np.float32(decayed_value)))
+        returns = discounted_return_series(final_value, len(raw_samples), first_move_discount)
+        samples: list[tuple] = [
+            (*sample, np.float32(g_t)) for sample, g_t in zip(raw_samples, returns)
+        ]
         if samples:
             blocks.append((your_deck, opponent_deck, final_value, samples))
     return blocks
 
 
-def _worker(data: bytes, value_decay: float = 1.0) -> list[PlayerBlock]:
-    return extract_player_blocks(data, value_decay=value_decay)
+def _worker(data: bytes, first_move_discount: float = 1.0) -> list[PlayerBlock]:
+    return extract_player_blocks(data, first_move_discount=first_move_discount)
 
 
 class _ShardWriter:
@@ -176,11 +175,11 @@ def preprocess_all(
     workers: int = 1,
     roles: tuple[str, ...] = ("own", "opp"),
     verbose: bool = True,
-    value_decay: float = 1.0,
+    first_move_discount: float = 1.0,
 ) -> dict[str, dict[str, int]]:
     """全エピソードを1回走査し、reps 各クラスタの own/opp シャードを同時生成する。
 
-    value_decayはextract_player_blocks参照(既定1.0=無効)。
+    first_move_discountはextract_player_blocks参照(既定1.0=割引なし)。
 
     戻り値: {cluster_name: {"own": shards, "opp": shards}}
     """
@@ -270,7 +269,7 @@ def preprocess_all(
         gc.freeze()
         # maxtasksperchild でワーカーを定期的に再起動し、長時間実行時の
         # プロセス単位メモリ増加（CoWドリフト等）を上限内に抑える。
-        worker = functools.partial(_worker, value_decay=value_decay)
+        worker = functools.partial(_worker, first_move_discount=first_move_discount)
         with Pool(workers, maxtasksperchild=2000) as pool:
             for blocks in pool.imap_unordered(worker, stream, chunksize=8):
                 route(blocks)
@@ -282,7 +281,7 @@ def preprocess_all(
                               f"elapsed={time.time()-t0:.1f}s workers={workers}{_rss_mb()}", flush=True)
     else:
         for data in stream:
-            route(extract_player_blocks(data, value_decay=value_decay))
+            route(extract_player_blocks(data, first_move_discount=first_move_discount))
             episode_count += 1
             if episode_count % 2000 == 0:
                 _memory_guard()

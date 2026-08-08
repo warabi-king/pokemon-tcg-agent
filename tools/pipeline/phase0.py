@@ -69,7 +69,11 @@ def run_phase0(root: Path | None = None) -> Path:
     for d in (agents_dir, shards_root, logs_dir):
         d.mkdir(parents=True, exist_ok=True)
 
-    pretrained = _pretrained_registry()
+    if config.PHASE0_WARMSTART:
+        pretrained = _pretrained_registry()
+    else:
+        pretrained = []
+        print("[phase0] PIPE_PHASE0_WARMSTART=0: PRETRAINEDを使わず全クラスタをランダム初期化から学習")
     sources = episode_sources(config.OFFICIAL_EPISODES)
     # 前処理の完了マーカー。存在すれば前処理をスキップして学習から再開できる
     # （やり直したい場合はこのファイルか shards ディレクトリごと削除する）。
@@ -92,7 +96,7 @@ def run_phase0(root: Path | None = None) -> Path:
         preprocess_all(
             sources, shards_root, reps=agents,
             threshold=config.SIM_THRESHOLD, shard_size=config.SHARD_SIZE,
-            workers=config.WORKERS, value_decay=config.VALUE_DECAY,
+            workers=config.WORKERS, first_move_discount=config.FIRST_MOVE_DISCOUNT,
         )
         preprocess_done.write_text(
             json.dumps({
