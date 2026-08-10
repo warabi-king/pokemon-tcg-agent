@@ -46,10 +46,19 @@ agents/rl_mcts/
 `serial` で追跡します。一度公開されて非公開領域へ戻ったカードも既知カードとして
 保持します。
 
-入力はカードID別の累積公開枚数に「公開総数」と「ターン」を加えたベクトル、出力は
-カードID別の60枚デッキ内枚数です。同一episodeのターンサンプルが学習側と検証側に
-分かれないよう、episode名の固定ハッシュで分割します。大量データでは全期間から
-`--max-samples` 件をreservoir samplingするため、先頭の日付だけに偏りません。
+入力はカードID別の累積公開枚数に「公開総数」と「ターン」を加えたベクトルです。
+出力は、学習デッキに実在したカードだけを対象とする「デッキ採用確率」と
+「採用された場合の枚数」の2ヘッドです。補完時は採用確率上位を選び、学習デッキの
+カード種類数の5〜95パーセンタイル内で60枚へ丸めます。これにより、小さな予測値が
+多数のカードへ分散しても、多種類を1枚ずつ採用する補完にはなりません。
+
+同一episodeのターンサンプルが学習側と検証側に分かれないよう、episode名の固定
+ハッシュで分割します。大量データでは全期間から `--max-samples` 件をreservoir
+samplingするため、先頭の日付だけに偏りません。
+
+デフォルトでは、全日付にまたがるepisodeの約10%をepisode名の決定的ハッシュで
+抽出します。先頭10%だけを使う方式ではないため、日付順の偏りはありません。割合は
+`--episode-ratio` で変更でき、全episodeを使う場合は `--episode-ratio 1` を指定します。
 
 短時間の動作確認:
 
@@ -62,10 +71,20 @@ python agents/rl_mcts/train/train_opponent_deck.py train \
   --output results/opponent_deck_smoke.pth
 ```
 
-利用可能な全ZIPから学習:
+利用可能な全ZIPから約10%のepisodeを学習（デフォルト）:
 
 ```bash
 python agents/rl_mcts/train/train_opponent_deck.py train \
+  --max-samples 200000 \
+  --epochs 20 \
+  --output agents/rl_mcts/src/opponent_deck_mlp.pth
+```
+
+全episodeを学習:
+
+```bash
+python agents/rl_mcts/train/train_opponent_deck.py train \
+  --episode-ratio 1 \
   --max-samples 200000 \
   --epochs 20 \
   --output agents/rl_mcts/src/opponent_deck_mlp.pth
@@ -86,8 +105,8 @@ checkpointがない場合は従来の固定ダミーカードによる探索へ�
 
 同梱するbootstrap checkpointは `2026-07-01` の先頭200対戦を使い、観測した
 4,516ターンサンプルから上限4,000件を抽出して10 epoch学習したものです。検証346件の
-60枚丸め後カードコピー一致率は約46.6%です。本番用には上記の全ZIP学習で更新して
-ください。
+60枚丸め後カードコピー一致率は約66.4%です。補完後は平均23.6種類、1枚採用は平均
+4.6種類です。本番用には上記の全ZIP学習で更新してください。
 
 ## 学習の流れ
 

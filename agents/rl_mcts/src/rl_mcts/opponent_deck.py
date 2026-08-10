@@ -138,7 +138,7 @@ class PublicCardTracker:
 
 
 class OpponentDeckMLP(torch.nn.Module):
-    """公開カード枚数ベクトルから60枚のカード枚数を回帰するMLP。"""
+    """公開カードから採用確率と採用時枚数を推定する2ヘッドMLP。"""
 
     def __init__(
         self,
@@ -146,6 +146,7 @@ class OpponentDeckMLP(torch.nn.Module):
         hidden_size: int = 256,
         layers: int = 2,
         dropout: float = 0.1,
+        output_size: int | None = None,
     ) -> None:
         super().__init__()
         modules: list[torch.nn.Module] = []
@@ -156,11 +157,14 @@ class OpponentDeckMLP(torch.nn.Module):
             if dropout > 0:
                 modules.append(torch.nn.Dropout(dropout))
             input_size = hidden_size
-        modules.append(torch.nn.Linear(input_size, vocab_size))
-        self.net = torch.nn.Sequential(*modules)
+        self.body = torch.nn.Sequential(*modules)
+        output_size = output_size or vocab_size
+        self.presence_head = torch.nn.Linear(input_size, output_size)
+        self.count_head = torch.nn.Linear(input_size, output_size)
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        return self.net(features)
+    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        hidden = self.body(features)
+        return self.presence_head(hidden), self.count_head(hidden)
 
 
 def make_features(
@@ -192,15 +196,48 @@ def complete_deck(
     basic_energy_ids: set[int],
     ace_spec_ids: set[int],
     card_names: Mapping[int, str],
+    presence_scores: torch.Tensor | None = None,
+    min_unique_cards: int | None = None,
+    max_unique_cards: int | None = None,
 ) -> list[int]:
-    """連続値の予測を、公開カードを必ず含む合法枚数寄りの60枚へ丸める。"""
+    """採用確率上位のカードだけを使い、予測枚数に近い60枚へ丸める。"""
     deck = [int(card_id) for card_id in observed_cards[:DECK_SIZE]]
     counts = Counter(deck)
     name_counts = Counter(card_names.get(card_id, str(card_id)) for card_id in deck)
     ace_count = sum(counts[card_id] for card_id in ace_spec_ids)
     scores = predicted_counts.detach().cpu().tolist()
+    presence = (presence_scores if presence_scores is not None else predicted_counts).detach().cpu().tolist()
 
     candidates = [int(card_id) for card_id in known_card_ids if 0 < int(card_id) < len(scores)]
+    ranked = sorted(
+        candidates,
+        key=lambda card_id: (float(presence[card_id]), float(scores[card_id]), -card_id),
+        reverse=True,
+    )
+    if max_unique_cards is not None:
+        observed_ids = set(deck)
+        predicted_unique = sum(float(presence[card_id]) >= 0.5 for card_id in candidates)
+        minimum = int(min_unique_cards or 1)
+        unique_limit = max(minimum, predicted_unique, len(observed_ids), 1)
+        unique_limit = min(unique_limit, max(int(max_unique_cards), len(observed_ids)))
+        selected = set(observed_ids)
+        for card_id in ranked:
+            if len(selected) >= unique_limit:
+                break
+            selected.add(card_id)
+
+        # 60枚まで確実に埋められるよう、基本エネルギーを最低1種類残す。
+        energy = next((card_id for card_id in ranked if card_id in basic_energy_ids), None)
+        if energy is not None and energy not in selected:
+            removable = next(
+                (card_id for card_id in reversed(ranked) if card_id in selected and card_id not in observed_ids),
+                None,
+            )
+            if removable is not None and len(selected) >= unique_limit:
+                selected.remove(removable)
+            selected.add(energy)
+        candidates = [card_id for card_id in ranked if card_id in selected]
+
     while len(deck) < DECK_SIZE:
         best_card: int | None = None
         best_score = float("-inf")
@@ -267,6 +304,7 @@ class OpponentDeckPredictor:
             hidden_size=int(config["hidden_size"]),
             layers=int(config["layers"]),
             dropout=float(config["dropout"]),
+            output_size=int(config.get("output_size", len(config["known_card_ids"]))),
         )
         model.load_state_dict(checkpoint["model_state"])
         model.eval()
@@ -287,10 +325,18 @@ class OpponentDeckPredictor:
             self.count_scales,
             float(config.get("turn_scale", DEFAULT_TURN_SCALE)),
         )
-        with torch.inference_mode():
-            predicted = torch.relu(self.model(features.unsqueeze(0))[0]) * self.count_scales
-
         known_card_ids = [int(card_id) for card_id in config["known_card_ids"]]
+        candidate_scales = self.count_scales[known_card_ids]
+        with torch.inference_mode():
+            presence_logits, normalized_counts = self.model(features.unsqueeze(0))
+            compact_presence = torch.sigmoid(presence_logits[0])
+            compact_counts = torch.nn.functional.softplus(normalized_counts[0]) * candidate_scales
+
+        predicted = torch.zeros(vocab_size, dtype=torch.float32)
+        presence = torch.zeros(vocab_size, dtype=torch.float32)
+        predicted[known_card_ids] = compact_counts
+        presence[known_card_ids] = compact_presence
+
         basic_energy_ids = {int(card_id) for card_id in config.get("basic_energy_ids", [])}
         ace_spec_ids = {int(card_id) for card_id in config.get("ace_spec_ids", [])}
         basic_pokemon_ids = {int(card_id) for card_id in config.get("basic_pokemon_ids", [])}
@@ -302,6 +348,9 @@ class OpponentDeckPredictor:
             basic_energy_ids,
             ace_spec_ids,
             card_names,
+            presence_scores=presence,
+            min_unique_cards=int(config.get("min_unique_cards", 10)),
+            max_unique_cards=int(config.get("max_unique_cards", 30)),
         )
 
         state = _field(observation, "current")

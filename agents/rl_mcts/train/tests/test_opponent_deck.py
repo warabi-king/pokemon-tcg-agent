@@ -125,14 +125,25 @@ class EpisodeSamplesTest(unittest.TestCase):
         self.assertEqual(samples[1].turn, 2)
         self.assertEqual(list(samples[1].observed), [10, 20])
 
+    def test_default_ratio_selects_about_one_tenth_deterministically(self) -> None:
+        keys = [f"2026-07-{index % 31 + 1:02d}/{index}.json" for index in range(10_000)]
+        first = [key for key in keys if TRAIN_MODULE.is_selected_episode(key, 0.1)]
+        second = [key for key in keys if TRAIN_MODULE.is_selected_episode(key, 0.1)]
+        self.assertEqual(first, second)
+        self.assertGreater(len(first), 900)
+        self.assertLess(len(first), 1100)
+        self.assertTrue(all(TRAIN_MODULE.is_selected_episode(key, 1.0) for key in keys))
+
 
 class ModelAndCompletionTest(unittest.TestCase):
     def test_model_feature_and_output_shapes(self) -> None:
         scales = torch.full((32,), 4.0)
         features = make_features([3, 3, 10], 5, 32, scales)
-        model = OpponentDeckMLP(32, hidden_size=16, layers=2, dropout=0)
+        model = OpponentDeckMLP(32, hidden_size=16, layers=2, dropout=0, output_size=12)
+        presence, counts = model(features.unsqueeze(0))
         self.assertEqual(features.shape, (34,))
-        self.assertEqual(model(features.unsqueeze(0)).shape, (1, 32))
+        self.assertEqual(presence.shape, (1, 12))
+        self.assertEqual(counts.shape, (1, 12))
 
     def test_completion_preserves_observed_and_copy_rules(self) -> None:
         prediction = torch.zeros(16)
@@ -150,6 +161,25 @@ class ModelAndCompletionTest(unittest.TestCase):
         self.assertGreaterEqual(deck.count(10), 2)
         self.assertLessEqual(deck.count(10), 4)
         self.assertEqual(deck.count(3), 56)
+
+    def test_diffuse_sub_one_predictions_do_not_create_sixty_singletons(self) -> None:
+        prediction = torch.full((100,), 0.2)
+        presence = torch.full((100,), 0.5)
+        known_card_ids = [3, *range(10, 80)]
+        deck = complete_deck(
+            [],
+            prediction,
+            known_card_ids,
+            basic_energy_ids={3},
+            ace_spec_ids=set(),
+            card_names={card_id: str(card_id) for card_id in known_card_ids},
+            presence_scores=presence,
+            max_unique_cards=20,
+        )
+        counts = Counter(deck)
+        self.assertEqual(len(deck), 60)
+        self.assertLessEqual(len(counts), 20)
+        self.assertEqual(sum(count == 1 for count in counts.values()), 0)
 
 
 if __name__ == "__main__":
