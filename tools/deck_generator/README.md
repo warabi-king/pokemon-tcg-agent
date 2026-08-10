@@ -189,7 +189,62 @@ checkpoint を指定する場合:
 
 推論時は、観測済みカード枚数を必ず満たすように、予測されたカード count をもとに 60 枚へ丸めます。カードを追加する順位は `predicted_count / count_scale` の正規化済みスコアで決めるため、基本エネルギーの `count_scale` が大きいだけで過剰に選ばれることを抑えます。その際、同名 4 枚制限、基本エネルギー例外、ACE SPEC 1 枚制限を考慮します。
 
-## 8. word2vec/CBOW 形式でデッキ生成モデルを学習する
+## 8. 互換性を考慮した MLP2 でマスク部分を補完する
+
+`train_deck_mlp_2.py` は `generated/deck_candidates_by_wins.jsonl` の完全な60枚デッキ
+だけを使います。対戦中の公開カードは学習データに使用しません。
+
+```text
+60枚デッキ
+  ↓ コピー単位で一部をマスク
+入力: 観測できたカード + 観測率
+教師: マスクされた残りのカードだけ
+```
+
+モデルは共有MLPから次の3種類を予測します。
+
+- 残りに各カードが入る確率
+- 入る場合の残り枚数
+- 元デッキのクラスタ確率
+
+クラスタ確率とクラスタ別カード頻度に加え、完全デッキから学習した
+`P(候補カード | 観測カード)` を互換性priorとして使います。近いデッキ同士のカードは
+混成できますが、観測カードと共起しない別系統のカードは採用スコアが下がります。
+不在カードのlossも、真のクラスタ・観測カードとの互換性が低いほど強くします。
+
+学習:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp_2.py train
+```
+
+出力:
+
+```text
+tools/deck_generator/generated/deck_mlp_2.pt
+```
+
+軽量な動作確認:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp_2.py train `
+  --epochs 2 --hidden-size 64 --layers 1 `
+  --samples-per-deck 2 --max-decks 150 `
+  --output tools\deck_generator\generated\debug_deck_mlp_2.pt
+```
+
+補完:
+
+```powershell
+.\.venv\Scripts\python.exe tools\deck_generator\train_deck_mlp_2.py predict `
+  --observed 646,646,648 --json
+```
+
+主な評価値として、完成60枚全体の一致率、マスクした部分だけの一致率、完全一致率、
+観測カードとの共起確率が5%未満のカードを追加した割合を出力します。同一クラスタが
+学習・検証の両方に残るよう、クラスタごとにデッキを分割します。
+
+## 9. word2vec/CBOW 形式でデッキ生成モデルを学習する
 
 `train_deck_word2vec.py` は、MLP ではなく word2vec の CBOW に近い形式でデッキ生成を学習します。
 各カード ID を one-hot トークンとして扱い、1つのデッキから一部のカードを文脈として取り出し、その文脈から伏せた1枚のカード ID を分類で予測します。
@@ -247,7 +302,7 @@ checkpoint を指定する場合:
 生成時は、同名4枚制限、基本エネルギー例外、ACE SPEC 1枚制限を考慮してカードを追加します。
 `--temperature 0` では greedy に選び、`--temperature` に正の値を指定すると `--top-k` 件から確率的にサンプリングします。
 
-## 9. CBOW Transformer 形式でデッキ生成モデルを学習する
+## 10. CBOW Transformer 形式でデッキ生成モデルを学習する
 
 `train_deck_transformer_cbow.py` は、`deck_word2vec.pt` のカード埋め込みを初期値として使い、Transformer で次に入りやすいカードを予測するモデルです。
 デッキは順序なしの集合として扱いたいため、position encoding は使わず、文脈カード集合を `TransformerEncoder` に通して mean pooling します。
