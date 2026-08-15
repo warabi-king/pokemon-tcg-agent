@@ -38,8 +38,25 @@
 
     # 1つのlibcgで全試合を保持し、MCTSのNN評価をMPSへまとめる
     python tools/run_matches_round_robin.py \\
-        --agent a=agents/rl_mcts_r_robin1/src/main.py \\
-        --agent b=agents/rl_mcts_r_robin2/src/main.py \\
+        --agent vtrain_00=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_00/src/main.py \\
+        --agent vtrain_01=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_01/src/main.py \\
+        --agent vtrain_02=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_02/src/main.py \\
+        --agent vtrain_03=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_03/src/main.py \\
+        --agent vtrain_04=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_04/src/main.py \\
+        --agent vtrain_05=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_05/src/main.py \\
+        --agent vtrain_06=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_06/src/main.py \\
+        --agent vtrain_07=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_07/src/main.py \\
+        --agent vtrain_08=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_08/src/main.py \\
+        --agent vtrain_09=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_09/src/main.py \\
+        --agent vtrain_10=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_10/src/main.py \\
+        --agent vtrain_11=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_11/src/main.py \\
+        --agent vtrain_12=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_12/src/main.py \\
+        --agent vtrain_13=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_13/src/main.py \\
+        --agent vtrain_14=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_14/src/main.py \\
+        --agent vtrain_15=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/dev_naoki_vtrain/agents/16model_pretrained_vtrain/cluster_15/src/main.py \\
+        --agent cluster_00=/Users/kawai/sh-kawai/pokemon-hackason/git-worktree/develop_naoki/agents/16model_pretrained_/cluster_00/src/main.py \\
+        --games 20 \\
+        
         --backend batched --device mps --lanes 128 --batch-size 128
 """
 
