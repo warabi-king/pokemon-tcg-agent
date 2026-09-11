@@ -15,8 +15,16 @@ episodes/
 shards/
 
 pipeline/gen_*/
-!pipeline/gen_000/
-!pipeline/gen_000_old/
 
 tools/deck_generator/daily_dataset/
 tools/deck_generator/generated/deck_candidates.jsonl
+tools/deck_generator/manifest_new.csv
+
+# コンペ後整理: 生成物・作業ディレクトリ
+agents/gen000_cl00/
+pipeline/cl00_46d/
+baseline/
+
+*.pth
+*.pkl
+*.json

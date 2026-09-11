@@ -26,12 +26,15 @@ _MAIN_TEMPLATE = '''from __future__ import annotations
 
 from pathlib import Path
 
+import rl_mcts
 from cg.api import Observation, to_observation_class
 from rl_mcts.agent import RlMctsAgent
 from rl_mcts.deck import read_deck_csv
 
+# Kaggleはmain.pyをexecでロードし__file__を定義しないため、main.py内で__file__は使えない。
+# インポート済みモジュール(rl_mcts)の__file__からsrc/直下を解決する。
 # 自分の手番は model.pth、MCTS探索木の相手手番は opponent_model.pth で評価する。
-_SRC = Path(__file__).resolve().parent
+_SRC = Path(rl_mcts.__file__).resolve().parent.parent
 _AGENT = RlMctsAgent(
     model_path=_SRC / "model.pth",
     opponent_model_path=_SRC / "opponent_model.pth",
