@@ -28,3 +28,5 @@ baseline/
 *.pth
 *.pkl
 *.json
+
+docs/1706.03762v7.pdf
